@@ -1,0 +1,33 @@
+- [x] Unify the solver ADMM variable names and operations so we dont have two sets of vectors in op_main
+- [x] Move some solver code from op_main into par-sdmm code
+- [x] Finish par-sdmm global reweighting implementation
+- [x] Have option or saving debug hdf-5 files
+- [ ] Work on built-in TE optimizer
+- [x] Python wrapper
+- [ ] Make backwards compatible python wrapper `gropt.gropt` withs `params` dictionary
+- [ ] There seem to be lot of redundant setZero() calls
+- [ ] Too many parameters are class members that could be function arguments
+- [ ] Moving all optimization parameters to `Solver` and adding controls to Python
+- [ ] Use git submodules for external code?
+
+
+Features to add/investigate:
+- Warm starting
+    - Investigate best parameters to when reweighting a warm start
+    - Determine best way to resize vectors for warm starting (when changing T or TE)
+- 3-axis tests
+    - Most constraints need further testing for the 3-axis cases
+- Objective function balancing
+    - Weights for objective functions are hard to pick relative to the dynamically reweighted constraints. How do we best balance them?
+    - Particularly for maximization where setting it too high results in instability.  (In general, setting a minimization weight too high just leads to it converging slower, as constriants get reweighted correctly.)
+- Is there a better way to define the problems in a general sense?
+    - Originally a single params dictionary, not very flexible.
+    - Now this object oriented constraint addeer, but doesnt allow an easy way to specify the problem.
+- Look into Ruiz equilibration
+- Find optimal starting weights, and X0 for initial solves
+- It would be much easier to do the above with a better testing framework.
+- Arbitrarily re-run with increasing or decreasing target/tolerances
+    - Add a flag: rerun_direction = [increase, decrease, constant] and add function in op_main.cpp for increase/decrease that can get overloaded by constraints.
+    - Then a general purpose rerunner can reinit, and change that value by x% each time.  It probably could only allow one contraint to be chosen for rerun_direction.
+- Automatically decrease or increase N for searches
+    - Needs to handle interpolating output of previous run, and aligning with a new set_vals and inv_vec.  Also need to figure out how to interpolate y.  Most should be easy, but what about slew? 

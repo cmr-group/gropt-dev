@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=18.0", "cython>=0.18", "wheel", "numpy"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+ignore = ["ANN",  # Type Annotations
+          "TRY",  # Exception linting
+          "N",    # Uppercase lowercase stuff.
+          "PTH",  # Path linting not compatible with cython setup.py stuff
+    
+          "RET504",  # Allow unnecessary assignment before return
+          "Q000",  # Don't warn about using single quotes
+          "PLR0913",  # Allow any number of arguments for a function
+          "ERA001",  # Allow commented out code
+
+          "T201",  # Allow print statements
+
+          "D212",  # Docstring can start on the next line, (This then turns on D213, which REQUIRES a new line)
+          "D100",  # Don't require a top level docstring for the whole file
+          "D104",  # Don't require a top level docstring __init__.py
+          
+          # "N801",  # Allow different title styles for classes
+          # "N803",  # Allow capital argument names (for Matrices and such)
+          # "N806",  # Allow capital variable names (for Matrices and such)
+          # "N813",  # Let me change cases
+          # "N999",  # Allow different title styles for filenames
+
+          "FBT002",  # Allow floating boolean arguments
+
+          "W293",  # Allow white space on blank lines (too annoying to see everytime)
+
+          # Warning about code complexity (re-enable these later hopefully):
+          "C901",
+          "PLR0912",
+
+          "S301",  # Allow pickle
+          "SIM108",  # Allow if..else
+
+    
+        ]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
