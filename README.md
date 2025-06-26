@@ -5,7 +5,7 @@ Staging for the next major update to GrOpt.
 ## Installation
 Clone the respository:
 
-`git clone https://github.com/cmr-group/gropt-dev.git .`
+`git clone https://github.com/cmr-group/gropt-dev.git`
 
 Then install with (modify path to the folder you just cloned):
 
