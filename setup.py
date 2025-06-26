@@ -24,7 +24,7 @@ print(f'{sourcefiles = }')
 
 libraries = []
 extra_compile_args = ['-DFMT_UNICODE=0',  # Needed for spdlog
-                      ]
+                      '-std=c++11']
 extra_link_args = []
 
 include_dirs = ["gropt_dev/src", "gropt_dev/src/external", np.get_include()]
