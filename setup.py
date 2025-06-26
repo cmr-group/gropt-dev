@@ -45,12 +45,6 @@ ext = Extension("gropt_dev.gropt_wrapper",
             )
 
 setup(
-    name='gropt_dev',
-    version="0.1.0",
     packages=['gropt_dev', 'gropt_dev.gropt_wrapper'],
-    setup_requires=[
-        'setuptools>=18.0',  # first version to support pyx in Extension
-        'cython>=0.18',
-    ],
     ext_modules=[ext],
 )

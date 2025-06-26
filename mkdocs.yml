@@ -12,6 +12,11 @@ extra_javascript:
   - javascripts/mathjax.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
+plugins:
+    - mkdocs-jupyter
+
+docs_dir: '.'
+
 nav:
   - Home: index.md
   - Algorithms:
@@ -20,3 +25,5 @@ nav:
     - gropt.gropt: python/gropt_py.md
   - C++:
     - Usage: cpp/cpp_info.md
+  - Notebook Test:
+    - ../examples/diffusion/test.md

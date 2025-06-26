@@ -1,3 +1,12 @@
+[project]
+name = "gropt_dev"
+version = "0.1.0"
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "pyqt6",
+]
+
 [build-system]
 requires = ["setuptools>=18.0", "cython>=0.18", "wheel", "numpy"]
 
