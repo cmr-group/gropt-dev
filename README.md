@@ -7,7 +7,7 @@ Clone the respository:
 
 `git clone https://github.com/cmr-group/gropt-dev.git .`
 
-Then install with (with correct path):
+Then install with (modify path to the folder you just cloned):
 
 `pip install path/to/gropt-dev/`
 
@@ -34,6 +34,6 @@ The highest priority things that are being added back in are:
 
 ## Other Versions
 
-The branch called `mess` contains the more full featured-but messier version that is being cleaned up here.
+The branch called `mess` contains the more full featured-but messier version that is being cleaned up here.  It is not being merged in with git, it is just there for reference.
 
-Which will have implementation details for constraints that have not migrated to this version yet.
+It has implementation details for constraints that have not migrated to this version yet.
