@@ -1,4 +1,4 @@
-name: Build Python C++ Extension (macOS)
+name: (Windows) Build Python C++ Extension
 
 on:
   push:

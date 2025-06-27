@@ -1,4 +1,4 @@
-name: Build Python C++ Extension (Linux)
+name: (Linux) Build Python C++ Extension
 
 on:
   push:
