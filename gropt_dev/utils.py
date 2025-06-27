@@ -27,8 +27,8 @@ def demo():
     
     print(f'{out.shape = }')
 
-    plt.figure()
-    plt.plot(out)
-    plt.show()
+    # plt.figure()
+    # plt.plot(out)
+    # plt.show()
     
     print('Done!', flush = True)
