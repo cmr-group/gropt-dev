@@ -25,5 +25,5 @@ nav:
     - gropt.gropt: python/gropt_py.md
   - C++:
     - Usage: cpp/cpp_info.md
-  - Notebook Test:
-    - ../examples/diffusion/test.md
+  # - Notebook Test:
+  #   - ../examples/diffusion/test.md
