@@ -30,4 +30,4 @@ jobs:
 
     - name: Test import
       run: |
-        python -c "import gropt_dev as gropt; gropt.demo();"
+        python -c "import gropt_dev as gropt; gropt.demo(plot=False);"
