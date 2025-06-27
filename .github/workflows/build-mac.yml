@@ -1,4 +1,4 @@
-name: (macOS) Build Python C++ Extension
+name: macOS
 
 on:
   push:

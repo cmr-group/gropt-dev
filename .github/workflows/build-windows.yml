@@ -1,4 +1,4 @@
-name: (Windows) Build Python C++ Extension
+name: Windows
 
 on:
   push:
