@@ -1,5 +1,9 @@
 # gropt-dev
 
+[![Windows](https://github.com/cmr-group/gropt-dev/actions/workflows/build-windows.yml/badge.svg)](https://github.com/cmr-group/gropt-dev/actions/workflows/build-windows.yml)
+[![Linux](https://github.com/cmr-group/gropt-dev/actions/workflows/build-linux.yml/badge.svg)](https://github.com/cmr-group/gropt-dev/actions/workflows/build-linux.yml)
+[![macOS](https://github.com/cmr-group/gropt-dev/actions/workflows/build-mac.yml/badge.svg)](https://github.com/cmr-group/gropt-dev/actions/workflows/build-mac.yml)
+
 Staging for the next major update to GrOpt.
 
 ## Installation
