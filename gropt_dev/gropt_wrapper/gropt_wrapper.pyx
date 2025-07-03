@@ -43,6 +43,9 @@ cdef class GroptParams:
     def add_moment(self, order, target):
         self.c_gparams.add_moment(order, target)
 
+    def add_SAFE(self, stim_thresh):
+        self.c_gparams.add_SAFE(stim_thresh)
+
     def add_bvalue(self, target, tol):
         self.c_gparams.add_bvalue(target, tol)
 
@@ -94,3 +97,24 @@ cdef class GroptParams:
     @dt.setter
     def dt(self, val):
         self.c_gparams.dt = val
+
+def set_verbose(level):
+    c_gropt.set_verbose(level)
+
+def get_SAFE(G, dt, true_safe = True):
+
+    cdef double[::1] G_view = array_prep(G, np.float64)
+
+    if G.ndim == 1:
+        N = G.size
+        Naxis = 1
+    else:
+        N = G.shape[1]
+        Naxis = G.shape[0]
+
+    cdef double *out
+    cdef int out_size
+
+    c_gropt.get_SAFE(N, Naxis, dt, &G_view[0], true_safe, &out, out_size)
+
+    return np.asarray(<cnp.float64_t[:out_size]> out)

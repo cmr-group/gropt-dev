@@ -19,6 +19,7 @@ namespace Gropt {
 
         N = gparams->N;
         Naxis = gparams->Naxis;
+        dt = gparams->dt;
         Ntot = N * Naxis;
 
         x_temp.setZero(Ntot);

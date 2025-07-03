@@ -28,6 +28,7 @@ class Operator  // This is the main parent class for every operator in GrOpt
         int N;
         int Naxis;
         int Ntot;
+        double dt;
         int Ax_size;
 
         bool rot_variant = true; 

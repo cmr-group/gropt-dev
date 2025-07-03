@@ -13,12 +13,14 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         int Naxis
         double dt
 
+        
         void vec_init_simple()
         void diff_init_demo()
 
         void add_gmax(double gmax)
         void add_smax(double smax)
         void add_moment(double order, double target)
+        void add_SAFE(double stim_thresh)
         void add_bvalue(double target, double tol)
 
         void add_obj_identity(double weight_mod)
@@ -34,5 +36,11 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
                     double ils_sigma) 
 
         void get_output(double **out, int &out_size)
+
+
+cdef extern from "gropt_utils.hpp" namespace "Gropt":
+    
+    void set_verbose(int level)
+    void get_SAFE(int N, int Naxis, double dt, double *G_in, bool true_safe, double **out, int &out_size)
 
         

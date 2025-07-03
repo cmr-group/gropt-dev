@@ -7,12 +7,12 @@
 #include "op_slew.hpp"
 #include "op_identity.hpp"
 #include "op_bvalue.hpp"
+#include "op_safe.hpp"
 #include "solver_groptsdmm.hpp"
 
 namespace Gropt {
 
 GroptParams::GroptParams() {
-    spdlog::set_level(spdlog::level::info);
 }
 
 void GroptParams::vec_init_simple() {
@@ -136,6 +136,12 @@ void GroptParams::add_smax(double smax) {
 
 void GroptParams::add_moment(double order, double target) {
     all_op.push_back(new Op_Moment(*this, order, target));
+}
+
+void GroptParams::add_SAFE(double stim_thresh) {
+    Op_SAFE* op_F = new Op_SAFE(*this, stim_thresh);
+    op_F->set_demo_params();
+    all_op.push_back(op_F);
 }
 
 void GroptParams::add_bvalue(double target, double tol) {

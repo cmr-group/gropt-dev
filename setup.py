@@ -6,6 +6,7 @@ from setuptools import Extension, setup
 SRC_DIR = "gropt_dev/src/"
 
 sources = ['gropt_params',
+           'gropt_utils',
            'ils',
            'ils_cg',
            'op_main',
@@ -13,6 +14,7 @@ sources = ['gropt_params',
            'op_gradient',
            'op_identity',
            'op_moment',
+           'op_safe',
            'op_slew',
            'solver',
            'solver_groptsdmm',

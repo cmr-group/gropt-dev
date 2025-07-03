@@ -55,6 +55,7 @@ class GroptParams
         void add_gmax(double gmax);
         void add_smax(double smax);
         void add_moment(double order, double target);
+        void add_SAFE(double stim_thresh);
         void add_bvalue(double target, double tol);
 
         void add_obj_identity(double weight_mod);
