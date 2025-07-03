@@ -40,6 +40,7 @@ class GroptParams
         int Naxis = 1;
 
         int iiter;
+        int final_good = 0;
 
         int vec_init_status = -1;
 
@@ -47,7 +48,7 @@ class GroptParams
         ~GroptParams() = default;
 
         void vec_init_simple();
-        void diff_init_demo();
+        void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
 
         void init();
         void warm_start_prev();

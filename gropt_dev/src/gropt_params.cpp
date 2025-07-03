@@ -35,14 +35,14 @@ void GroptParams::vec_init_simple() {
     vec_init_status = N;
 }
 
-void GroptParams::diff_init_demo() {
-    dt = 200e-6;
+void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout) {
+    dt = _dt;
     Naxis = 1;
 
-    double T_90 = 3e-3;
-    double T_180 = 5e-3;
-    double T_readout = 16e-3;
-    double TE = 100e-3;
+    double T_90 = _T_90;
+    double T_180 = _T_180;
+    double T_readout = _T_readout;
+    double TE = _TE;
 
     N = (int)((TE-T_readout)/dt) + 1;
 

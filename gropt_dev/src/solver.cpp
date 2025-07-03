@@ -44,6 +44,9 @@ int Solver::logger(Eigen::VectorXd &X)
 
 void Solver::final_log(Eigen::VectorXd &X) 
 {
+    
+    gparams->final_good = 1;
+
     spdlog::info(" ");
     spdlog::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ");
     spdlog::info("======================== Final Stats ========================", gparams->iiter);
@@ -56,8 +59,13 @@ void Solver::final_log(Eigen::VectorXd &X)
         Operator *op = gparams->all_op[i];
         op->Ax_temp.setZero();
         op->forward_op(X, op->Ax_temp);
+        
         spdlog::info("    {:^16}    {:d}       {: .2e}    {: .2e}    {: .2e}", 
             op->name, op->hist_feas.back(), op->Ax_temp.minCoeff()-op->target, op->Ax_temp.maxCoeff()-op->target, op->tol0);
+
+        if (op->hist_feas.back() == 0) {
+            gparams->final_good = 0;
+        }
     }
 }
 

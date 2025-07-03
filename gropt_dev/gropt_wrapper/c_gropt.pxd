@@ -12,10 +12,11 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         int N
         int Naxis
         double dt
+        int final_good
 
         
         void vec_init_simple()
-        void diff_init_demo()
+        void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout)
 
         void add_gmax(double gmax)
         void add_smax(double smax)

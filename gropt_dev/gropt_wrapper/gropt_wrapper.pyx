@@ -31,8 +31,14 @@ cdef class GroptParams:
     def vec_init_simple(self):
         self.c_gparams.vec_init_simple()
 
-    def diff_init_demo(self):
-        self.c_gparams.diff_init_demo()
+    def diff_init(self,
+                  dt: float = 400e-6,
+                  TE: float = 80e-3,
+                  T_90: float = 3e-3,
+                  T_180: float = 5e-3,
+                  T_readout: float = 16e-3):
+        
+        self.c_gparams.diff_init(dt, TE, T_90, T_180, T_readout)
 
     def add_gmax(self, gmax):
         self.c_gparams.add_gmax(gmax)
@@ -56,7 +62,7 @@ cdef class GroptParams:
         self.c_gparams.init()
 
     def solve(self,
-              min_iter: int = 1000,
+              min_iter: int = 1,
               n_iter: int = 2000,
               gamma_x: float = 1.6,
               ils_tol: float = 1e-3,
@@ -92,6 +98,13 @@ cdef class GroptParams:
     @dt.setter
     def dt(self, val):
         self.c_gparams.dt = val
+
+    @property
+    def final_good(self):
+        return self.c_gparams.final_good
+    @final_good.setter
+    def final_good(self, val):
+        self.c_gparams.final_good = val
 
 def set_verbose(level):
     c_gropt.set_verbose(level)

@@ -1,12 +1,14 @@
 ## July 3rd 2026
 
 Easy first steps:
-- Allow defining the diffusion timings and dt
-- Output of feasibility status
+- XX Allow defining the diffusion timings and dt
+- XX Output of feasibility status
 
 Necessary steps:
 - Loading asc files and using those parameters
 - Multiple SAFE constraints
+- Allow gropt get_SAFE to take .asc files
+- Function to fake axis
 
 Helpful:
 - Internal TE finder or max b-value finder
