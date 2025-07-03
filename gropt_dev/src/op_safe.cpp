@@ -45,37 +45,37 @@ void Op_SAFE::init()
 
 void Op_SAFE::set_demo_params() 
 {
-    tau1(0) = 0.135/1000.0;
-    tau2(0) = 12.0/1000.0;
-    tau3(0) = 0.5175/1000.0;
-    a1(0) = 0.3130;
-    a2(0) = 0.1995;
-    a3(0) = 0.4875;
-    stim_limit(0) = 27.894;
-    g_scale(0) = 0.325;
+    safe_params.tau1[0] = 0.135/1000.0; 
+    safe_params.tau2[0] = 12.0/1000.0;
+    safe_params.tau3[0] = 0.5175/1000.0;
+    safe_params.a1[0] = 0.3130;
+    safe_params.a2[0] = 0.1995;
+    safe_params.a3[0] = 0.4875;
+    safe_params.stim_limit[0] = 27.894;
+    safe_params.g_scale[0] = 0.325;
 
-    tau1(1) = 1.5/1000.0;
-    tau2(1) = 2.5/1000.0;
-    tau3(1) = 0.15/1000.0;
-    a1(1) = 0.55;
-    a2(1) = 0.15;
-    a3(1) = 0.3;
-    stim_limit(1) = 15;
-    g_scale(1) = 0.31;
+    safe_params.tau1[1] = 1.5/1000.0;
+    safe_params.tau2[1] = 2.5/1000.0;
+    safe_params.tau3[1] = 0.15/1000.0;
+    safe_params.a1[1] = 0.55;
+    safe_params.a2[1] = 0.15;
+    safe_params.a3[1] = 0.3;
+    safe_params.stim_limit[1] = 15;
+    safe_params.g_scale[1] = 0.31;
 
-    tau1(2) = 2/1000.0;
-    tau2(2) = 0.12/1000.0;
-    tau3(2) = 1/1000.0;
-    a1(2) = 0.42;
-    a2(2) = 0.4;
-    a3(2) = 0.18;
-    stim_limit(2) = 25;
-    g_scale(2) = 0.25;
+    safe_params.tau1[2] = 2/1000.0;
+    safe_params.tau2[2] = 0.12/1000.0;
+    safe_params.tau3[2] = 1/1000.0;
+    safe_params.a1[2] = 0.42;
+    safe_params.a2[2] = 0.4;
+    safe_params.a3[2] = 0.18;
+    safe_params.stim_limit[2] = 25;
+    safe_params.g_scale[2] = 0.25;
 
     for (int i = 0; i < 3; i++) {
-        alpha1(i) = gparams->dt/(tau1(i) + gparams->dt);
-        alpha2(i) = gparams->dt/(tau2(i) + gparams->dt);
-        alpha3(i) = gparams->dt/(tau3(i) + gparams->dt);
+        safe_params.alpha1[i] = gparams->dt/(safe_params.tau1[i] + gparams->dt);
+        safe_params.alpha2[i] = gparams->dt/(safe_params.tau2[i] + gparams->dt);
+        safe_params.alpha3[i] = gparams->dt/(safe_params.tau3[i] + gparams->dt);
     }
 
 }
@@ -96,9 +96,9 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
     stim1.setZero();
     for (int j = 0; j < Naxis; j++) {
-        stim1(j*N) = alpha1(j) * out(j*N);
+        stim1(j*N) = safe_params.alpha1[j] * out(j*N);
         for (int i = 1; i < N; i++) {
-            stim1(j*N+i) = alpha1(j) * out(j*N+i) + (1.0-alpha1(j)) * stim1(j*N+i-1);
+            stim1(j*N+i) = safe_params.alpha1[j] * out(j*N+i) + (1.0-safe_params.alpha1[j]) * stim1(j*N+i-1);
         }
     }
     if (true_safe) {
@@ -109,9 +109,9 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
     stim2.setZero();
     for (int j = 0; j < Naxis; j++) {
-        stim2(j*N) = alpha2(j) * abs(out(j*N));
+        stim2(j*N) = safe_params.alpha2[j] * abs(out(j*N));
         for (int i = 1; i < N; i++) {
-            stim2(j*N+i) = alpha2(j) * abs(out(j*N+i)) + (1.0-alpha2(j)) * stim2(j*N+i-1);
+            stim2(j*N+i) = safe_params.alpha2[j] * abs(out(j*N+i)) + (1.0-safe_params.alpha2[j]) * stim2(j*N+i-1);
         }
     }
     if (!true_safe) {
@@ -122,9 +122,9 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
     stim3.setZero();
     for (int j = 0; j < Naxis; j++) {
-        stim3(j*N) = alpha3(j) * out(j*N);
+        stim3(j*N) = safe_params.alpha3[j] * out(j*N);
         for (int i = 1; i < N; i++) {
-            stim3(j*N+i) = alpha3(j) * out(j*N+i) + (1.0-alpha3(j)) * stim3(j*N+i-1);
+            stim3(j*N+i) = safe_params.alpha3[j] * out(j*N+i) + (1.0-safe_params.alpha3[j]) * stim3(j*N+i-1);
         }
     }
     if (true_safe) {
@@ -141,9 +141,9 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            out(j*3*N+i) = a1(j)*stim1(j*N+i) / stim_limit(j) * g_scale(j);
-            out(j*3*N+i+N) = a2(j)*stim2(j*N+i) / stim_limit(j) * g_scale(j);
-            out(j*3*N+i+2*N) = a3(j)*stim3(j*N+i) / stim_limit(j) * g_scale(j);
+            out(j*3*N+i) = safe_params.a1[j] * stim1(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            out(j*3*N+i+N) = safe_params.a2[j] * stim2(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            out(j*3*N+i+2*N) = safe_params.a3[j] * stim3(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
         }
     }
 
@@ -174,9 +174,9 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
     stim1.setZero();
     for (int j = 0; j < Naxis; j++) {
-        stim1(j*N+N-1) = alpha1(j) * x_temp(j*N+N-1);
+        stim1(j*N+N-1) = safe_params.alpha1[j] * x_temp(j*N+N-1);
         for (int i = N-2; i >= 0; i--) {
-            stim1(j*N+i) = alpha1(j) * x_temp(j*N+i) + (1-alpha1(j)) * stim1(j*N+i+1);
+            stim1(j*N+i) = safe_params.alpha1[j] * x_temp(j*N+i) + (1-safe_params.alpha1[j]) * stim1(j*N+i+1);
         }
     }
     if (true_safe) {
@@ -188,9 +188,9 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
     stim2.setZero();
     for (int j = 0; j < Naxis; j++) {
-        stim2(j*N+N-1) = alpha2(j) * abs(x_temp(j*N+N-1));
+        stim2(j*N+N-1) = safe_params.alpha2[j] * abs(x_temp(j*N+N-1));
         for (int i = N-2; i >= 0; i--) {
-            stim2(j*N+i) = alpha2(j) * abs(x_temp(j*N+i)) + (1-alpha2(j)) * stim2(j*N+i+1);
+            stim2(j*N+i) = safe_params.alpha2[j] * abs(x_temp(j*N+i)) + (1-safe_params.alpha2[j]) * stim2(j*N+i+1);
         }
     }
     if (!true_safe) {
@@ -203,9 +203,9 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
     stim3.setZero();
     for (int j = 0; j < Naxis; j++) {
-        stim3(j*N+N-1) = alpha3(j) * x_temp(j*N+N-1);
+        stim3(j*N+N-1) = safe_params.alpha3[j] * x_temp(j*N+N-1);
         for (int i = N-2; i >= 0; i--) {
-            stim3(j*N+i) = alpha3(j) * x_temp(j*N+i) + (1-alpha3(j)) * stim3(j*N+i+1);
+            stim3(j*N+i) = safe_params.alpha3[j] * x_temp(j*N+i) + (1-safe_params.alpha3[j]) * stim3(j*N+i+1);
         }
     }
     if (true_safe) {
@@ -218,7 +218,9 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
             // out(j*N+i) = signs(j*N+i) * (a1(j)*stim1(j*N+i) + a2(j)*stim2(j*N+i) + a3(j)*stim3(j*N+i)) / stim_limit(j) * g_scale(j);
-            out(j*N+i) = (a1(j)*stim1(j*N+i) + a2(j)*stim2(j*N+i) + a3(j)*stim3(j*N+i)) / stim_limit(j) * g_scale(j);
+            out(j*N+i) = (safe_params.a1[j]*stim1(j*N+i) + 
+                          safe_params.a2[j]*stim2(j*N+i) + 
+                          safe_params.a3[j]*stim3(j*N+i)) / safe_params.stim_limit[j] * safe_params.g_scale[j];
         }
     }
 

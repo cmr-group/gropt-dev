@@ -14,6 +14,24 @@
 
 namespace Gropt {
 
+class SAFEParams {
+
+    public:
+        std::vector<double> tau1 = std::vector<double>(3, 0.0);
+        std::vector<double> tau2 = std::vector<double>(3, 0.0);
+        std::vector<double> tau3 = std::vector<double>(3, 0.0);
+        std::vector<double> alpha1 = std::vector<double>(3, 0.0);
+        std::vector<double> alpha2 = std::vector<double>(3, 0.0);
+        std::vector<double> alpha3 = std::vector<double>(3, 0.0);
+        std::vector<double> a1 = std::vector<double>(3, 0.0);
+        std::vector<double> a2 = std::vector<double>(3, 0.0);
+        std::vector<double> a3 = std::vector<double>(3, 0.0);
+        std::vector<double> stim_limit = std::vector<double>(3, 0.0);
+        std::vector<double> g_scale = std::vector<double>(3, 0.0);
+
+        SAFEParams() = default;
+};
+
 class Op_SAFE : public Operator
 {  
     protected:
@@ -24,17 +42,7 @@ class Op_SAFE : public Operator
         Eigen::VectorXd stim2;
         Eigen::VectorXd stim3;
 
-        Eigen::Vector3d tau1;
-        Eigen::Vector3d tau2;
-        Eigen::Vector3d tau3;
-        Eigen::Vector3d alpha1;
-        Eigen::Vector3d alpha2;
-        Eigen::Vector3d alpha3;
-        Eigen::Vector3d a1;
-        Eigen::Vector3d a2;
-        Eigen::Vector3d a3;
-        Eigen::Vector3d stim_limit;
-        Eigen::Vector3d g_scale;
+        SAFEParams safe_params;
 
     public:
         bool true_safe;

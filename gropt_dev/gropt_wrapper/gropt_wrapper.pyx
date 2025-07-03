@@ -55,19 +55,14 @@ cdef class GroptParams:
     def init(self):
         self.c_gparams.init()
 
-    def solve(self, **kwargs):
-        if len(kwargs) == 0:
-            # Default solve parameters
-            self.c_gparams.solve()
-        else:
-            # Unpack kwargs and call solve with parameters
-            min_iter = kwargs.get('min_iter', 1000)
-            n_iter = kwargs.get('n_iter', 2000)
-            gamma_x = kwargs.get('gamma_x', 1.6)
-            ils_tol = kwargs.get('ils_tol', 1e-3)
-            ils_max_iter = kwargs.get('ils_max_iter', 20)
-            ils_min_iter = kwargs.get('ils_min_iter', 2)
-            ils_sigma = kwargs.get('ils_sigma', 1e-4)
+    def solve(self,
+              min_iter: int = 1000,
+              n_iter: int = 2000,
+              gamma_x: float = 1.6,
+              ils_tol: float = 1e-3,
+              ils_max_iter: int = 20,
+              ils_min_iter: int = 2,
+              ils_sigma: float = 1e-4):
 
             self.c_gparams.solve(min_iter, n_iter, gamma_x, ils_tol, ils_max_iter, ils_min_iter, ils_sigma)
 
