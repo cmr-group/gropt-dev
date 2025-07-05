@@ -138,9 +138,19 @@ void GroptParams::add_moment(double order, double target) {
     all_op.push_back(new Op_Moment(*this, order, target));
 }
 
-void GroptParams::add_SAFE(double stim_thresh) {
+void GroptParams::add_SAFE(double stim_thresh, 
+                           double *tau1, double *tau2, double *tau3, 
+                           double *a1, double *a2, double *a3,
+                           double *stim_limit, double *g_scale,
+                           int new_first_axis, bool demo_params) 
+{
     Op_SAFE* op_F = new Op_SAFE(*this, stim_thresh);
-    op_F->set_demo_params();
+    if (demo_params) {
+        op_F->safe_params.set_demo_params();
+    } else {
+        op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
+    }
+    op_F->safe_params.swap_first_axes(new_first_axis);
     all_op.push_back(op_F);
 }
 

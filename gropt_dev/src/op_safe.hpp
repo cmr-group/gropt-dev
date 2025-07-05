@@ -20,16 +20,24 @@ class SAFEParams {
         std::vector<double> tau1 = std::vector<double>(3, 0.0);
         std::vector<double> tau2 = std::vector<double>(3, 0.0);
         std::vector<double> tau3 = std::vector<double>(3, 0.0);
-        std::vector<double> alpha1 = std::vector<double>(3, 0.0);
-        std::vector<double> alpha2 = std::vector<double>(3, 0.0);
-        std::vector<double> alpha3 = std::vector<double>(3, 0.0);
         std::vector<double> a1 = std::vector<double>(3, 0.0);
         std::vector<double> a2 = std::vector<double>(3, 0.0);
         std::vector<double> a3 = std::vector<double>(3, 0.0);
         std::vector<double> stim_limit = std::vector<double>(3, 0.0);
         std::vector<double> g_scale = std::vector<double>(3, 0.0);
 
+        // These aren't real parameters as they depend on dt, maybe they should be in Op_SAFE?
+        std::vector<double> alpha1 = std::vector<double>(3, 0.0);
+        std::vector<double> alpha2 = std::vector<double>(3, 0.0);
+        std::vector<double> alpha3 = std::vector<double>(3, 0.0);
+
         SAFEParams() = default;
+        void set_demo_params();
+        void set_params(double *_tau1, double *_tau2, double *_tau3, 
+                            double *_a1, double *_a2, double *_a3,
+                            double *_stim_limit, double *_g_scale);
+        void calc_alphas(double dt);
+        void swap_first_axes(int new_first_axis);
 };
 
 class Op_SAFE : public Operator
@@ -42,10 +50,9 @@ class Op_SAFE : public Operator
         Eigen::VectorXd stim2;
         Eigen::VectorXd stim3;
 
-        SAFEParams safe_params;
-
     public:
         bool true_safe;
+        SAFEParams safe_params;
 
         Op_SAFE(GroptParams &_gparams, double _stim_thresh);
         virtual void init();

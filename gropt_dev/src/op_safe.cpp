@@ -19,7 +19,9 @@ Op_SAFE::Op_SAFE(GroptParams &_gparams, double _stim_thresh)
 void Op_SAFE::init()
 {
     spdlog::trace("Op_SAFE::init  N = {}", gparams->N);
-    
+
+    safe_params.calc_alphas(gparams->dt);
+
     target = 0;
     tol0 = stim_thresh;
     tol = (1.0-cushion) * tol0;
@@ -43,42 +45,16 @@ void Op_SAFE::init()
     spdlog::trace("Op_SAFE::init  Done!");
 }
 
-void Op_SAFE::set_demo_params() 
+
+void SAFEParams::calc_alphas(double dt) 
 {
-    safe_params.tau1[0] = 0.135/1000.0; 
-    safe_params.tau2[0] = 12.0/1000.0;
-    safe_params.tau3[0] = 0.5175/1000.0;
-    safe_params.a1[0] = 0.3130;
-    safe_params.a2[0] = 0.1995;
-    safe_params.a3[0] = 0.4875;
-    safe_params.stim_limit[0] = 27.894;
-    safe_params.g_scale[0] = 0.325;
-
-    safe_params.tau1[1] = 1.5/1000.0;
-    safe_params.tau2[1] = 2.5/1000.0;
-    safe_params.tau3[1] = 0.15/1000.0;
-    safe_params.a1[1] = 0.55;
-    safe_params.a2[1] = 0.15;
-    safe_params.a3[1] = 0.3;
-    safe_params.stim_limit[1] = 15;
-    safe_params.g_scale[1] = 0.31;
-
-    safe_params.tau1[2] = 2/1000.0;
-    safe_params.tau2[2] = 0.12/1000.0;
-    safe_params.tau3[2] = 1/1000.0;
-    safe_params.a1[2] = 0.42;
-    safe_params.a2[2] = 0.4;
-    safe_params.a3[2] = 0.18;
-    safe_params.stim_limit[2] = 25;
-    safe_params.g_scale[2] = 0.25;
-
     for (int i = 0; i < 3; i++) {
-        safe_params.alpha1[i] = gparams->dt/(safe_params.tau1[i] + gparams->dt);
-        safe_params.alpha2[i] = gparams->dt/(safe_params.tau2[i] + gparams->dt);
-        safe_params.alpha3[i] = gparams->dt/(safe_params.tau3[i] + gparams->dt);
+        alpha1[i] = dt/(tau1[i] + dt);
+        alpha2[i] = dt/(tau2[i] + dt);
+        alpha3[i] = dt/(tau3[i] + dt);
     }
-
 }
+
 
 void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
@@ -319,6 +295,86 @@ void Op_SAFE::check(Eigen::VectorXd &X)
     }
 
     hist_feas.push_back(is_feas);
+}
+
+
+void SAFEParams::set_demo_params() 
+{
+    tau1[0] = 0.135/1000.0; 
+    tau2[0] = 12.0/1000.0;
+    tau3[0] = 0.5175/1000.0;
+    a1[0] = 0.3130;
+    a2[0] = 0.1995;
+    a3[0] = 0.4875;
+    stim_limit[0] = 27.894;
+    g_scale[0] = 0.325;
+
+    tau1[1] = 1.5/1000.0;
+    tau2[1] = 2.5/1000.0;
+    tau3[1] = 0.15/1000.0;
+    a1[1] = 0.55;
+    a2[1] = 0.15;
+    a3[1] = 0.3;
+    stim_limit[1] = 15;
+    g_scale[1] = 0.31;
+
+    tau1[2] = 2/1000.0;
+    tau2[2] = 0.12/1000.0;
+    tau3[2] = 1/1000.0;
+    a1[2] = 0.42;
+    a2[2] = 0.4;
+    a3[2] = 0.18;
+    stim_limit[2] = 25;
+    g_scale[2] = 0.25;
+}
+
+void SAFEParams::set_params(double *_tau1, double *_tau2, double *_tau3, 
+                            double *_a1, double *_a2, double *_a3,
+                            double *_stim_limit, double *_g_scale) 
+{
+    tau1[0] = _tau1[0]; 
+    tau2[0] = _tau2[0];
+    tau3[0] = _tau3[0];
+    a1[0] = _a1[0];
+    a2[0] = _a2[0];
+    a3[0] = _a3[0];
+    stim_limit[0] = _stim_limit[0];
+    g_scale[0] = _g_scale[0];
+
+    tau1[1] = _tau1[1];
+    tau2[1] = _tau2[1];
+    tau3[1] = _tau3[1];
+    a1[1] = _a1[1];
+    a2[1] = _a2[1];
+    a3[1] = _a3[1];
+    stim_limit[1] = _stim_limit[1];
+    g_scale[1] = _g_scale[1];
+
+    tau1[2] = _tau1[2];
+    tau2[2] = _tau2[2];
+    tau3[2] = _tau3[2];
+    a1[2] = _a1[2];
+    a2[2] = _a2[2];
+    a3[2] = _a3[2];
+    stim_limit[2] = _stim_limit[2];
+    g_scale[2] = _g_scale[2];
+}
+
+void SAFEParams::swap_first_axes(int new_first_axis) 
+{
+    if (new_first_axis < 0 || new_first_axis >= 3) {
+        spdlog::error("Invalid axis index: {}", new_first_axis);
+        return;
+    } else if (new_first_axis > 0) {
+        std::swap(tau1[0], tau1[new_first_axis]);
+        std::swap(tau2[0], tau2[new_first_axis]);
+        std::swap(tau3[0], tau3[new_first_axis]);
+        std::swap(a1[0], a1[new_first_axis]);
+        std::swap(a2[0], a2[new_first_axis]);
+        std::swap(a3[0], a3[new_first_axis]);
+        std::swap(stim_limit[0], stim_limit[new_first_axis]);
+        std::swap(g_scale[0], g_scale[new_first_axis]);
+    }
 }
 
 }  // close "namespace Gropt"

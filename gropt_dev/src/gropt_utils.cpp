@@ -25,7 +25,12 @@ void set_verbose(int level) {
     }
 }
 
-void get_SAFE(int N, int Naxis, double dt, double *G_in, bool true_safe, double **out, int &out_size)
+void get_SAFE(int N, int Naxis, double dt, double *G_in, 
+              bool true_safe, int new_first_axis, bool demo_params,
+              double *tau1, double *tau2, double *tau3,
+              double *a1, double *a2, double *a3,
+              double *stim_limit, double *g_scale,
+              double **out, int &out_size)
 {
     spdlog::trace("get_SAFE(): start");
 
@@ -46,7 +51,12 @@ void get_SAFE(int N, int Naxis, double dt, double *G_in, bool true_safe, double 
     spdlog::trace("get_SAFE(): finished params");
 
     Op_SAFE opF(params, 1.0);
-    opF.set_demo_params();
+    if (demo_params) {
+        opF.safe_params.set_demo_params();
+    } else {
+        opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
+    }
+    opF.safe_params.swap_first_axes(new_first_axis);
     opF.true_safe = true_safe;
     opF.init();
 

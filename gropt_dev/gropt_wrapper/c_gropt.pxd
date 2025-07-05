@@ -21,7 +21,11 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         void add_gmax(double gmax)
         void add_smax(double smax)
         void add_moment(double order, double target)
-        void add_SAFE(double stim_thresh)
+        void add_SAFE(double stim_thresh,
+                      double *tau1, double *tau2, double *tau3, 
+                      double *a1, double *a2, double *a3,
+                      double *stim_limit, double *g_scale,
+                      int new_first_axis, bool demo_params)
         void add_bvalue(double target, double tol)
 
         void add_obj_identity(double weight_mod)
@@ -42,6 +46,10 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
 cdef extern from "gropt_utils.hpp" namespace "Gropt":
     
     void set_verbose(int level)
-    void get_SAFE(int N, int Naxis, double dt, double *G_in, bool true_safe, double **out, int &out_size)
+    void get_SAFE(int N, int Naxis, double dt, double *G_in, 
+                  bool true_safe, int new_first_axis, bool demo_params,
+                  double *tau1, double *tau2, double *tau3,
+                  double *a1, double *a2, double *a3,
+                  double *stim_limit, double *g_scale,
+                  double **out, int &out_size)
 
-        

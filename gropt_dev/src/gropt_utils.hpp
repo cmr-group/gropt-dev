@@ -17,8 +17,13 @@
 namespace Gropt {
     
 void set_verbose(int level);
-void get_SAFE(int N, int Naxis, double dt, double *G_in, bool true_safe, double **out, int &out_size);
-
+void get_SAFE(int N, int Naxis, double dt, double *G_in, 
+              bool true_safe, int new_first_axis, bool demo_params,
+              double *tau1, double *tau2, double *tau3,
+              double *a1, double *a2, double *a3,
+              double *stim_limit, double *g_scale,
+              double **out, int &out_size);
+              
 }  // close "namespace Gropt"
 
 #endif
