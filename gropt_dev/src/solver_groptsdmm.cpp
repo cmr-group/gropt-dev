@@ -17,7 +17,7 @@ void SolverGroptSDMM::solve()
     r_dual.setZero(X.size());
 
     if (gparams->ils_method == CG) {
-        ils_solver = new ILS_CG(*gparams, ils_tol, ils_min_iter, ils_sigma, ils_max_iter);
+        ils_solver = new ILS_CG(*gparams, ils_tol, ils_min_iter, ils_sigma, ils_max_iter, ils_tik_lam);
     } else {
         spdlog::error("Unknown Indirect Linear Solver method");
         return;
@@ -117,7 +117,6 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
         }
         if (max_index >= 0) {
             gparams->all_op[max_index]->weight *= 1.5;
-            spdlog::trace("Finished SolverGroptSDMM::update");
         }
     }
 

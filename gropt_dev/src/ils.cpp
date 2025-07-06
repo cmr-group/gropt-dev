@@ -4,8 +4,8 @@
 
 namespace Gropt {
 
-IndirectLinearSolver::IndirectLinearSolver(GroptParams &_gparams, int _n_iter, double _sigma)
-    : name("IndirectLinearSolver"), n_iter(_n_iter), sigma(_sigma)
+IndirectLinearSolver::IndirectLinearSolver(GroptParams &_gparams, int _n_iter, double _sigma, double _tik_lam)
+    : name("IndirectLinearSolver"), n_iter(_n_iter), sigma(_sigma), tik_lam(_tik_lam)
 {
     gparams = &_gparams;
     hist_n_iter.push_back(-1);
@@ -20,6 +20,10 @@ Eigen::VectorXd IndirectLinearSolver::solve(Eigen::VectorXd &x0)
 Eigen::VectorXd IndirectLinearSolver::get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out)
 {
     out.setZero();
+
+    if (tik_lam > 0.0) {
+        out.array() += tik_lam * x.array();
+    }
 
     out.array() += sigma * x.array();
 

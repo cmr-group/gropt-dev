@@ -176,7 +176,9 @@ void GroptParams::solve(int min_iter,
                         double ils_tol, 
                         int ils_max_iter, 
                         int ils_min_iter, 
-                        double ils_sigma) 
+                        double ils_sigma,
+                        double ils_tik_lam
+                        ) 
 {
     SolverGroptSDMM solver(*this);
     solver.min_iter = min_iter;
@@ -186,6 +188,7 @@ void GroptParams::solve(int min_iter,
     solver.ils_max_iter = ils_max_iter;
     solver.ils_min_iter = ils_min_iter;
     solver.ils_sigma = ils_sigma;
+    solver.ils_tik_lam = ils_tik_lam;
     solver.solve();
 }
 

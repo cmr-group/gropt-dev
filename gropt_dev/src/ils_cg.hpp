@@ -23,7 +23,7 @@ class ILS_CG : public IndirectLinearSolver
         double tol;
         int min_iter;
 
-        ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma, int _n_iter);
+        ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma, int _n_iter, double _tik_lam);
 
         // Runs conventional conjugate gradient
         Eigen::VectorXd solve(Eigen::VectorXd &x0) override;

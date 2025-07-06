@@ -2,6 +2,7 @@ private*
 gropt_wrapper.cpp
 build-release/
 build-debug/
+stubs/
 
 # We might eventualyl need these for tests
 *.h5

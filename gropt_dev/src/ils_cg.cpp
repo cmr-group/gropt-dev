@@ -4,8 +4,8 @@
 
 namespace Gropt {
 
-ILS_CG::ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma, int _n_iter)
-    : IndirectLinearSolver(_gparams, _n_iter, _sigma), tol(_tol), min_iter(_min_iter)
+ILS_CG::ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma, int _n_iter, double _tik_lam)
+    : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam), tol(_tol), min_iter(_min_iter)
 {
     name = "CG"; 
 

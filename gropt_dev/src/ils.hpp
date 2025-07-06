@@ -24,8 +24,9 @@ class IndirectLinearSolver
 
         int n_iter;
         double sigma;
+        double tik_lam;
 
-        IndirectLinearSolver(GroptParams &gparams, int _n_iter, double _sigma);
+        IndirectLinearSolver(GroptParams &gparams, int _n_iter, double _sigma, double _tik_lam);
         ~IndirectLinearSolver() = default;
 
         virtual Eigen::VectorXd solve(Eigen::VectorXd &x0);

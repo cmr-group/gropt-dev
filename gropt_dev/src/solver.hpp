@@ -27,6 +27,7 @@ class Solver
         int ils_max_iter = 10;
         int ils_min_iter = 2;
         double ils_sigma = 1e-4;
+        double ils_tik_lam = 1e-4;
 
         bool extra_debug = false;
         std::vector<Eigen::VectorXd> hist_X;

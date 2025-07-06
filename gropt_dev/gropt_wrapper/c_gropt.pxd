@@ -38,7 +38,8 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
                     double ils_tol, 
                     int ils_max_iter, 
                     int ils_min_iter, 
-                    double ils_sigma) 
+                    double ils_sigma,
+                    double ils_tik_lam) 
 
         void get_output(double **out, int &out_size)
 
