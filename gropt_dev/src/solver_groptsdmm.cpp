@@ -40,7 +40,7 @@ void SolverGroptSDMM::solve()
             spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         };
-        Xhat.array() *= gparams->fixer.array();
+        // Xhat.array() *= gparams->fixer.array();
  
         // Update all constraints (do prox operations)        
         update(Xhat);

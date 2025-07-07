@@ -47,7 +47,7 @@ class GroptParams
         GroptParams();
         ~GroptParams() = default;
 
-        void vec_init_simple();
+        void vec_init_simple(double first_val, double last_val);
         void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
 
         void init();

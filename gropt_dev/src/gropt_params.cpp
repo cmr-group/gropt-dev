@@ -16,22 +16,22 @@ namespace Gropt {
 GroptParams::GroptParams() {
 }
 
-void GroptParams::vec_init_simple() {
+void GroptParams::vec_init_simple(double first_val, double last_val) {
     inv_vec.setOnes(N * Naxis);
     
     set_vals.setZero(N * Naxis);
     set_vals.array() *= NAN;
-    set_vals(0) = 0.0;
-    set_vals(N-1) = 0.0;
-    
+    set_vals(0) = first_val;
+    set_vals(N-1) = last_val;
+
     fixer.setOnes(N * Naxis);
     fixer(0) = 0.0;
     fixer(N-1) = 0.0;
 
     X0.setOnes(N * Naxis);
     X0 *= .01;
-    X0(0) = 0.0;
-    X0(N-1) = 0.0;
+    X0(0) = first_val;
+    X0(N-1) = last_val;
 
     vec_init_status = N;
 }
@@ -113,7 +113,7 @@ void GroptParams::init() {
 
     if (vec_init_status != N) {
         spdlog::warn("set_vals and inv_vec were not initialized, calling vec_init_simple()");
-        vec_init_simple();
+        vec_init_simple(0.0, 0.0);
     }
 
     for (int i = 0; i < all_op.size(); i++) {

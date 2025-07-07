@@ -46,7 +46,7 @@ void get_SAFE(int N, int Naxis, double dt, double *G_in,
     params.N = N;
     params.Naxis = Naxis;
     params.dt = dt;
-    params.vec_init_simple();
+    params.vec_init_simple(0.0, 0.0);
 
     spdlog::trace("get_SAFE(): finished params");
 

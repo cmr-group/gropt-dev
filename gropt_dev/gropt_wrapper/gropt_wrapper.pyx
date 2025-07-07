@@ -28,10 +28,22 @@ cdef class GroptParams:
     def __init__(self):
         self.c_gparams = c_gropt.GroptParams() 
 
-    def vec_init_simple(self):
-        self.c_gparams.vec_init_simple()
+    def vec_init_simple(self,
+                        first_val: float = 0.0,
+                        last_val: float = 0.0):
+        """
+        Initialize the set_vec and inv_vec settings in gparams.
 
-    
+        Parameters
+        ----------
+        first_val : float, optional
+            Fixed value for the first point in the gradient vector. [mT/m]
+        last_val : float, optional
+            Fixed value for the last point in the gradient vector. [mT/m]
+        """
+
+        self.c_gparams.vec_init_simple(first_val, last_val)
+
     def diff_init(self,
                   dt: float = 400e-6,
                   TE: float = 80e-3,
