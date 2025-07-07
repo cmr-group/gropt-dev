@@ -5,7 +5,10 @@
 namespace Gropt {
 
 IndirectLinearSolver::IndirectLinearSolver(GroptParams &_gparams, int _n_iter, double _sigma, double _tik_lam)
-    : name("IndirectLinearSolver"), n_iter(_n_iter), sigma(_sigma), tik_lam(_tik_lam)
+    : name("IndirectLinearSolver"), 
+    n_iter(_n_iter), 
+    sigma(_sigma), 
+    tik_lam(_tik_lam)
 {
     gparams = &_gparams;
     hist_n_iter.push_back(-1);

@@ -8,6 +8,7 @@
 #include "op_identity.hpp"
 #include "op_bvalue.hpp"
 #include "op_safe.hpp"
+#include "op_tv.hpp"
 #include "solver_groptsdmm.hpp"
 
 namespace Gropt {
@@ -159,6 +160,11 @@ void GroptParams::add_bvalue(double target, double tol) {
     op_Bval->target = target;
     op_Bval->tol0 = tol;
     all_op.push_back(op_Bval);
+}
+
+void GroptParams::add_TV(double tv_lam, double weight_in)
+{
+    all_op.push_back(new Op_TV(*this, tv_lam, weight_in));  
 }
 
 void GroptParams::add_obj_identity(double weight_mod) {

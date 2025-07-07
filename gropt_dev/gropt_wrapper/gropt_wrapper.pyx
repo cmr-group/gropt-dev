@@ -116,6 +116,19 @@ cdef class GroptParams:
     def add_bvalue(self, target, tol):
         self.c_gparams.add_bvalue(target, tol)
 
+    def add_TV(self, tv_lam: float = 0.0, weight_in: float = 1.0):
+        """
+        Add total variation regularization parameters.
+
+        Parameters
+        ----------
+        tv_lam : float, optional
+            Regularization strength for total variation.
+        weight_in : float, optional
+            Weighting factor for the input data.
+        """
+        self.c_gparams.add_TV(tv_lam, weight_in)
+
     def add_obj_identity(self, weight_mod):
         self.c_gparams.add_obj_identity(weight_mod)
 
@@ -129,9 +142,10 @@ cdef class GroptParams:
               ils_tol: float = 1e-3,
               ils_max_iter: int = 20,
               ils_min_iter: int = 2,
-              ils_sigma: float = 1e-4):
+              ils_sigma: float = 1e-4,
+              ils_tik_lam: float = 0.0):
 
-        self.c_gparams.solve(min_iter, n_iter, gamma_x, ils_tol, ils_max_iter, ils_min_iter, ils_sigma)
+        self.c_gparams.solve(min_iter, n_iter, gamma_x, ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam)
 
     def get_out(self):
         cdef double *out

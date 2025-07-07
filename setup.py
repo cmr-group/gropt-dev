@@ -38,6 +38,7 @@ sources = ['gropt_params',
            'op_moment',
            'op_safe',
            'op_slew',
+           'op_tv',
            'solver',
            'solver_groptsdmm',
            ]

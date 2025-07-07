@@ -27,6 +27,7 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
                       double *stim_limit, double *g_scale,
                       int new_first_axis, bool demo_params)
         void add_bvalue(double target, double tol)
+        void add_TV(double tv_lam, double weight_in)
 
         void add_obj_identity(double weight_mod)
 
