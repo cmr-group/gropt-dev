@@ -18,6 +18,8 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         void vec_init_simple(double first_val, double last_val)
         void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout)
 
+        void set_ils_solver(string ils_method)
+
         void add_gmax(double gmax)
         void add_smax(double smax)
         void add_moment(double order, double target)

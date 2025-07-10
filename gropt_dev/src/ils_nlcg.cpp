@@ -4,126 +4,111 @@
 
 namespace Gropt {
 
-
-
-ILS_NLCG::ILS_NLCG(GroptParams &_gparams)
-    : IndirectLinearSolver(_gparams)
+ILS_NLCG::ILS_NLCG(GroptParams &_gparams, double _sigma, int _n_iter, double _tik_lam)
+    : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam)
 {
     name = "NLCG"; 
 
     b.setZero(gparams->N);
     Ax.setZero(gparams->N);
-    x.setZero(gparams->N);
+    x0.setZero(gparams->N);
 }
 
 
-double ILS_NLCG::line_search()
-{
-    for(int i = -4; i < 4; i++) {
-        double a = std::pow(10.0, i);
-        
-        Eigen::VectorXd xadx = x + a*dx;
-        Ax.setZero();
-        get_lhs(xadx, Ax);
-    }
-}
-
-Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x0)
+Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x_in)
 {
     start_time = std::chrono::steady_clock::now();
-    spdlog::trace("ILS_CG::solve  start");
+    spdlog::trace("ILS_NLCG::solve  start");
 
-    x = x0;
+    x0 = x_in;
 
-    b.setZero();
     get_rhs(x0, b);
 
-    Ax.setZero();
-    get_lhs(x, Ax);
+    get_lhs(x0, Ax);
 
     r = (Ax - b);
-    double rnorm0 = r.norm();
+    double rnorm0 = r.squaredNorm();
+    double rnorm_x0 = rnorm0;
 
-    dx.setZero();
-    get_lhs(r, dx);
+    Eigen::VectorXd g0;
+    Eigen::VectorXd g1;
 
+    g0.setZero(r.size());
+    g1.setZero(r.size());
 
+    get_lhs(r, g0);
+    g0 *= 2;
 
+    Eigen::VectorXd d0 = -g0;
+    Eigen::VectorXd d1;
 
+    Eigen::VectorXd xad;
+    Eigen::VectorXd y;
+    Eigen::VectorXd ymid;
 
-    double rnorm0;
-    double bnorm0;
-    double tol0;
-    double res;
-
-    double alpha; 
+    double alpha0 = 2.0;
+    double alpha;
+    double rnorm_xad;
     double beta;
-    double gamma;
-
-    double pAp;
-
-    x = x0;
-
-    b.setZero();
-    get_rhs(x0, b);
-
-    Ax.setZero();
-    Ap.setZero();
-    get_lhs(x, Ax);
-
-    r = (b - Ax);
-    rnorm0 = r.norm();
-    bnorm0 = b.norm();
-
-    // tol0 = std::max(rel_tol*rnorm0/bnorm0, 1.0e-12);
-    // if (gparams->iiter > 3) {
-    //     tol = std::min(tol0, tol);
-    // } else {
-    //     tol = tol0;
-    // }
-
-    tol = 1e-12;
-
-    p = r;
-    gamma = r.dot(r);
-
-    double gamma_new;
+    
     int ii;
     for (ii = 0; ii < n_iter; ii++) {
-        spdlog::trace("ILS_CG::solve  ii = {:d}  start", ii);
+        alpha = alpha0;
 
-        Ap.setZero();
-        get_lhs(p, Ap);  // Ap = A*p
-        pAp = p.dot(Ap);
-        alpha = gamma / pAp;
-
-        x += alpha * p;
-        r -= alpha * Ap;
-
-        gamma_new = r.dot(r);
-        beta = gamma_new / gamma;
-        gamma = gamma_new;
-
-        p = beta * p + r;
-
-        if ((gamma <= tol * rnorm0) && (ii > 4))
-        {
-            spdlog::trace("ILS_CG::solve  break for (res <= tol)  ii = {:d}", ii);
-            break;
+        xad = x0 + alpha*d0;
+        get_lhs(xad, Ax);
+        r = (Ax - b);
+        rnorm_xad = r.squaredNorm();
+        
+        while (rnorm_xad > rnorm_x0 + eta*alpha*g0.dot(d0)) {
+            alpha *= theta;
+            xad = x0 + alpha*d0;
+            get_lhs(xad, Ax);
+            r = (Ax - b);
+            rnorm_xad = r.squaredNorm();
+            if (alpha < 1e-32) {
+                spdlog::warn("ILS_NLCG::solve  alpha < 1e-32, stopping line search");
+                break;
+            } 
         }
 
-        
-        
+        x1 = xad;
+        get_lhs(r, g1);
+        g1 *= 2;
+
+        y = g1 - g0;
+
+        // ymid = y - 2*d0*y.squaredNorm()/d0.dot(y);
+        // beta = 1.0/(d0.dot(y)) * ymid.dot(g1);
+
+        beta = g1.dot(y) / g0.squaredNorm();
+        if (beta < 0.0) {
+            beta = 0.0;
+        }
+
+        // beta = g1.squaredNorm() / g0.squaredNorm();
+
+        d1 = -g1 + beta*d0;
+
+        if (g1.dot(d1) >= 0.0) {
+            d1 = -g1;
+        }
+
+        x0 = x1;
+        g0 = g1;
+        d0 = d1;
+        rnorm_x0 = rnorm_xad;
+        alpha0 = 4 * alpha;
     }
 
-    spdlog::trace("ILS_CG::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, r.norm(), ii);
+    spdlog::info("ILS_NLCG::solve  rnorm0 = {:e}   rnorm = {:e}   alpha0 = {:e}   ii = {:d}", sqrt(rnorm0), r.norm(), alpha0, ii);
 
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
 
     hist_n_iter.push_back(ii+1);
 
-    return x;
+    return x1;
 }
 
 

@@ -32,7 +32,7 @@ void Op_SAFE::init()
     Ax_size = 3 * gparams->Naxis * gparams->N;
 
     if (!save_weights) {
-        weight = 1e4 / spec_norm2;
+        weight = 1e4;
     }
 
     signs.setZero(gparams->Naxis*gparams->N);

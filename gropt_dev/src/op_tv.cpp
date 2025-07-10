@@ -27,7 +27,7 @@ void Op_TV::init()
     Ax_size = gparams->Naxis * (gparams->N-1);
 
     if (!save_weights) {
-        weight = weight_in * 1e4 / spec_norm2;
+        weight = weight_in * 1e4;
     }
 
     Operator::init();

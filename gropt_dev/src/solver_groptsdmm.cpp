@@ -2,6 +2,8 @@
 
 #include "ils.hpp"
 #include "ils_cg.hpp"
+#include "ils_nlcg.hpp"
+#include "ils_bicgstabl.hpp"
 #include "solver_groptsdmm.hpp"
 
 namespace Gropt {
@@ -18,8 +20,12 @@ void SolverGroptSDMM::solve()
 
     if (gparams->ils_method == CG) {
         ils_solver = new ILS_CG(*gparams, ils_tol, ils_min_iter, ils_sigma, ils_max_iter, ils_tik_lam);
+    } else if (gparams->ils_method == NLCG) {
+        ils_solver = new ILS_NLCG(*gparams, ils_sigma, ils_max_iter, ils_tik_lam);
+    } else if (gparams->ils_method == BiCGstabl) {
+        ils_solver = new ILS_BiCGstabl(*gparams, ils_tol, ils_sigma, ils_max_iter, ils_tik_lam);
     } else {
-        spdlog::error("Unknown Indirect Linear Solver method");
+        spdlog::error("SolverGroptSDMM::solve()  Unknown Indirect Linear Solver method");
         return;
     }
 
@@ -34,7 +40,11 @@ void SolverGroptSDMM::solve()
         spdlog::trace("Starting GroptSDMM iteration {:d} SolverGroptSDMM::solve", iiter);
         gparams->iiter = iiter;
 
-        Xhat = ils_solver->solve(X);
+        if (iiter > 0) {
+            Xhat = ils_solver->solve(X);
+        } else {
+            Xhat = X;
+        }
 
         if (Xhat.array().isNaN().any()) {
             spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
@@ -46,7 +56,7 @@ void SolverGroptSDMM::solve()
         update(Xhat);
 
         X = gamma_x * Xhat + (1 - gamma_x) * X;
-        
+
         get_residuals(X);
 
         if (extra_debug) {hist_X.push_back(X);}

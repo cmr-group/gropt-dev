@@ -57,7 +57,7 @@ void Op_Moment::init()
     tol = (1.0-cushion) * tol0;
     
     if (!save_weights) {
-        weight = 1.0e4 / spec_norm2;
+        weight = 1.0e4;
     }
 
     Operator::init();

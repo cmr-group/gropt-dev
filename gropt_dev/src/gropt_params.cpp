@@ -46,6 +46,7 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
     double TE = _TE;
 
     N = (int)((TE-T_readout)/dt) + 1;
+    Ntot = N * Naxis;
 
     int ind_inv = (int)(TE/2.0/dt);
     inv_vec.setOnes(N);
@@ -91,7 +92,24 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
 
 }
 
-// This is a warm starter assuming that N ahs not changed
+void GroptParams::set_ils_solver(std::string _ils_method) 
+{
+    spdlog::info("set_ils_solver: {}", _ils_method);
+    if (_ils_method == "CG") {
+        ils_method = CG;
+    } else if (_ils_method == "NLCG") {
+        ils_method = NLCG;
+    } else if (_ils_method == "BiCGstabl") {
+        ils_method = BiCGstabl;
+    } else {
+        spdlog::error("Unknown Indirect Linear Solver method: {}", _ils_method);
+        throw std::invalid_argument("Unknown Indirect Linear Solver method");
+    }
+}
+
+
+
+// This is a warm starter assuming that N has not changed
 void GroptParams::warm_start_prev() {
     X0 = final_X;
 
@@ -110,6 +128,12 @@ void GroptParams::warm_start_prev() {
 void GroptParams::init() {
 
     spdlog::trace("GroptParams::init() start");
+
+    if (N*Naxis != Ntot) {
+        Ntot = N * Naxis;
+        spdlog::warn("Ntot is not consistent with N and Naxis");
+        spdlog::warn("Setting Ntot = {}", Ntot);
+    }
 
     if (vec_init_status != N) {
         spdlog::warn("set_vals and inv_vec were not initialized, calling vec_init_simple()");

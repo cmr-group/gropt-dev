@@ -14,23 +14,20 @@ namespace Gropt {
 class ILS_NLCG : public IndirectLinearSolver
 {
     public:
-        Eigen::VectorXd x;
+        Eigen::VectorXd x0;
+        Eigen::VectorXd x1;
         Eigen::VectorXd b;
         Eigen::VectorXd Ax;
-        Eigen::VectorXd dx;
-        Eigen::VectorXd s0;
-        Eigen::VectorXd s1;
         Eigen::VectorXd r;
 
-        double alpha;
-        double beta;
+        double eta = 0.8;
+        double theta = 0.5;
 
 
-        ILS_NLCG(GroptParams &_gparams);
+        ILS_NLCG(GroptParams &_gparams, double _sigma, int _n_iter, double _tik_lam);
 
         // Runs conventional conjugate gradient
         Eigen::VectorXd solve(Eigen::VectorXd &x0) override;
-        double line_search();
 
 };
 

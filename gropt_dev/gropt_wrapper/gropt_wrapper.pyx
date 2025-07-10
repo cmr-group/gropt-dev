@@ -70,6 +70,17 @@ cdef class GroptParams:
         
         self.c_gparams.diff_init(dt, TE, T_90, T_180, T_readout)
 
+    def set_ils_solver(self, ils_method: str = 'CG'):
+        """
+        Set the indirect solver method.
+
+        Parameters
+        ----------
+        ils_method : str
+            The name of the indirect solver method to use.
+        """
+        self.c_gparams.set_ils_solver(ils_method.encode('utf-8'))
+
     def add_gmax(self, gmax):
         self.c_gparams.add_gmax(gmax)
 

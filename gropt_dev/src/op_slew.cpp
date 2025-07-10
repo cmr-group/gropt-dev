@@ -25,7 +25,7 @@ void Op_Slew::init()
     Ax_size = gparams->Naxis * (gparams->N-1);
 
     if (!save_weights) {
-        weight = 1e4 / spec_norm2;
+        weight = 1e4;
     }
 
     Operator::init();

@@ -95,7 +95,7 @@ namespace Gropt {
     {
         transpose(X, out);
         out.array() *= gparams->fixer.array();
-        // out.array() /= spec_norm2;
+        out.array() /= spec_norm2;
     }
 
     void Operator::add_Atb(Eigen::VectorXd &b)

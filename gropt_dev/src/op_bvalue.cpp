@@ -25,8 +25,8 @@ void Op_BValue::init()
     Ax_size = gparams->Naxis * gparams->N;
 
     if (!save_weights) {
-        weight = 1.0e4 / spec_norm2;
-        obj_weight = -1.0/spec_norm2;
+        weight = 1.0e4;
+        obj_weight = -1.0;
     }
 
     Operator::init();

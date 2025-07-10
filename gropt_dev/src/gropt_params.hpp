@@ -16,6 +16,8 @@ enum SolverMethod {
 
 enum ILSMethod {
   CG,
+  NLCG,
+  BiCGstabl,
 }; 
 
 class Operator;  // Forward declaration of Operator class
@@ -38,6 +40,8 @@ class GroptParams
         double dt = 10e-6;
         int N = 10;
         int Naxis = 1;
+        // WARNING, TODO: Need to use getter and setters for N and Naxis to update Ntot automatically, it is not guaranteed now
+        int Ntot = 10;  
 
         int iiter;
         int final_good = 0;
@@ -52,6 +56,8 @@ class GroptParams
 
         void init();
         void warm_start_prev();
+
+        void set_ils_solver(std::string ils_method);
 
         void add_gmax(double gmax);
         void add_smax(double smax);
