@@ -20,11 +20,10 @@ namespace Gropt {
 class Op_TV : public Operator
 {  
     protected:
-        double weight_in = 1.0;;
         double tv_lam = 0.0;
 
     public:
-        Op_TV(GroptParams &_gparams, double _tv_lam, double _weight_in);
+        Op_TV(GroptParams &_gparams, double _tv_lam, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

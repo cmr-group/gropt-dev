@@ -10,8 +10,33 @@ cnp.import_array()
 
 cimport c_gropt
 
-# Prepare numpy array for memory view, with as few copies as possible
 def array_prep(A, dtype, linear=True):
+    """
+    Prepare a NumPy array for a Cython memory view.
+
+    This function ensures that the input array `A` is C-contiguous and
+    has the specified data type, making it suitable for efficient use
+    with Cython memory views. It aims to minimize data copies by using
+    `np.ascontiguousarray` and `astype(copy=False)` where possible.
+    The array can also be flattened.
+
+    Parameters
+    ----------
+    A : array_like
+        The input array to be prepared.
+    dtype : numpy.dtype
+        The target data type for the array.
+    linear : bool, optional
+        If True (default), the array is flattened into a 1D array
+        using `ravel()`. If False, the array's dimensions are preserved.
+
+    Returns
+    -------
+    numpy.ndarray
+        The prepared NumPy array, which is C-contiguous, has the correct
+        `dtype`, and is optionally flattened.
+
+    """
     if not A.flags['C_CONTIGUOUS']:
         A = np.ascontiguousarray(A)
     
@@ -29,6 +54,8 @@ cdef class GroptParams:
         self.c_gparams = c_gropt.GroptParams() 
 
     def vec_init_simple(self,
+                        N: int = -1,
+                        Naxis: int = -1,
                         first_val: float = 0.0,
                         last_val: float = 0.0):
         """
@@ -36,13 +63,17 @@ cdef class GroptParams:
 
         Parameters
         ----------
+        N : int, optional
+            Number of points in a *single* axis of the waveform. Negative values
+            will use the existing value.
+        Naxis : int, optional
+            Number of axes in the waveform. Negative values will use the existing value.
         first_val : float, optional
             Fixed value for the first point in the gradient vector. [mT/m]
         last_val : float, optional
             Fixed value for the last point in the gradient vector. [mT/m]
         """
-
-        self.c_gparams.vec_init_simple(first_val, last_val)
+        self.c_gparams.vec_init_simple(N, Naxis, first_val, last_val)
 
     def diff_init(self,
                   dt: float = 400e-6,
@@ -78,25 +109,133 @@ cdef class GroptParams:
         ----------
         ils_method : str
             The name of the indirect solver method to use.
+            Currently supported methods are 'CG', 'NLCG', and 'BiCGstabl'. (case-sensitive)
         """
         self.c_gparams.set_ils_solver(ils_method.encode('utf-8'))
 
-    def add_gmax(self, gmax):
-        self.c_gparams.add_gmax(gmax)
+    def add_gmax(self, 
+                 gmax: float = 0.03,
+                 rot_variant: bool = True,
+                 weight_mod: float = 1.0):
+        """
+        Adds a constraint for the maximum gradient amplitude.
 
-    def add_smax(self, smax):
-        self.c_gparams.add_smax(smax)
+        Parameters
+        ----------
+        gmax : float, optional
+            The maximum allowed gradient magnitude [T/m].
+            Defaults to 0.03.
+        rot_variant : bool, optional
+            If True, uses the rotationally invariant formulation of the gmax
+            constraint. i.e. each gradient axis can hit gmax.  Defaults to True.
+        weight_mod : float, optional
+            A weighting factor for this specific constraint in the optimization
+            problem. Defaults to 1.0.
+        """
+        self.c_gparams.add_gmax(gmax, rot_variant, weight_mod)
 
-    def add_moment(self, order, target):
-        self.c_gparams.add_moment(order, target)
+    def add_smax(self, 
+                 smax: float = 80.0,
+                 rot_variant: bool = True,
+                 weight_mod: float = 1.0):
+        """
+        Adds a constraint for the maximum gradient slew rate.
+
+        Parameters
+        ----------
+        smax : float, optional
+            The maximum allowed gradient slew rate [T/m/s].
+            Defaults to 0.03.
+        rot_variant : bool, optional
+            If True, uses the rotationally invariant formulation of the smax
+            constraint. i.e. each gradient axis can hit smax.  Defaults to True.
+        weight_mod : float, optional
+            A weighting factor for this specific constraint in the optimization
+            problem. Defaults to 1.0.
+        """
+        self.c_gparams.add_smax(smax, rot_variant, weight_mod)
+
+   
+    def add_moment(self, 
+                   order: int = 0, 
+                   target: float = 0.0, 
+                   tol: float = 1e-6, 
+                   units: str = 'mT*ms/m',
+                   axis: int = 0, 
+                   start_idx: int = -1, 
+                   stop_idx: int = -1, 
+                   ref_idx: int = 0,
+                   weight_mod: float = 1.0):
+        """
+        Adds a moment constraint to the optimization problem.
+
+        Parameters
+        ----------
+        order : int, optional
+            The order of the moment.
+            Defaults to 0.
+        target : float, optional
+            The target value for the moment constraint.
+            Defaults to 0.0.
+        tol : float, optional
+            The tolerance for satisfying the moment constraint.
+            Defaults to 1e-6.
+        units : str, optional
+            The units of the moment constraint, for `target` and `tolerance`
+            Defaults to 'mT*ms/m'.
+            Can be 'mT*ms/m', 'T*s/m', 'rad*s/m', or 's/m'
+        axis : int, optional
+            The axis along which the moment is calculated.
+            Defaults to 0.
+        start_idx : int, optional
+            The starting index (inclusive) for the range over which the
+            moment is calculated. A value of -1 indicates the beginning of the
+            axis. 
+            Defaults to -1.
+        stop_idx : int, optional
+            The stopping index (exclusive) for the range over which the
+            moment is calculated. A value of -1 indicates the end of the
+            axis. 
+            Defaults to -1.
+        ref_idx : int, optional
+            The reference index, (i.e. index where t=0 in moment calculations), 
+            which often could be the time of excitation.
+            Defaults to 0.
+        weight_mod : float, optional
+            A weighting factor for this specific constraint in the optimization
+            problem. Defaults to 1.0.
+        """
+        self.c_gparams.add_moment(order, target, tol, units, axis, start_idx, stop_idx, ref_idx, weight_mod)
 
     def add_SAFE(self, 
                  stim_thresh: float = 1.0,
                  new_first_axis: int = 0, 
                  demo_params: bool = True, 
-                 safe_params: dict = None
-    ):
+                 safe_params: dict = None,
+                 weight_mod: float = 1.0):
+        """
+        Adds a SAFE constraint to the optimization problem.
 
+        Parameters
+        ----------
+        stim_thresh : float
+            The stimulus threshold for the SAFE constraint.
+            Defaults to 1.0.
+        new_first_axis : int
+            Swaps the first axis of the SAFE parameters used for the constraint. 
+            This is useful for a single-axis optimization, where you want to test
+            the SAFE parameters for a different axis than the first.
+            Defaults to 0.
+        demo_params : bool
+            Whether to use demo parameters for the SAFE constraint.
+            NOTE: If `safe_params` is not None, this parameter is ignored.
+            Defaults to True.
+        safe_params : dict, optional
+            A dictionary of SAFE parameters. See `gropt.readasc`
+        weight_mod : float, optional
+            A weighting factor for this specific constraint in the optimization
+            problem. Defaults to 1.0.
+        """
         if safe_params is None and not demo_params:
             raise ValueError("If safe_params is None, demo_params must be True.")
         
@@ -125,42 +264,93 @@ cdef class GroptParams:
                                     &tau1_view[0], &tau2_view[0], &tau3_view[0],
                                     &a1_view[0], &a2_view[0], &a3_view[0],
                                     &stim_limit_view[0], &g_scale_view[0],
-                                    new_first_axis, False)
+                                    new_first_axis, False, weight_mod)
         else:
             self.c_gparams.add_SAFE(stim_thresh,
                                     _unused, _unused, _unused, _unused, _unused, _unused,
                                     _unused, _unused,
-                                     new_first_axis, demo_params)
-        
-        
-        
+                                     new_first_axis, demo_params, weight_mod)
 
+    def add_bvalue(self, 
+                   target: float = 100.0, 
+                   tol: float = 1.0,
+                   start_idx0: int = -1, 
+                   stop_idx0: int = -1, 
+                   weight_mod: float = 1.0):
+        """
+        Adds a b-value constraint to the optimization problem.
+        
+        Parameters
+        ----------
+        target : float, optional
+            The target b-value for the constraint. 
+            Defaults to 100.0.
+        tol : float, optional
+            The tolerance for the b-value constraint. 
+            Keeping this value a little larger (>0.1) might make the optimization faster.
+            Defaults to 1.0.
+        start_idx0 : int, optional
+            The starting index (inclusive) for the range over which the constraint is applied. 
+            Defaults to -1 ( = full waveform).
+        stop_idx0 : int, optional
+            The stopping index (exclusive) for the range over which the constraint is applied. 
+            Defaults to -1 ( = full waveform).
+        weight_mod : float, optional
+            A weighting factor for this specific constraint in the optimization problem. 
+            Defaults to 1.0.
+        """
+        self.c_gparams.add_bvalue(target, tol, start_idx0, stop_idx0, weight_mod)
 
-    def add_bvalue(self, target, tol):
-        self.c_gparams.add_bvalue(target, tol)
-
-    def add_TV(self, tv_lam: float = 0.0, weight_in: float = 1.0):
+    def add_TV(self, 
+               tv_lam: float = 0.0, 
+               weight_mod: float = 1.0):
         """
         Add total variation regularization parameters.
 
+        Unlike other constraints, this is not required to be feasible.
+        TODO: Make this property a user choice so it can be required for feasibility.
         Parameters
         ----------
         tv_lam : float, optional
-            Regularization strength for total variation.
-        weight_in : float, optional
-            Weighting factor for the input data.
+            Regularization strength for total variation.  This wont do
+            anything if it is not > 0.0.
+        weight_mod : float, optional
+            A weighting factor for this specific constraint in the optimization problem. 
+            Defaults to 1.0.
         """
-        self.c_gparams.add_TV(tv_lam, weight_in)
+        self.c_gparams.add_TV(tv_lam, weight_mod)
 
-    def add_obj_identity(self, weight_mod):
+    def add_obj_identity(self, 
+                         weight_mod: float = 1.0):
+        """
+        Add an identity objective function to the problem.
+
+        This is typically used for regularization, penalizing the L2 norm
+        of the solution vector.
+
+        Parameters
+        ----------
+        weight_mod : float
+            The weighting factor for the identity objective. Larger values
+            increase the penalty on the solution's norm.
+            Default 1.0
+        """
         self.c_gparams.add_obj_identity(weight_mod)
 
+
     def init(self):
+        """
+        Force an initialization of the GroptParams object.
+
+        This mostly just allocates vectors in each of the constraints, and 
+        sets up the initial optimization variables.  It is automatically done in solve
+        if it has not been done yet.
+        """
         self.c_gparams.init()
 
     def solve(self,
               min_iter: int = 1,
-              n_iter: int = 2000,
+              max_iter: int = 2000,
               gamma_x: float = 1.6,
               ils_tol: float = 1e-3,
               ils_max_iter: int = 20,
@@ -168,14 +358,23 @@ cdef class GroptParams:
               ils_sigma: float = 1e-4,
               ils_tik_lam: float = 0.0):
 
-        self.c_gparams.solve(min_iter, n_iter, gamma_x, ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam)
+        self.c_gparams.solve(min_iter, max_iter, gamma_x, ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam)
 
-    def get_out(self):
+    def get_out(self) -> np.ndarray:
+        """
+        Get the gradient waveform output from the C++ layer.
+
+        Returns
+        -------
+        np.ndarray
+            The output array.
+        """
         cdef double *out
         cdef int out_size
         self.c_gparams.get_output(&out, out_size)
         return np.asarray(<cnp.float64_t[:out_size]> out)
 
+    # TODO: Make these protected and use getter/setters (except final_good)
     @property
     def N(self):
         return self.c_gparams.N
@@ -204,6 +403,10 @@ cdef class GroptParams:
     def final_good(self, val):
         self.c_gparams.final_good = val
 
+
+# ---------------------------------------------------------
+# GroptWrapper functions
+# ---------------------------------------------------------
 def set_verbose(level):
     c_gropt.set_verbose(level)
 
@@ -212,8 +415,7 @@ def get_SAFE(G: np.ndarray,
              true_safe: bool = True, 
              new_first_axis: int = 0, 
              demo_params: bool = True, 
-             safe_params: dict = None
-):
+             safe_params: dict = None) -> np.ndarray:
 
     if safe_params is None and not demo_params:
         raise ValueError("If safe_params is None, demo_params must be True.")

@@ -4,11 +4,13 @@
 
 namespace Gropt {
 
-Op_Gradient::Op_Gradient(GroptParams &_gparams, double _gmax)
+Op_Gradient::Op_Gradient(GroptParams &_gparams, double _gmax, bool _rot_variant, double _weight_mod)
     : Operator(_gparams)
 {
     name = "Gradient"; 
     gmax = _gmax;
+    rot_variant = _rot_variant;
+    weight_mod = _weight_mod;
 }
 
 void Op_Gradient::init()
@@ -23,6 +25,14 @@ void Op_Gradient::init()
     spec_norm = 1.0;
 
     Ax_size = gparams->Naxis * gparams->N;
+
+    if (do_init_weights) {
+        weight = 1.0;
+        obj_weight = 1.0;
+
+        weight *= weight_mod;
+        obj_weight *= weight_mod;
+    }
 
     Operator::init();
 }

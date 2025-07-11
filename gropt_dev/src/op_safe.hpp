@@ -16,7 +16,8 @@ namespace Gropt {
 
 class SAFEParams {
 
-    public:
+    public:  // Code is too messy if this isnt public, any better way?
+
         std::vector<double> tau1 = std::vector<double>(3, 0.0);
         std::vector<double> tau2 = std::vector<double>(3, 0.0);
         std::vector<double> tau3 = std::vector<double>(3, 0.0);
@@ -26,11 +27,12 @@ class SAFEParams {
         std::vector<double> stim_limit = std::vector<double>(3, 0.0);
         std::vector<double> g_scale = std::vector<double>(3, 0.0);
 
-        // These aren't real parameters as they depend on dt, maybe they should be in Op_SAFE?
+        // These aren't real parameters because they depend on dt, maybe they should be in Op_SAFE?
         std::vector<double> alpha1 = std::vector<double>(3, 0.0);
         std::vector<double> alpha2 = std::vector<double>(3, 0.0);
         std::vector<double> alpha3 = std::vector<double>(3, 0.0);
 
+    
         SAFEParams() = default;
         void set_demo_params();
         void set_params(double *_tau1, double *_tau2, double *_tau3, 
@@ -44,6 +46,7 @@ class Op_SAFE : public Operator
 {  
     protected:
         double stim_thresh;
+        bool true_safe;
 
         Eigen::VectorXd signs;
         Eigen::VectorXd stim1;
@@ -51,13 +54,10 @@ class Op_SAFE : public Operator
         Eigen::VectorXd stim3;
 
     public:
-        bool true_safe;
         SAFEParams safe_params;
 
-        Op_SAFE(GroptParams &_gparams, double _stim_thresh);
+        Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod, bool _true_safe);
         virtual void init();
-
-        void set_demo_params();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);
         virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);

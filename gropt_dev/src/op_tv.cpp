@@ -4,11 +4,11 @@
 
 namespace Gropt {
 
-Op_TV::Op_TV(GroptParams &_gparams, double _tv_lam, double _weight_in)
+Op_TV::Op_TV(GroptParams &_gparams, double _tv_lam, double _weight_mod)
     : Operator(_gparams)
 {
     name = "TotalVariation"; 
-    weight_in = _weight_in;
+    weight_mod = _weight_mod;
     tv_lam = _tv_lam;
 }
 
@@ -16,7 +16,6 @@ void Op_TV::init()
 {
     spdlog::trace("Op_TV::init  N = {}", gparams->N);
     
-    // These arent really used for shrinkage
     target = 0;
     tol0 = tv_lam;
     tol = (1.0-cushion) * tol0;
@@ -26,8 +25,12 @@ void Op_TV::init()
 
     Ax_size = gparams->Naxis * (gparams->N-1);
 
-    if (!save_weights) {
-        weight = weight_in * 1e4;
+    if (do_init_weights) {
+        weight = 1e4;
+        obj_weight = 1.0;
+
+        weight *= weight_mod;
+        obj_weight *= weight_mod;
     }
 
     Operator::init();

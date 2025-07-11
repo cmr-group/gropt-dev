@@ -19,17 +19,17 @@ namespace Gropt {
 
 class Op_Gradient : public Operator
 {  
-    public:
+    protected:
         double gmax;
-
-        Op_Gradient(GroptParams &_gparams, double _gmax);
+    
+    public:
+        Op_Gradient(GroptParams &_gparams, double _gmax, bool _rot_variant, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);
         virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);
         virtual void prox(Eigen::VectorXd &X);
         virtual void check(Eigen::VectorXd &X);
-
 };
 
 }  // close "namespace Gropt"

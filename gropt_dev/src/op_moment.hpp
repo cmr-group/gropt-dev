@@ -17,24 +17,30 @@ namespace Gropt {
 
 class Op_Moment : public Operator
 {  
-    public:
-        // These references may change due to gparams resize, so keep a record of input values
-        int input_start = -1;
-        int input_stop = -1;
 
+    protected:
+         // These references may change due to gparams resize, so keep a record of input values
+        int start_idx0 = -1;
+        int stop_idx0 = -1;
+        int ref_idx0 = 0;
+
+        int start_idx;
+        int stop_idx;
+        int ref_idx;    
 
         int moment_axis = 0;
         double moment_order;
-        double moment_ref0 = 0.0;
-        int moment_start;
-        int moment_stop;
         double moment_target = 0;
         double moment_tol0 = 1e-6;
 
+        std::string units = "mT*ms/m";  
+
+    public:
         Eigen::MatrixXd A;
 
-        Op_Moment(GroptParams &_gparams, double _order);
-        Op_Moment(GroptParams &_gparams, double _order, double _target);
+        Op_Moment(GroptParams &_gparams, double _order, double _target, double _tol0, std::string _units, 
+                  int _moment_axis, int _start_idx0, int _stop_idx0, int _ref_idx0, double _weight_mod);
+
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

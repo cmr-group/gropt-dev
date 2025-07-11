@@ -36,7 +36,7 @@ void SolverGroptSDMM::solve()
     r_primal.setZero(total_Ax_size);
     
     int iiter;
-    for (iiter = 0; iiter < N_iter; ++iiter) {
+    for (iiter = 0; iiter < max_iter; ++iiter) {
         spdlog::trace("Starting GroptSDMM iteration {:d} SolverGroptSDMM::solve", iiter);
         gparams->iiter = iiter;
 

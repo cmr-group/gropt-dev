@@ -19,7 +19,7 @@ class Solver
         GroptParams *gparams;
         IndirectLinearSolver *ils_solver;
 
-        int N_iter = 2000;
+        int max_iter = 2000;
         int log_interval = 20;
         int min_iter = 0;
 

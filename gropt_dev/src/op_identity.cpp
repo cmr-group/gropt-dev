@@ -28,8 +28,13 @@ void Op_Identity::init()
 
     Ax_size = gparams->Naxis * gparams->N;
 
-    weight = weight_mod;
-    obj_weight = weight_mod;
+    if (do_init_weights) {
+        weight = 1.0;
+        obj_weight = 1.0;
+
+        weight *= weight_mod;
+        obj_weight *= weight_mod;
+    }
 
     Operator::init();
 }

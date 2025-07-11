@@ -4,16 +4,17 @@
 
 namespace Gropt {
 
-Op_SAFE::Op_SAFE(GroptParams &_gparams, double _stim_thresh)
+Op_SAFE::Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod, bool _true_safe)
     : Operator(_gparams)
 {
     name = "SAFE"; 
     stim_thresh = _stim_thresh;
+    weight_mod = _weight_mod;
 
     // Proper SAFE model is not stable in Krylov optimization, Setting to false removes the abs(), which
     // makes it converge nicely, but does not give the proper SAFE, though in every example I have tried
     // it still matches *PEAK* SAFE (it is the lower safe values that might not match up)
-    true_safe = false; 
+    true_safe = _true_safe;
 }
 
 void Op_SAFE::init()
@@ -31,7 +32,7 @@ void Op_SAFE::init()
 
     Ax_size = 3 * gparams->Naxis * gparams->N;
 
-    if (!save_weights) {
+    if (do_init_weights) {
         weight = 1e4;
     }
 
@@ -44,17 +45,6 @@ void Op_SAFE::init()
 
     spdlog::trace("Op_SAFE::init  Done!");
 }
-
-
-void SAFEParams::calc_alphas(double dt) 
-{
-    for (int i = 0; i < 3; i++) {
-        alpha1[i] = dt/(tau1[i] + dt);
-        alpha2[i] = dt/(tau2[i] + dt);
-        alpha3[i] = dt/(tau3[i] + dt);
-    }
-}
-
 
 void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
@@ -376,5 +366,15 @@ void SAFEParams::swap_first_axes(int new_first_axis)
         std::swap(g_scale[0], g_scale[new_first_axis]);
     }
 }
+
+void SAFEParams::calc_alphas(double dt) 
+{
+    for (int i = 0; i < 3; i++) {
+        alpha1[i] = dt/(tau1[i] + dt);
+        alpha2[i] = dt/(tau2[i] + dt);
+        alpha3[i] = dt/(tau3[i] + dt);
+    }
+}
+
 
 }  // close "namespace Gropt"

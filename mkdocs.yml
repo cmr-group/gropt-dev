@@ -3,6 +3,10 @@ site_name: GrOpt
 site_url: https://temp.org
 theme:
   name: material
+  palette:
+    scheme: slate
+  features:
+    - navigation.tabs
 
 markdown_extensions:
   - pymdownx.arithmatex:
@@ -14,8 +18,8 @@ extra_javascript:
 
 plugins:
     - mkdocs-jupyter
-
-# docs_dir: '.'
+    - search
+    - mkdocstrings
 
 nav:
   - Home: index.md

@@ -16,7 +16,17 @@ namespace Gropt {
 GroptParams::GroptParams() {
 }
 
-void GroptParams::vec_init_simple(double first_val, double last_val) {
+void GroptParams::vec_init_simple(int _N, int _Naxis, double first_val, double last_val) {
+    if (_N > 0) {
+        N = _N;
+    }
+
+    if (_Naxis > 0) {
+        Naxis = _Naxis;
+    }   
+
+    Ntot = N * Naxis;
+
     inv_vec.setOnes(N * Naxis);
     
     set_vals.setZero(N * Naxis);
@@ -114,7 +124,7 @@ void GroptParams::warm_start_prev() {
     X0 = final_X;
 
     for (int i = 0; i < all_op.size(); i++) {
-        all_op[i]->save_weights = true;
+        all_op[i]->do_init_weights = false;
         all_op[i]->init();
         all_op[i]->reinit_parsdmm();
         all_op[i]->prep_parsdmm(X0);
@@ -125,7 +135,7 @@ void GroptParams::warm_start_prev() {
 
 }
 
-void GroptParams::init() {
+void GroptParams::prepare() {
 
     spdlog::trace("GroptParams::init() start");
 
@@ -136,8 +146,8 @@ void GroptParams::init() {
     }
 
     if (vec_init_status != N) {
-        spdlog::warn("set_vals and inv_vec were not initialized, calling vec_init_simple()");
-        vec_init_simple(0.0, 0.0);
+        spdlog::info("set_vals and inv_vec were not initialized, calling vec_init_simple()");
+        vec_init_simple(-1, -1, 0.0, 0.0);
     }
 
     for (int i = 0; i < all_op.size(); i++) {
@@ -148,28 +158,34 @@ void GroptParams::init() {
     for (int i = 0; i < all_obj.size(); i++) {
         all_obj[i]->init();
     }
+
+    op_prep_status = N;
+
     spdlog::trace("GroptParams::init() end");
 }
 
-void GroptParams::add_gmax(double gmax) {
-    all_op.push_back(new Op_Gradient(*this, gmax));
+void GroptParams::add_gmax(double gmax, bool rot_variant, double weight_mod) {
+    all_op.push_back(new Op_Gradient(*this, gmax, rot_variant, weight_mod));
 }
 
-void GroptParams::add_smax(double smax) {
-    all_op.push_back(new Op_Slew(*this, smax));
+void GroptParams::add_smax(double smax, bool rot_variant, double weight_mod) {
+    all_op.push_back(new Op_Slew(*this, smax, rot_variant, weight_mod));
 }
 
-void GroptParams::add_moment(double order, double target) {
-    all_op.push_back(new Op_Moment(*this, order, target));
+void GroptParams::add_moment(double order, double target, 
+                             double tol0, std::string units, int moment_axis, 
+                             int start_idx0, int stop_idx0, int ref_idx0, double weight_mod) {
+    all_op.push_back(new Op_Moment(*this, order, target, tol0, units, 
+                                   moment_axis, start_idx0, stop_idx0, ref_idx0, weight_mod));
 }
 
 void GroptParams::add_SAFE(double stim_thresh, 
                            double *tau1, double *tau2, double *tau3, 
                            double *a1, double *a2, double *a3,
                            double *stim_limit, double *g_scale,
-                           int new_first_axis, bool demo_params) 
+                           int new_first_axis, bool demo_params, double weight_mod) 
 {
-    Op_SAFE* op_F = new Op_SAFE(*this, stim_thresh);
+    Op_SAFE* op_F = new Op_SAFE(*this, stim_thresh, weight_mod, false);
     if (demo_params) {
         op_F->safe_params.set_demo_params();
     } else {
@@ -179,16 +195,13 @@ void GroptParams::add_SAFE(double stim_thresh,
     all_op.push_back(op_F);
 }
 
-void GroptParams::add_bvalue(double target, double tol) {
-    Op_BValue* op_Bval = new Op_BValue(*this);
-    op_Bval->target = target;
-    op_Bval->tol0 = tol;
-    all_op.push_back(op_Bval);
+void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod) {
+    all_op.push_back(new Op_BValue(*this, target, tol, start_idx0, stop_idx0, weight_mod));
 }
 
-void GroptParams::add_TV(double tv_lam, double weight_in)
+void GroptParams::add_TV(double tv_lam, double weight_mod)
 {
-    all_op.push_back(new Op_TV(*this, tv_lam, weight_in));  
+    all_op.push_back(new Op_TV(*this, tv_lam, weight_mod));  
 }
 
 void GroptParams::add_obj_identity(double weight_mod) {
@@ -196,12 +209,18 @@ void GroptParams::add_obj_identity(double weight_mod) {
 }
 
 void GroptParams::solve() {
+    if (op_prep_status != N) {
+        spdlog::info("operators do not seem prepared, calling prepare()");
+        prepare();
+    }
+
+
     SolverGroptSDMM solver(*this);
     solver.solve();
 }
 
 void GroptParams::solve(int min_iter, 
-                        int n_iter, 
+                        int max_iter, 
                         double gamma_x, 
                         double ils_tol, 
                         int ils_max_iter, 
@@ -210,9 +229,14 @@ void GroptParams::solve(int min_iter,
                         double ils_tik_lam
                         ) 
 {
+    if (op_prep_status != N) {
+        spdlog::info("operators do not seem prepared, calling prepare()");
+        prepare();
+    }
+
     SolverGroptSDMM solver(*this);
     solver.min_iter = min_iter;
-    solver.N_iter = n_iter;
+    solver.max_iter = max_iter;
     solver.gamma_x = gamma_x;
     solver.ils_tol = ils_tol;
     solver.ils_max_iter = ils_max_iter;

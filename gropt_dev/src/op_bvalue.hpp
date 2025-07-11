@@ -18,12 +18,27 @@ namespace Gropt {
 class Op_BValue : public Operator
 {  
     protected:
-        int start_ind = 0; 
+        // These are the user inputted values
+        int start_idx0 = -1;
+        int stop_idx0 = -1;
+
+        // These are the values after modifying problem parameters (i.e. changing N or Naxis)
+        int start_idx;
+        int stop_idx;
+
+        // These are the values used in the calculations
+        int i_start;
+        int i_stop;
+
+        double bval_target = 100;
+        double bval_tol0 = 1;
+
         double GAMMA;
         double MAT_SCALE;
 
     public:
-        Op_BValue(GroptParams &_gparams);
+        Op_BValue(GroptParams &_gparams, double _bval_target, double _bval_tol0,
+                  int _start_idx0, int _stop_idx0, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

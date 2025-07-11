@@ -32,7 +32,7 @@ class Operator  // This is the main parent class for every operator in GrOpt
         int Ax_size;
 
         bool rot_variant = true; 
-        bool save_weights = false;
+        bool do_init_weights = true;
         
         double target;
         double tol0;

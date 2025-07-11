@@ -4,11 +4,13 @@
 
 namespace Gropt {
 
-Op_Slew::Op_Slew(GroptParams &_gparams, double _smax)
+Op_Slew::Op_Slew(GroptParams &_gparams, double _smax, bool _rot_variant, double _weight_mod)
     : Operator(_gparams)
 {
     name = "Slew"; 
     smax = _smax;
+    rot_variant = _rot_variant;
+    weight_mod = _weight_mod;
 }
 
 void Op_Slew::init()
@@ -24,8 +26,12 @@ void Op_Slew::init()
 
     Ax_size = gparams->Naxis * (gparams->N-1);
 
-    if (!save_weights) {
-        weight = 1e4;
+    if (do_init_weights) {
+        weight = 1.0e4;
+        obj_weight = 1.0;
+
+        weight *= weight_mod;
+        obj_weight *= weight_mod;
     }
 
     Operator::init();
