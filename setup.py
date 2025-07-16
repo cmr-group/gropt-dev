@@ -61,7 +61,7 @@ ext = Extension("gropt_dev.gropt_wrapper",
                 # libraries=libraries,   # Handled in CustomBuildExt now
                 # extra_compile_args = extra_compile_args,
                 # extra_link_args = extra_link_args,
-                # undef_macros=['NDEBUG'], # This will *re-enable* the Eigen assertions
+                # undef_macros=['NDEBUG'], # This will *re-enable* the Eigen assertions, COMMENT THIS FOR RELEASE
             )
 
 setup(

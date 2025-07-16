@@ -7,5 +7,23 @@ dependencies = [
   "pyqt6",
 ]
 
+
+[project.optional-dependencies]
+dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel"]
+
 [build-system]
 requires = ["setuptools>=18.0", "cython>=0.18", "wheel", "numpy"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tool.pixi.pypi-dependencies]
+gropt_dev = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[tool.pixi.tasks]
+rebuild = "python setup.py build_ext --inplace"
