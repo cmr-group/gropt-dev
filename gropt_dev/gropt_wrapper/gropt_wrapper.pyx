@@ -338,15 +338,15 @@ cdef class GroptParams:
         self.c_gparams.add_obj_identity(weight_mod)
 
 
-    def init(self):
+    def prepare(self):
         """
-        Force an initialization of the GroptParams object.
+        Force a preparation of the GroptParams object.
 
         This mostly just allocates vectors in each of the constraints, and 
         sets up the initial optimization variables.  It is automatically done in solve
         if it has not been done yet.
         """
-        self.c_gparams.init()
+        self.c_gparams.prepare()
 
     def solve(self,
               min_iter: int = 1,
@@ -357,7 +357,38 @@ cdef class GroptParams:
               ils_min_iter: int = 2,
               ils_sigma: float = 1e-4,
               ils_tik_lam: float = 0.0):
+        """
+        Run the optimization solver.
 
+        Parameters
+        ----------
+        min_iter : int, optional
+            Minimum number of iterations for the main SDMM loop. The solver will
+            run for at least this many iterations. Defaults to 1.
+        max_iter : int, optional
+            Maximum number of iterations for the main SDMM loop. Defaults to 2000.
+        gamma_x : float, optional
+            Relaxation parameter for the SDMM update step.
+            correspond to over-relaxation, which can speed up convergence.
+            Defaults to 1.6.
+        ils_tol : float, optional
+            Relative tolerance for the inner-loop indirect linear solver (e.g., CG).
+            The ILS stops when the residual norm is less than `ils_tol` times
+            the initial residual norm. Defaults to 1e-3.
+        ils_max_iter : int, optional
+            Maximum number of iterations for the indirect linear solver per main
+            SDMM iteration. Defaults to 20.
+        ils_min_iter : int, optional
+            Minimum number of iterations for the indirect linear solver.
+            Defaults to 2.
+        ils_sigma : float, optional
+            Regularization parameter for the linear system solved in the inner
+            loop, related to the ADMM penalty parameter. Defaults to 1e-4.
+        ils_tik_lam : float, optional
+            Tikhonov (L2) regularization parameter for the indirect linear
+            solver. Adds a penalty on the norm of the solution to improve
+            conditioning. Defaults to 0.0.
+        """
         self.c_gparams.solve(min_iter, max_iter, gamma_x, ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam)
 
     def get_out(self) -> np.ndarray:
@@ -405,7 +436,7 @@ cdef class GroptParams:
 
 
 # ---------------------------------------------------------
-# GroptWrapper functions
+# gropt_utils
 # ---------------------------------------------------------
 def set_verbose(level):
     c_gropt.set_verbose(level)

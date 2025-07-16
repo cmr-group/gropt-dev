@@ -69,4 +69,21 @@ void Solver::final_log(Eigen::VectorXd &X)
     }
 }
 
+void Solver::set_general_params(int min_iter, int max_iter, int log_interval, int gamma_x)
+{
+    this->min_iter = min_iter;
+    this->max_iter = max_iter;
+    this->log_interval = log_interval;
+    this->gamma_x = gamma_x;
+}
+
+void Solver::set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam)
+{
+    this->ils_tol = ils_tol;
+    this->ils_max_iter = ils_max_iter;
+    this->ils_min_iter = ils_min_iter;
+    this->ils_sigma = ils_sigma;
+    this->ils_tik_lam = ils_tik_lam;
+}
+
 } // namespace Gropt

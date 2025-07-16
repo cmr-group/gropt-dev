@@ -40,7 +40,7 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
 
         void add_obj_identity(double weight_mod)
 
-        void init()
+        void prepare()
         void solve()
         void solve(int min_iter, 
                     int n_iter, 

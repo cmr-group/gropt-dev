@@ -22,6 +22,7 @@ class Solver
         int max_iter = 2000;
         int log_interval = 20;
         int min_iter = 0;
+        double gamma_x = 1.6;
 
         double ils_tol = 1e-3;
         int ils_max_iter = 10;
@@ -39,6 +40,8 @@ class Solver
         virtual void solve();
         virtual int logger(Eigen::VectorXd &X);
         virtual void final_log(Eigen::VectorXd &X);
+        virtual void set_general_params(int min_iter, int max_iter, int log_interval, int gamma_x);
+        virtual void set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam);
 };
 
 } // namespace Gropt

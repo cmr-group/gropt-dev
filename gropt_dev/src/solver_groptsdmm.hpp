@@ -18,8 +18,6 @@ class SolverGroptSDMM : public Solver
 
         SolverGroptSDMM(GroptParams &gparams) : Solver(gparams){gparams.solver_method = GROPT_SDMM;};
 
-        double gamma_x = 1.6;
-        
         int total_Ax_size;
 
         Eigen::VectorXd Px;
