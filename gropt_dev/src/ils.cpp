@@ -20,7 +20,7 @@ Eigen::VectorXd IndirectLinearSolver::solve(Eigen::VectorXd &x0)
     return Eigen::VectorXd::Zero(1);
 }
 
-Eigen::VectorXd IndirectLinearSolver::get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out)
+void IndirectLinearSolver::get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out)
 {
     out.setZero();
 
@@ -37,11 +37,9 @@ Eigen::VectorXd IndirectLinearSolver::get_lhs(Eigen::VectorXd &x, Eigen::VectorX
     for (int i = 0; i < gparams->all_obj.size(); i++) {
         gparams->all_obj[i]->add_obj(x, out);
     }
-
-    return out; 
 } 
 
-Eigen::VectorXd IndirectLinearSolver::get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out)
+void IndirectLinearSolver::get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out)
 {
     out.setZero();
 
@@ -55,8 +53,6 @@ Eigen::VectorXd IndirectLinearSolver::get_rhs(Eigen::VectorXd &x0, Eigen::Vector
     // for (int i = 0; i < gparams->all_obj.size(); i++) {
     //     gparams->all_obj[i]->add_b(out);
     // }
-
-    return out;
 }
 
 } // close "namespace Gropt"

@@ -11,8 +11,12 @@ ILS_BiCGstabl::ILS_BiCGstabl(GroptParams &_gparams, double _tol, double _sigma, 
     name = "BiCGStabl"; 
 
     int n = gparams->N * gparams->Naxis;
-    rs.setZero(ell+1, n);
-    us.setZero(ell+1, n);
+    rs.resize(ell + 1);
+    us.resize(ell + 1);
+    for (int i = 0; i <= ell; ++i) {
+        rs[i].setZero(n);
+        us[i].setZero(n);
+    }
 
     Ax.setZero(n);
     b.setZero(n);
@@ -46,9 +50,11 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
     double rho0 = 1.0;
     double alpha = 0.0;
 
-    us.setZero();
-    rs.setZero();
-    rs.row(0) = r;
+    for (int i = 0; i <= ell; ++i) {
+        us[i].setZero();
+        rs[i].setZero();
+    }
+    rs[0] = r;
 
     int ii;
     for (ii = 0; ii < n_iter; ii++) {
@@ -57,31 +63,29 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
         rho0 = -omega*rho0;
 
         for (int jj = 0; jj < ell; jj++) {
-            double rho1 = r_shadow.dot(rs.row(jj));
+            double rho1 = r_shadow.dot(rs[jj]);
             double beta = alpha*rho1/rho0;
             rho0 = rho1;
             for (int ij = 0; ij <= jj; ij++) {
-                us.row(ij) = rs.row(ij) - beta * us.row(ij);
+                us[ij] = rs[ij] - beta * us[ij];
             }
-            get_lhs((Eigen::VectorXd)us.row(jj), Ax);
-            us.row(jj+1) = Ax; // This copy must be unecesarty, but I cant figure out the casting.
-            double gamma_cg = us.row(jj+1).dot(r_shadow);
+            get_lhs(us[jj], us[jj+1]);
+            double gamma_cg = us[jj+1].dot(r_shadow);
             alpha = rho0/gamma_cg;
             for (int ij = 0; ij <= jj; ij++) {
-                rs.row(ij) = rs.row(ij) - alpha * us.row(ij+1);
+                rs[ij] = rs[ij] - alpha * us[ij+1];
             }
-            get_lhs((Eigen::VectorXd)rs.row(jj), Ax);
-            rs.row(jj+1) = Ax;
-            x += alpha * us.row(0);
+            get_lhs(rs[jj], rs[jj+1]);
+            x += alpha * us[0];
         }
 
         for (int jj = 1; jj <= ell; jj++) {
             for (int ij = 1; ij < jj; ij++) {
-                tau(ij, jj) = rs.row(jj).dot(rs.row(ij))/sigma(ij);
-                rs.row(jj) = rs.row(jj) - tau(ij, jj) * rs.row(ij);
+                tau(ij, jj) = rs[jj].dot(rs[ij])/sigma(ij);
+                rs[jj] = rs[jj] - tau(ij, jj) * rs[ij];
             }
-            sigma(jj) = rs.row(jj).dot(rs.row(jj));
-            gammap(jj) = rs.row(0).dot(rs.row(jj))/sigma(jj);
+            sigma(jj) = rs[jj].dot(rs[jj]);
+            gammap(jj) = rs[0].dot(rs[jj])/sigma(jj);
         }
 
         gamma(ell) = gammap(ell);
@@ -103,16 +107,16 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
             gammapp(jj) = gamma(jj+1) + sum;
         }
 
-        x += gamma(1) * rs.row(0);
-        rs.row(0) = rs.row(0) - gammap(ell)*rs.row(ell);
-        us.row(0) = us.row(0) - gamma(ell)*us.row(ell);
+        x += gamma(1) * rs[0];
+        rs[0] = rs[0] - gammap(ell)*rs[ell];
+        us[0] = us[0] - gamma(ell)*us[ell];
 
         for (int jj = 1; jj < ell; jj++) {
-            us.row(0) = us.row(0) - gamma(jj)*us.row(jj);
-            x += gammapp(jj) * rs.row(jj);
-            rs.row(0) = rs.row(0) - gammap(jj)*rs.row(jj);
+            us[0] = us[0] - gamma(jj)*us[jj];
+            x += gammapp(jj) * rs[jj];
+            rs[0] = rs[0] - gammap(jj)*rs[jj];
         }
-        rnorm = rs.row(0).norm();
+        rnorm = rs[0].norm();
         if ((rnorm <= tol * rnorm0))
         {
             spdlog::trace("ILS_CG::solve  break for (res <= tol)  ii = {:d}", ii);
@@ -120,7 +124,7 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
         }
     }
 
-    spdlog::info("ILS_BiCGstabl::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, rs.row(0).norm(), ii);
+    spdlog::info("ILS_BiCGstabl::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, rs[0].norm(), ii);
 
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;

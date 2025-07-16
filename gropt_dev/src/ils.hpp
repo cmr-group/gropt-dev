@@ -30,8 +30,8 @@ class IndirectLinearSolver
         ~IndirectLinearSolver() = default;
 
         virtual Eigen::VectorXd solve(Eigen::VectorXd &x0);
-        virtual Eigen::VectorXd get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out);
-        virtual Eigen::VectorXd get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out);
+        virtual void get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out);
+        virtual void get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out);
 };
 
 } // namespace Gropt
