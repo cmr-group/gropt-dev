@@ -101,7 +101,7 @@ Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x_in)
         alpha0 = 4 * alpha;
     }
 
-    spdlog::info("ILS_NLCG::solve  rnorm0 = {:e}   rnorm = {:e}   alpha0 = {:e}   ii = {:d}", sqrt(rnorm0), r.norm(), alpha0, ii);
+    spdlog::debug("ILS_NLCG::solve  rnorm0 = {:e}   rnorm = {:e}   alpha0 = {:e}   ii = {:d}", sqrt(rnorm0), r.norm(), alpha0, ii);
 
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
