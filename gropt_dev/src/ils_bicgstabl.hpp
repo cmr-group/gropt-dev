@@ -16,8 +16,8 @@ class ILS_BiCGstabl : public IndirectLinearSolver
     public:
         int ell = 2;
 
-        Eigen::MatrixXd rs;
-        Eigen::MatrixXd us;
+        std::vector<Eigen::VectorXd> rs;
+        std::vector<Eigen::VectorXd> us;
         Eigen::MatrixXd tau;
 
         Eigen::VectorXd x;

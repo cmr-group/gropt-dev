@@ -13,14 +13,19 @@ add_subdirectory(external/highfive)
 set(SRC_FILES
     fft_helper.cpp
     gropt_params.cpp
+    gropt_utils.cpp
     ils.cpp
     ils_cg.cpp
+    ils_nlcg.cpp
+    ils_bicgstabl.cpp
     op_bvalue.cpp
     op_gradient.cpp
     op_identity.cpp
     op_main.cpp
     op_moment.cpp
     op_slew.cpp
+    op_safe.cpp
+    op_tv.cpp
     solver.cpp
     solver_groptsdmm.cpp
 )

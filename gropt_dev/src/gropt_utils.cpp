@@ -42,22 +42,19 @@ void get_SAFE(int N, int Naxis, double dt, double *G_in,
 
     spdlog::trace("get_SAFE(): copied G");
 
-    GroptParams params;
-    params.N = N;
-    params.Naxis = Naxis;
+    GroptParams params; 
     params.dt = dt;
-    params.vec_init_simple(0.0, 0.0);
+    params.vec_init_simple(N, Naxis, 0.0, 0.0);
 
     spdlog::trace("get_SAFE(): finished params");
 
-    Op_SAFE opF(params, 1.0);
+    Op_SAFE opF(params, 1.0, 1.0, true_safe);
     if (demo_params) {
         opF.safe_params.set_demo_params();
     } else {
         opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     }
     opF.safe_params.swap_first_axes(new_first_axis);
-    opF.true_safe = true_safe;
     opF.init();
 
     spdlog::trace("get_SAFE(): finished Op_SAFE");

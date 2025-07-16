@@ -41,6 +41,7 @@ void save_debug(GroptParams &params, Solver &solver) {
     spdlog::info("Debug information saved.");
 }
 
+/*
 void simple_test() {
     GroptParams params;
     params.N = 103;
@@ -286,12 +287,13 @@ void diff_demo_c()
     spdlog::info("Finished main");
 
 }
-
+*/
 
 int main(int, char**){
     spdlog::set_level(spdlog::level::debug);
 
     // simple_test();
     // maximize_I();
-    diff_demo_c();
+    
+    
 }
