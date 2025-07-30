@@ -1,5 +1,5 @@
 [project]
-name = "gropt_dev"
+name = "gropt"
 version = "0.1.0"
 dependencies = [
   "numpy",
@@ -9,7 +9,8 @@ dependencies = [
 
 
 [project.optional-dependencies]
-dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel"]
+dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen"]
+docs = ["mkdocs", "mkdocs-material", "mkdocs-jupyter", "mkdocstrings-python", "pybind11-stubgen"]
 
 [build-system]
 requires = ["setuptools>=18.0", "cython>=0.18", "wheel", "numpy"]
@@ -19,11 +20,11 @@ channels = ["conda-forge"]
 platforms = ["win-64"]
 
 [tool.pixi.pypi-dependencies]
-gropt_dev = { path = ".", editable = true }
+gropt = { path = ".", editable = true }
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
-dev = { features = ["dev"], solve-group = "default" }
+dev = { features = ["dev", "docs"], solve-group = "default" }
 
 [tool.pixi.tasks]
 rebuild = "python setup.py build_ext --inplace"

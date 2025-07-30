@@ -20,7 +20,6 @@ plugins:
     - mkdocs-jupyter
     - search
     - mkdocstrings
-
 nav:
   - Home: index.md
   - Algorithms:

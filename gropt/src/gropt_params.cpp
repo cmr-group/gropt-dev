@@ -214,9 +214,8 @@ void GroptParams::solve() {
         prepare();
     }
 
-
-    SolverGroptSDMM solver(*this);
-    solver.solve();
+    SolverGroptSDMM solver;
+    solver.solve(*this);
 }
 
 void GroptParams::solve(int min_iter, 
@@ -234,11 +233,11 @@ void GroptParams::solve(int min_iter,
         prepare();
     }
 
-    SolverGroptSDMM solver(*this);
+    SolverGroptSDMM solver;
     solver.set_general_params(min_iter, max_iter, 20, gamma_x);
     solver.set_ils_params(ils_tol, ils_max_iter, ils_min_iter,
                           ils_sigma, ils_tik_lam);
-    solver.solve();
+    solver.solve(*this);
 }
 
 void GroptParams::get_output(double **out, int &out_size)

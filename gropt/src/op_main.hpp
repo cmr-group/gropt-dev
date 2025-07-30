@@ -69,12 +69,6 @@ class Operator  // This is the main parent class for every operator in GrOpt
         bool do_weight = true;
         bool do_scalelim = true; 
 
-        // Some of these should move to solver settings
-        int rw_interval = 8;
-        double e_corr = 0.4;
-        double rw_eps = 1e-36;
-        double rw_scalelim = 1.5;
-
         Eigen::VectorXd y0;
         Eigen::VectorXd y1;
         Eigen::VectorXd z0;
@@ -135,7 +129,7 @@ class Operator  // This is the main parent class for every operator in GrOpt
         virtual void prox(Eigen::VectorXd &X);
         virtual void get_feas(Eigen::VectorXd &s);
         virtual void prep_parsdmm(Eigen::VectorXd &X);
-        virtual void reweight_parsdmm();
+        virtual void reweight_parsdmm(double rw_eps, double e_corr, double rw_scalelim);
         virtual void add_Atb(Eigen::VectorXd &b);
         void add_AtAx(Eigen::VectorXd &x, Eigen::VectorXd &out);
         virtual void add_obj(Eigen::VectorXd &x, Eigen::VectorXd &out);

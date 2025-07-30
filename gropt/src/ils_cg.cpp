@@ -80,7 +80,7 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
         
     }
 
-    spdlog::info("ILS_CG::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, r.norm(), ii);
+    spdlog::debug("ILS_CG::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, r.norm(), ii);
 
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;

@@ -169,7 +169,7 @@ namespace Gropt {
         hist_r_feas.push_back(r_feas);
     }
 
-    void Operator::reweight_parsdmm()
+    void Operator::reweight_parsdmm(double rw_eps, double e_corr, double rw_scalelim)
     {
         double rho0 = weight;
         

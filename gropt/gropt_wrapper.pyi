@@ -1,0 +1,422 @@
+from View.MemoryView import __pyx_unpickle_Enum
+from __future__ import annotations
+import builtins as __builtins__
+import numpy as np
+import time as time
+__all__ = ['GroptParams', 'SolverGroptSDMM', 'array_prep', 'get_SAFE', 'np', 'set_verbose', 'time']
+class GroptParams:
+    @staticmethod
+    def __new__(type, *args, **kwargs):
+        """
+        Create and return a new object.  See help(type) for accurate signature.
+        """
+    @staticmethod
+    def __reduce__(*args, **kwargs):
+        ...
+    @staticmethod
+    def __setstate__(*args, **kwargs):
+        ...
+    def add_SAFE(self, stim_thresh: float = 1.0, new_first_axis: int = 0, demo_params: bool = True, safe_params: dict = None, weight_mod: float = 1.0):
+        """
+        
+                Adds a SAFE constraint to the optimization problem.
+        
+                Parameters
+                ----------
+                stim_thresh : float
+                    The stimulus threshold for the SAFE constraint.
+                    Defaults to 1.0.
+                new_first_axis : int
+                    Swaps the first axis of the SAFE parameters used for the constraint. 
+                    This is useful for a single-axis optimization, where you want to test
+                    the SAFE parameters for a different axis than the first.
+                    Defaults to 0.
+                demo_params : bool
+                    Whether to use demo parameters for the SAFE constraint.
+                    NOTE: If `safe_params` is not None, this parameter is ignored.
+                    Defaults to True.
+                safe_params : dict, optional
+                    A dictionary of SAFE parameters. See `gropt.readasc`
+                weight_mod : float, optional
+                    A weighting factor for this specific constraint in the optimization
+                    problem. Defaults to 1.0.
+                
+        """
+    def add_TV(self, tv_lam: float = 0.0, weight_mod: float = 1.0):
+        """
+        
+                Add total variation regularization parameters.
+        
+                Unlike other constraints, this is not required to be feasible.
+                TODO: Make this property a user choice so it can be required for feasibility.
+                Parameters
+                ----------
+                tv_lam : float, optional
+                    Regularization strength for total variation.  This wont do
+                    anything if it is not > 0.0.
+                weight_mod : float, optional
+                    A weighting factor for this specific constraint in the optimization problem. 
+                    Defaults to 1.0.
+                
+        """
+    def add_bvalue(self, target: float = 100.0, tol: float = 1.0, start_idx0: int = -1, stop_idx0: int = -1, weight_mod: float = 1.0):
+        """
+        
+                Adds a b-value constraint to the optimization problem.
+                
+                Parameters
+                ----------
+                target : float, optional
+                    The target b-value for the constraint. 
+                    Defaults to 100.0.
+                tol : float, optional
+                    The tolerance for the b-value constraint. 
+                    Keeping this value a little larger (>0.1) might make the optimization faster.
+                    Defaults to 1.0.
+                start_idx0 : int, optional
+                    The starting index (inclusive) for the range over which the constraint is applied. 
+                    Defaults to -1 ( = full waveform).
+                stop_idx0 : int, optional
+                    The stopping index (exclusive) for the range over which the constraint is applied. 
+                    Defaults to -1 ( = full waveform).
+                weight_mod : float, optional
+                    A weighting factor for this specific constraint in the optimization problem. 
+                    Defaults to 1.0.
+                
+        """
+    def add_gmax(self, gmax: float = 0.03, rot_variant: bool = True, weight_mod: float = 1.0):
+        """
+        
+                Adds a constraint for the maximum gradient amplitude.
+        
+                Parameters
+                ----------
+                gmax : float, optional
+                    The maximum allowed gradient magnitude [T/m].
+                    Defaults to 0.03.
+                rot_variant : bool, optional
+                    If True, uses the rotationally invariant formulation of the gmax
+                    constraint. i.e. each gradient axis can hit gmax.  Defaults to True.
+                weight_mod : float, optional
+                    A weighting factor for this specific constraint in the optimization
+                    problem. Defaults to 1.0.
+                
+        """
+    def add_moment(self, order: int = 0, target: float = 0.0, tol: float = 1e-06, units: str = 'mT*ms/m', axis: int = 0, start_idx: int = -1, stop_idx: int = -1, ref_idx: int = 0, weight_mod: float = 1.0):
+        """
+        
+                Adds a moment constraint to the optimization problem. docstub
+        
+                Parameters
+                ----------
+                order : int, optional
+                    The order of the moment.
+                    Defaults to 0.
+                target : float, optional
+                    The target value for the moment constraint.
+                    Defaults to 0.0.
+                tol : float, optional
+                    The tolerance for satisfying the moment constraint.
+                    Defaults to 1e-6.
+                units : str, optional
+                    The units of the moment constraint, for `target` and `tolerance`
+                    Defaults to 'mT*ms/m'.
+                    Can be 'mT*ms/m', 'T*s/m', 'rad*s/m', or 's/m'
+                axis : int, optional
+                    The axis along which the moment is calculated.
+                    Defaults to 0.
+                start_idx : int, optional
+                    The starting index (inclusive) for the range over which the
+                    moment is calculated. A value of -1 indicates the beginning of the
+                    axis. 
+                    Defaults to -1.
+                stop_idx : int, optional
+                    The stopping index (exclusive) for the range over which the
+                    moment is calculated. A value of -1 indicates the end of the
+                    axis. 
+                    Defaults to -1.
+                ref_idx : int, optional
+                    The reference index, (i.e. index where t=0 in moment calculations), 
+                    which often could be the time of excitation.
+                    Defaults to 0.
+                weight_mod : float, optional
+                    A weighting factor for this specific constraint in the optimization
+                    problem. Defaults to 1.0.
+                
+        """
+    def add_obj_identity(self, weight_mod: float = 1.0):
+        """
+        
+                Add an identity objective function to the problem.
+        
+                This is typically used for regularization, penalizing the L2 norm
+                of the solution vector.
+        
+                Parameters
+                ----------
+                weight_mod : float
+                    The weighting factor for the identity objective. Larger values
+                    increase the penalty on the solution's norm.
+                    Default 1.0
+                
+        """
+    def add_smax(self, smax: float = 80.0, rot_variant: bool = True, weight_mod: float = 1.0):
+        """
+        
+                Adds a constraint for the maximum gradient slew rate.
+        
+                Parameters
+                ----------
+                smax : float, optional
+                    The maximum allowed gradient slew rate [T/m/s].
+                    Defaults to 0.03.
+                rot_variant : bool, optional
+                    If True, uses the rotationally invariant formulation of the smax
+                    constraint. i.e. each gradient axis can hit smax.  Defaults to True.
+                weight_mod : float, optional
+                    A weighting factor for this specific constraint in the optimization
+                    problem. Defaults to 1.0.
+                
+        """
+    def diff_init(self, dt: float = 0.0004, TE: float = 0.08, T_90: float = 0.003, T_180: float = 0.005, T_readout: float = 0.016):
+        """
+        
+                Initialize diffusion sequence parameters.
+        
+                Parameters
+                ----------
+                dt : float, optional
+                    Raster time in seconds.
+                TE : float, optional
+                    Echo time in seconds.
+                T_90 : float, optional
+                    Duration of the excitation RF pulse in seconds.  This should only
+                    include the time from excitation, so half of the full RF pulse duration.
+                T_180 : float, optional
+                    Duration of the refocusing RF pulse in seconds.
+                T_readout : float, optional
+                    Time to TE of the readout in seconds.
+                
+        """
+    def get_out(self) -> np.ndarray:
+        """
+        
+                Get the gradient waveform output from the C++ layer.
+        
+                Returns
+                -------
+                np.ndarray
+                    The output array.
+                
+        """
+    def prepare(self):
+        """
+        
+                Force a preparation of the GroptParams object.
+        
+                This mostly just allocates vectors in each of the constraints, and 
+                sets up the initial optimization variables.  It is automatically done in solve
+                if it has not been done yet.
+                
+        """
+    def set_ils_solver(self, ils_method: str = 'CG'):
+        """
+        
+                Set the indirect solver method.
+        
+                Parameters
+                ----------
+                ils_method : str
+                    The name of the indirect solver method to use.
+                    Currently supported methods are 'CG', 'NLCG', and 'BiCGstabl'. (case-sensitive)
+                
+        """
+    def solve(self, min_iter: int = 1, max_iter: int = 2000, gamma_x: float = 1.6, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0):
+        """
+        
+                Run the optimization solver.
+        
+                Parameters
+                ----------
+                min_iter : int, optional
+                    Minimum number of iterations for the main SDMM loop. The solver will
+                    run for at least this many iterations. Defaults to 1.
+                max_iter : int, optional
+                    Maximum number of iterations for the main SDMM loop. Defaults to 2000.
+                gamma_x : float, optional
+                    Relaxation parameter for the SDMM update step.
+                    correspond to over-relaxation, which can speed up convergence.
+                    Defaults to 1.6.
+                ils_tol : float, optional
+                    Relative tolerance for the inner-loop indirect linear solver (e.g., CG).
+                    The ILS stops when the residual norm is less than `ils_tol` times
+                    the initial residual norm. Defaults to 1e-3.
+                ils_max_iter : int, optional
+                    Maximum number of iterations for the indirect linear solver per main
+                    SDMM iteration. Defaults to 20.
+                ils_min_iter : int, optional
+                    Minimum number of iterations for the indirect linear solver.
+                    Defaults to 2.
+                ils_sigma : float, optional
+                    Regularization parameter for the linear system solved in the inner
+                    loop, related to the ADMM penalty parameter. Defaults to 1e-4.
+                ils_tik_lam : float, optional
+                    Tikhonov (L2) regularization parameter for the indirect linear
+                    solver. Adds a penalty on the norm of the solution to improve
+                    conditioning. Defaults to 0.0.
+                
+        """
+    def vec_init_simple(self, N: int = -1, Naxis: int = -1, first_val: float = 0.0, last_val: float = 0.0):
+        """
+        
+                Initialize the set_vec and inv_vec settings in gparams.
+        
+                Parameters
+                ----------
+                N : int, optional
+                    Number of points in a *single* axis of the waveform. Negative values
+                    will use the existing value.
+                Naxis : int, optional
+                    Number of axes in the waveform. Negative values will use the existing value.
+                first_val : float, optional
+                    Fixed value for the first point in the gradient vector. [mT/m]
+                last_val : float, optional
+                    Fixed value for the last point in the gradient vector. [mT/m]
+                
+        """
+class SolverGroptSDMM:
+    @staticmethod
+    def __new__(type, *args, **kwargs):
+        """
+        Create and return a new object.  See help(type) for accurate signature.
+        """
+    @staticmethod
+    def __reduce__(*args, **kwargs):
+        ...
+    @staticmethod
+    def __setstate__(*args, **kwargs):
+        ...
+    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6):
+        """
+        
+                Set general parameters for the SDMM solver.
+        
+                Parameters
+                ----------
+                min_iter : int, optional
+                    Minimum number of iterations for the main SDMM loop. The solver will
+                    run for at least this many iterations. Defaults to 1.
+                max_iter : int, optional
+                    Maximum number of iterations for the main SDMM loop. Defaults to 2000.
+                log_interval : int, optional
+                    Interval at which to log the progress of the solver. 
+                    This will only be seen when verbose logging is enabled.
+                    Defaults to 20.
+                gamma_x : float, optional
+                    Relaxation parameter for the SDMM update step.
+                    correspond to over-relaxation, which can speed up convergence.
+                    Defaults to 1.6.
+                
+        """
+    def set_ils_params(self, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0):
+        """
+         
+                Set parameters for the indirect linear solver used in the SDMM.
+        
+                Parameters
+                ----------
+                ils_tol : float, optional
+                    Relative tolerance for the inner-loop indirect linear solver (e.g., CG).
+                    The ILS stops when the residual norm is less than `ils_tol` times
+                    the initial residual norm. Defaults to 1e-3.
+                ils_max_iter : int, optional
+                    Maximum number of iterations for the indirect linear solver per main
+                    SDMM iteration. Defaults to 20.
+                ils_min_iter : int, optional
+                    Minimum number of iterations for the indirect linear solver.
+                    Defaults to 2.
+                ils_sigma : float, optional
+                    Regularization parameter for the linear system solved in the inner
+                    loop, related to the ADMM penalty parameter. Defaults to 1e-4.
+                ils_tik_lam : float, optional
+                    Tikhonov (L2) regularization parameter for the indirect linear
+                    solver. Adds a penalty on the norm of the solution to improve
+                    conditioning. Defaults to 0.0.
+                
+        """
+    def set_sdmm_params(self, rw_interval: int = 8, rw_e_corr: float = 0.4, rw_eps: float = 1e-36, rw_scalelim: float = 1.5, grw_min_infeasible: int = 20, grw_interval: int = 20, grw_mod: float = 2.0):
+        """
+        
+                Set parameters specific to the SDMM algorithm.
+        
+                Parameters
+                ----------
+                rw_interval : int, optional
+                    Interval for reweighting operations. 
+                    Defaults to 8.
+                rw_e_corr : float, optional
+                    Error correction parameter for reweighting. 
+                    Defaults to 0.4.
+                rw_eps : float, optional
+                    Small epsilon value for numerical stability in reweighting. 
+                    Defaults to 1e-36.
+                rw_scalelim : float, optional
+                    Scale limit for reweighting operations. 
+                    Defaults to 1.5.
+                grw_min_infeasible : int, optional
+                    Minimum number of infeasible iterations before adaptive reweighting is allowed. 
+                    Defaults to 20.
+                grw_interval : int, optional
+                    Interval for adaptive reweighting checks. 
+                    Defaults to 20.
+                grw_mod : float, optional
+                    Modification factor for adaptive reweighting. 
+                    Defaults to 2.0.
+                
+        """
+    def solve(self, gparams):
+        """
+        
+                Run the SDMM solver.
+        
+                Uses the problem definitions set during the initialization of the solver.
+                
+        """
+def __reduce_cython__(self):
+    ...
+def __setstate_cython__(self, __pyx_state):
+    ...
+def array_prep(A, dtype, linear = True):
+    """
+    
+        Prepare a NumPy array for a Cython memory view.
+    
+        This function ensures that the input array `A` is C-contiguous and
+        has the specified data type, making it suitable for efficient use
+        with Cython memory views. It aims to minimize data copies by using
+        `np.ascontiguousarray` and `astype(copy=False)` where possible.
+        The array can also be flattened.
+    
+        Parameters
+        ----------
+        A : array_like
+            The input array to be prepared.
+        dtype : numpy.dtype
+            The target data type for the array.
+        linear : bool, optional
+            If True (default), the array is flattened into a 1D array
+            using `ravel()`. If False, the array's dimensions are preserved.
+    
+        Returns
+        -------
+        numpy.ndarray
+            The prepared NumPy array, which is C-contiguous, has the correct
+            `dtype`, and is optionally flattened.
+    
+        
+    """
+def get_SAFE(G: np.ndarray, dt: float, true_safe: bool = True, new_first_axis: int = 0, demo_params: bool = True, safe_params: dict = None) -> np.ndarray:
+    ...
+def set_verbose(level):
+    ...
+__test__: dict = {}

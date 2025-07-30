@@ -54,6 +54,17 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         void get_output(double **out, int &out_size)
 
 
+cdef extern from "solver_groptsdmm.hpp" namespace "Gropt":
+    cdef cppclass SolverGroptSDMM:
+
+        SolverGroptSDMM() except +
+
+        void set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x)
+        void set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam)
+        void solve(GroptParams &gparams)
+        void set_sdmm_params(int rw_interval, double rw_e_corr, double rw_eps, double rw_scalelim,
+                             int grw_min_infeasible, int grw_interval, double grw_mod)
+
 cdef extern from "gropt_utils.hpp" namespace "Gropt":
     
     void set_verbose(int level)

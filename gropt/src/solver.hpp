@@ -34,13 +34,13 @@ class Solver
         std::vector<Eigen::VectorXd> hist_X;
         std::vector<int> hist_cg_iter; 
 
-        Solver(GroptParams &gparams);
+        Solver() = default;
         ~Solver() = default;
 
-        virtual void solve();
+        virtual void solve(GroptParams &_gparams);
         virtual int logger(Eigen::VectorXd &X);
         virtual void final_log(Eigen::VectorXd &X);
-        virtual void set_general_params(int min_iter, int max_iter, int log_interval, int gamma_x);
+        virtual void set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x);
         virtual void set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam);
 };
 

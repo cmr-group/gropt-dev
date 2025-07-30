@@ -4,12 +4,7 @@
 
 namespace Gropt {
 
-Solver::Solver(GroptParams &_gparams)
-{
-    gparams = &_gparams;
-} 
-
-void Solver::solve()
+void Solver::solve(GroptParams &_gparams)
 {
     spdlog::warn("Solver::solve is not implemented for the base class.");
 } 
@@ -69,7 +64,7 @@ void Solver::final_log(Eigen::VectorXd &X)
     }
 }
 
-void Solver::set_general_params(int min_iter, int max_iter, int log_interval, int gamma_x)
+void Solver::set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x)
 {
     this->min_iter = min_iter;
     this->max_iter = max_iter;

@@ -124,7 +124,7 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
         }
     }
 
-    spdlog::info("ILS_BiCGstabl::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, rs[0].norm(), ii);
+    spdlog::debug("ILS_BiCGstabl::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, rs[0].norm(), ii);
 
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;

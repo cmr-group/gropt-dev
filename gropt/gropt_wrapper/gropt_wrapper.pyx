@@ -166,8 +166,9 @@ cdef class GroptParams:
                    stop_idx: int = -1, 
                    ref_idx: int = 0,
                    weight_mod: float = 1.0):
-        """
-        Adds a moment constraint to the optimization problem.
+        """ what is here
+        
+        Adds a moment constraint to the optimization problem. docorig
 
         Parameters
         ----------
@@ -205,7 +206,7 @@ cdef class GroptParams:
             A weighting factor for this specific constraint in the optimization
             problem. Defaults to 1.0.
         """
-        self.c_gparams.add_moment(order, target, tol, units, axis, start_idx, stop_idx, ref_idx, weight_mod)
+        self.c_gparams.add_moment(order, target, tol, units.encode('utf-8'), axis, start_idx, stop_idx, ref_idx, weight_mod)
 
     def add_SAFE(self, 
                  stim_thresh: float = 1.0,
@@ -434,6 +435,116 @@ cdef class GroptParams:
     def final_good(self, val):
         self.c_gparams.final_good = val
 
+
+cdef class SolverGroptSDMM:
+    cdef c_gropt.SolverGroptSDMM c_solver
+
+    def __init__(self):
+        self.c_solver = c_gropt.SolverGroptSDMM()
+
+    def set_general_params(self, 
+                        min_iter: int = 1, 
+                        max_iter: int = 2000, 
+                        log_interval: int = 20, 
+                        gamma_x: float = 1.6):
+        """
+        Set general parameters for the SDMM solver.
+
+        Parameters
+        ----------
+        min_iter : int, optional
+            Minimum number of iterations for the main SDMM loop. The solver will
+            run for at least this many iterations. Defaults to 1.
+        max_iter : int, optional
+            Maximum number of iterations for the main SDMM loop. Defaults to 2000.
+        log_interval : int, optional
+            Interval at which to log the progress of the solver. 
+            This will only be seen when verbose logging is enabled.
+            Defaults to 20.
+        gamma_x : float, optional
+            Relaxation parameter for the SDMM update step.
+            correspond to over-relaxation, which can speed up convergence.
+            Defaults to 1.6.
+        """
+        self.c_solver.set_general_params(min_iter, max_iter, log_interval, gamma_x)
+
+
+    def set_ils_params(self, 
+                    ils_tol: float = 1e-3, 
+                    ils_max_iter: int = 20, 
+                    ils_min_iter: int = 2, 
+                    ils_sigma: float = 1e-4, 
+                    ils_tik_lam: float = 0.0):
+        """ 
+        Set parameters for the indirect linear solver used in the SDMM.
+
+        Parameters
+        ----------
+        ils_tol : float, optional
+            Relative tolerance for the inner-loop indirect linear solver (e.g., CG).
+            The ILS stops when the residual norm is less than `ils_tol` times
+            the initial residual norm. Defaults to 1e-3.
+        ils_max_iter : int, optional
+            Maximum number of iterations for the indirect linear solver per main
+            SDMM iteration. Defaults to 20.
+        ils_min_iter : int, optional
+            Minimum number of iterations for the indirect linear solver.
+            Defaults to 2.
+        ils_sigma : float, optional
+            Regularization parameter for the linear system solved in the inner
+            loop, related to the ADMM penalty parameter. Defaults to 1e-4.
+        ils_tik_lam : float, optional
+            Tikhonov (L2) regularization parameter for the indirect linear
+            solver. Adds a penalty on the norm of the solution to improve
+            conditioning. Defaults to 0.0.
+        """
+        self.c_solver.set_ils_params(ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam)
+
+    def solve(self, GroptParams gparams):
+        """
+        Run the SDMM solver.
+
+        Uses the problem definitions set during the initialization of the solver.
+        """
+        self.c_solver.solve(gparams.c_gparams)
+
+    def set_sdmm_params(self, 
+                        rw_interval: int = 8, 
+                        rw_e_corr: float = 0.4, 
+                        rw_eps: float = 1e-36, 
+                        rw_scalelim: float = 1.5,
+                        grw_min_infeasible: int = 20, 
+                        grw_interval: int = 20, 
+                        grw_mod: float = 2.0):
+        """
+        Set parameters specific to the SDMM algorithm.
+
+        Parameters
+        ----------
+        rw_interval : int, optional
+            Interval for reweighting operations. 
+            Defaults to 8.
+        rw_e_corr : float, optional
+            Error correction parameter for reweighting. 
+            Defaults to 0.4.
+        rw_eps : float, optional
+            Small epsilon value for numerical stability in reweighting. 
+            Defaults to 1e-36.
+        rw_scalelim : float, optional
+            Scale limit for reweighting operations. 
+            Defaults to 1.5.
+        grw_min_infeasible : int, optional
+            Minimum number of infeasible iterations before adaptive reweighting is allowed. 
+            Defaults to 20.
+        grw_interval : int, optional
+            Interval for adaptive reweighting checks. 
+            Defaults to 20.
+        grw_mod : float, optional
+            Modification factor for adaptive reweighting. 
+            Defaults to 2.0.
+        """
+        self.c_solver.set_sdmm_params(rw_interval, rw_e_corr, rw_eps, rw_scalelim,
+                                     grw_min_infeasible, grw_interval, grw_mod)
 
 # ---------------------------------------------------------
 # gropt_utils

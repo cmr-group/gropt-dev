@@ -25,7 +25,7 @@ class CustomBuildExt(build_ext):
         super().build_extension(ext)
 
 
-SRC_DIR = "gropt_dev/src/"
+SRC_DIR = "gropt/src/"
 
 sources = ['gropt_params',
            'gropt_utils',
@@ -45,15 +45,15 @@ sources = ['gropt_params',
            'solver_groptsdmm',
            ]
 
-sourcefiles = ['gropt_dev/gropt_wrapper/gropt_wrapper.pyx'] + [os.path.join(SRC_DIR, f'{x}.cpp') for x in sources]
+sourcefiles = ['gropt/gropt_wrapper/gropt_wrapper.pyx'] + [os.path.join(SRC_DIR, f'{x}.cpp') for x in sources]
 
-include_dirs = ["gropt_dev/src", "gropt_dev/src/external", np.get_include()]
-library_dirs = ["gropt_dev/src"]
+include_dirs = ["gropt/src", "gropt/src/external", np.get_include()]
+library_dirs = ["gropt/src"]
 
 include_dirs = [os.path.abspath(x) for x in include_dirs]
 library_dirs = [os.path.abspath(x) for x in library_dirs]
 
-ext = Extension("gropt_dev.gropt_wrapper",
+ext = Extension("gropt.gropt_wrapper",
                 sourcefiles,
                 language = "c++",
                 include_dirs = include_dirs,
@@ -65,7 +65,7 @@ ext = Extension("gropt_dev.gropt_wrapper",
             )
 
 setup(
-    packages=['gropt_dev', 'gropt_dev.gropt_wrapper'],
+    packages=['gropt', 'gropt.gropt_wrapper'],
     ext_modules=[ext],
     cmdclass={'build_ext': CustomBuildExt},
 )

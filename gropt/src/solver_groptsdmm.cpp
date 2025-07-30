@@ -8,9 +8,15 @@
 
 namespace Gropt {
 
-void SolverGroptSDMM::solve()  
+void SolverGroptSDMM::solve(GroptParams &_gparams)  
 {
     spdlog::trace("Starting SolverGroptSDMM::solve");
+    gparams = &_gparams;
+    gparams->solver_method = GROPT_SDMM;
+    if (gparams->op_prep_status != gparams->N) {
+        spdlog::info("Operators do not seem prepared, calling prepare()");
+        gparams->prepare();
+    }
 
     Eigen::VectorXd X = gparams->X0;
     Eigen::VectorXd Xhat;
@@ -89,8 +95,8 @@ void SolverGroptSDMM::update(Eigen::VectorXd &X)
         // y = y0 + p*(as + (1-a)z0 - z1)
         op->y1 = op->y0 + op->weight * (op->gamma * op->s1 + (1 - op->gamma) * op->z0 - op->z1);
 
-        if ((op->do_rw) && (gparams->iiter > op->rw_interval) && (gparams->iiter%op->rw_interval == 0)) {
-            op->reweight_parsdmm();
+        if ((op->do_rw) && (gparams->iiter > rw_interval) && (gparams->iiter%rw_interval == 0)) {
+            op->reweight_parsdmm(rw_eps, rw_e_corr, rw_scalelim);
         }
 
         // op->dyk = op->yk1 - op->yk0;
@@ -113,12 +119,12 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
         op->check(op->Ax_temp);
     }
 
-    int N_worst_update = 20;
-    if (gparams->iiter > 2*N_worst_update && gparams->iiter % N_worst_update == 0) {
+    
+    if (gparams->iiter > 2*grw_min_infeasible && gparams->iiter % grw_interval == 0) {
         double max_feas = 0.0;
         int max_index = -1;
         for (int i = 0; i < gparams->all_op.size(); i++) {
-            if (std::accumulate(gparams->all_op[i]->hist_feas.end()-N_worst_update, gparams->all_op[i]->hist_feas.end(), 0) == 0) {
+            if (std::accumulate(gparams->all_op[i]->hist_feas.end()-grw_min_infeasible, gparams->all_op[i]->hist_feas.end(), 0) == 0) {
                 if (gparams->all_op[i]->hist_r_feas.back() > max_feas) {
                     max_feas = gparams->all_op[i]->hist_r_feas.back();
                     max_index = i;
@@ -126,12 +132,25 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
             } 
         }
         if (max_index >= 0) {
-            gparams->all_op[max_index]->weight *= 1.5;
+            gparams->all_op[max_index]->weight *= grw_mod;
         }
     }
 
 
 }
+
+void SolverGroptSDMM::set_sdmm_params(int rw_interval, double rw_e_corr, double rw_eps, double rw_scalelim,
+                             int grw_min_infeasible, int grw_interval, double grw_mod)
+{
+    this->rw_interval = rw_interval;
+    this->rw_e_corr = rw_e_corr;
+    this->rw_eps = rw_eps;
+    this->rw_scalelim = rw_scalelim;
+
+    this->grw_min_infeasible = grw_min_infeasible;
+    this->grw_interval = grw_interval;
+    this->grw_mod = grw_mod;
+}   
 
 /*
 void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
