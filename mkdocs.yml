@@ -11,6 +11,8 @@ theme:
 markdown_extensions:
   - pymdownx.arithmatex:
       generic: true
+  - toc
+  - tables
 
 extra_javascript:
   - javascripts/mathjax.js
@@ -19,14 +21,14 @@ extra_javascript:
 plugins:
     - mkdocs-jupyter
     - search
-    - mkdocstrings
-nav:
-  - Home: index.md
-  - Algorithms:
-    - OSQP: solvers/osqp_solver.md
-  - Python Wrapper:
-    - gropt.gropt: python/gropt_py.md
-  - C++:
-    - Usage: cpp/cpp_info.md
-  # - Notebook Test:
-  #   - ../examples/diffusion/test.md
+    - awesome-nav
+    - mkdocstrings:
+        handlers:
+          python:
+            options:
+              docstring_style: numpy
+              show_root_heading: true
+              separate_signature: true
+              show_signature_annotations: true
+              show_labels: false
+

@@ -20,6 +20,7 @@ enum ILSMethod {
   BiCGstabl,
 }; 
 
+class SolverGroptSDMM;  // Forward declaration of SolverGroptSDMM class
 class Operator;  // Forward declaration of Operator class
 class GroptParams
 {
@@ -49,12 +50,16 @@ class GroptParams
 
         int iiter;
         int final_good = 0;
+        int final_n_feval = 0;
 
         GroptParams();
         ~GroptParams() = default;
 
         void vec_init_simple(int _N, int _Naxis, double first_val, double last_val);
         void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
+        void setvec_X0(int _N, int _Naxis, double *_X0, bool set_others);
+
+        void vec_reduce_simple(int N_reduce);
 
         void prepare();
         void warm_start_prev();
@@ -66,6 +71,12 @@ class GroptParams
         void add_moment(double order, double target, double tol0, std::string units,
                         int moment_axis, int start_idx0, int stop_idx0, int ref_idx0, double weight_mod);
         void add_SAFE(double stim_thresh,
+                      double *tau1, double *tau2, double *tau3, 
+                      double *a1, double *a2, double *a3,
+                      double *stim_limit, double *g_scale,
+                      int new_first_axis, bool demo_params, 
+                      double weight_mod);
+        void add_SAFE_vec(int N_vec, double *stim_thresh_vec,
                       double *tau1, double *tau2, double *tau3, 
                       double *a1, double *a2, double *a3,
                       double *stim_limit, double *g_scale,
@@ -89,8 +100,13 @@ class GroptParams
                    double ils_tik_lam
                    );
 
+        void test_reduce_and_solve();
+        void test_reduce_and_solve(SolverGroptSDMM solver);
+
         void get_output(double **out, int &out_size);
 };
+
+Eigen::VectorXd linear_interpolate(const Eigen::VectorXd& in, int out_size);
 
 } // namespace Gropt
 

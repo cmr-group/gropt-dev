@@ -46,6 +46,8 @@ class Op_SAFE : public Operator
 {  
     protected:
         double stim_thresh;
+        Eigen::VectorXd stim_thresh_vec;
+
         bool true_safe;
 
         Eigen::VectorXd signs;
@@ -57,6 +59,7 @@ class Op_SAFE : public Operator
         SAFEParams safe_params;
 
         Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod, bool _true_safe);
+        Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod, bool _true_safe);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

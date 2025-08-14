@@ -10,3 +10,5 @@ __all__ = [
 from . import readasc
 from .gropt_wrapper import GroptParams, SolverGroptSDMM, get_SAFE, set_verbose
 from .utils import demo
+
+set_verbose(mode = "warning")

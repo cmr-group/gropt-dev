@@ -51,11 +51,26 @@ namespace Gropt {
 
     void Operator::reinit_parsdmm()
     {
-        // y0.setZero(Ax_size);
-        // y1.setZero(Ax_size);
-
-        s0.setZero(Ax_size);
-        s1.setZero(Ax_size);
+        // For reinit we want to not modify y, but we need to if size changes
+        // TODO: Can we interpolate the old y to the new size instead?
+        if (y0.size() != Ax_size) {
+            y0.setZero(Ax_size);
+        }
+        if (y1.size() != Ax_size) {
+            y1.setZero(Ax_size);
+        }
+        if (yhat00.size() != Ax_size) {
+            yhat00.setZero(Ax_size);
+        }
+        if (y00.size() != Ax_size) {
+            y00.setZero(Ax_size);
+        }
+        if (s0.size() != Ax_size) {
+            s0.setZero(Ax_size);
+        }
+        if (s1.size() != Ax_size) {
+            s1.setZero(Ax_size);
+        }
 
         yhat1.setZero(Ax_size);
         dyhat.setZero(Ax_size);
@@ -63,8 +78,10 @@ namespace Gropt {
         dhhat.setZero(Ax_size);
         dghat.setZero(Ax_size);
 
-        // yhat00.setZero(Ax_size);
         s00.setZero(Ax_size);
+
+        z0.setZero(Ax_size);
+        z1.setZero(Ax_size);
         z00.setZero(Ax_size);
     }
 

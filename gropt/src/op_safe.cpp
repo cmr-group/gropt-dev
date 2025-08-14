@@ -17,15 +17,45 @@ Op_SAFE::Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod,
     true_safe = _true_safe;
 }
 
+Op_SAFE::Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod, bool _true_safe)
+    : Operator(_gparams)
+{
+    name = "SAFE"; 
+    stim_thresh = 1.0;
+    weight_mod = _weight_mod;
+
+    stim_thresh_vec.resize(_N_vec);
+    for (int i = 0; i < stim_thresh_vec.size(); i++) {
+        stim_thresh_vec(i) = _stim_thresh_vec[i];
+    }
+
+
+    // Proper SAFE model is not stable in Krylov optimization, Setting to false removes the abs(), which
+    // makes it converge nicely, but does not give the proper SAFE, though in every example I have tried
+    // it still matches *PEAK* SAFE (it is the lower safe values that might not match up)
+    true_safe = _true_safe;
+}
+
 void Op_SAFE::init()
 {
     spdlog::trace("Op_SAFE::init  N = {}", gparams->N);
 
     safe_params.calc_alphas(gparams->dt);
 
+    // We will ignore this for now and just use stim_thresh_vec directly
     target = 0;
     tol0 = stim_thresh;
     tol = (1.0-cushion) * tol0;
+
+    if (stim_thresh_vec.size() != gparams->Naxis * gparams->N) {
+        if (stim_thresh_vec.size() != 0) {
+            spdlog::warn("Op_SAFE::init  stim_thresh_vec size does not match Naxis * N, resizing to match");
+        }
+        stim_thresh_vec.resize(gparams->Naxis * gparams->N);
+        for (int i = 0; i < stim_thresh_vec.size(); i++) {
+            stim_thresh_vec(i) = stim_thresh;
+        }
+    }
 
     spec_norm2 = 4.0/gparams->dt/gparams->dt;
     spec_norm = sqrt(spec_norm2);
@@ -212,13 +242,12 @@ void Op_SAFE::prox(Eigen::VectorXd &X)
         }
     }
 
-    double upper_bound = (target+tol);
-
     if (rot_variant) {
         for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
             double val = abs(x_temp(j*N+i));
 
+            double upper_bound = (1-cushion) * stim_thresh_vec(j*N+i);
             if (val > upper_bound) {
                 X(j*3*N+i) *= (upper_bound/val);
                 X(j*3*N+i+N) *= (upper_bound/val);
@@ -233,6 +262,7 @@ void Op_SAFE::prox(Eigen::VectorXd &X)
                 val += X(j*N+i)*X(j*N+i);
             }
             val = sqrt(val);
+            double upper_bound = (1-cushion) * stim_thresh_vec(i);
 
             if (val > upper_bound) {
                 for (int j = 0; j < Naxis; j++) {
@@ -258,12 +288,11 @@ void Op_SAFE::check(Eigen::VectorXd &X)
         }
     }
 
-    double upper_bound = (target+tol0);
-
     if (rot_variant) {
         for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
             double val = abs(x_temp(j*N+i));
+            double upper_bound = stim_thresh_vec(j*N+i);
 
             if (val > upper_bound) {
                 is_feas = 0;
@@ -277,6 +306,7 @@ void Op_SAFE::check(Eigen::VectorXd &X)
                 val += X(j*N+i)*X(j*N+i);
             }
             val = sqrt(val);
+            double upper_bound = stim_thresh_vec(i);
 
             if (val > upper_bound) {
                 is_feas = 0;

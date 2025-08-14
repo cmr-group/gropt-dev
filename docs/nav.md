@@ -1,0 +1,7 @@
+- [GrOpt](index.md)
+- Python Wrapper
+    - [Overview](python/gropt_py.md)
+    - [GroptParams Setup](python/problem.md)
+- Examples
+    - [Diffusion](examples/diffusion/*.ipynb)
+    - [Moments](examples/moments/)

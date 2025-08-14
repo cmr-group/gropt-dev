@@ -41,6 +41,7 @@ void SolverGroptSDMM::solve(GroptParams &_gparams)
     }
     r_primal.setZero(total_Ax_size);
     
+    int total_feval = 0;
     int iiter;
     for (iiter = 0; iiter < max_iter; ++iiter) {
         spdlog::trace("Starting GroptSDMM iteration {:d} SolverGroptSDMM::solve", iiter);
@@ -68,6 +69,13 @@ void SolverGroptSDMM::solve(GroptParams &_gparams)
         if (extra_debug) {hist_X.push_back(X);}
         
         if ((logger(X) > 0) && (iiter > min_iter)) {break;}
+        
+        total_feval += ils_solver->hist_n_iter.back();
+        if (total_feval > max_feval) {
+            spdlog::info("Maximum function evaluations reached");
+            break;
+        }
+
     }
 
     gparams->final_X = X;

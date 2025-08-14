@@ -1,0 +1,7 @@
+nav:
+  - GrOpt: index.md
+  - Python:
+      - Overview: python/gropt_py.md
+      - GroptParams Setup: python/problem.md
+  - Examples:
+      - "examples/"

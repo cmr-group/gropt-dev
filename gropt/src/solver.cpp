@@ -42,10 +42,12 @@ void Solver::final_log(Eigen::VectorXd &X)
     
     gparams->final_good = 1;
 
+    gparams->final_n_feval = std::accumulate(ils_solver->hist_n_iter.begin(), ils_solver->hist_n_iter.end(), 0);
+
     spdlog::info(" ");
     spdlog::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ");
     spdlog::info("======================== Final Stats ========================", gparams->iiter);
-    spdlog::info("  Iteration = {:d}   Total f_eval = {:d}", gparams->iiter, std::accumulate(ils_solver->hist_n_iter.begin(), ils_solver->hist_n_iter.end(), 0));
+    spdlog::info("  Iteration = {:d}   Total f_eval = {:d}", gparams->iiter, gparams->final_n_feval);
     spdlog::info("  ||x|| = {:.2e}", X.norm());
     spdlog::info(" ");
     spdlog::info("          Name      Feasibile   min(Ax)       max(Ax)      tol0 ");
@@ -62,14 +64,17 @@ void Solver::final_log(Eigen::VectorXd &X)
             gparams->final_good = 0;
         }
     }
+
+    
 }
 
-void Solver::set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x)
+void Solver::set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval)
 {
     this->min_iter = min_iter;
     this->max_iter = max_iter;
     this->log_interval = log_interval;
     this->gamma_x = gamma_x;
+    this->max_feval = max_feval;
 }
 
 void Solver::set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam)

@@ -9,8 +9,8 @@ dependencies = [
 
 
 [project.optional-dependencies]
-dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen"]
-docs = ["mkdocs", "mkdocs-material", "mkdocs-jupyter", "mkdocstrings-python", "pybind11-stubgen"]
+dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen", "scipy"]
+docs = ["mkdocs", "mkdocs-material", "mkdocs-jupyter", "mkdocstrings-python", "mkdocs-awesome-nav", "pybind11-stubgen"]
 
 [build-system]
 requires = ["setuptools>=18.0", "cython>=0.18", "wheel", "numpy"]
