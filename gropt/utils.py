@@ -18,7 +18,6 @@ def demo(plot=True):
     
     print('Starting solve...', flush=True)
 
-    gparams.init()
     gparams.solve()
 
     print('Finished solve...', flush=True)
