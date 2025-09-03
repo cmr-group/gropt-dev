@@ -2,6 +2,8 @@ nav:
   - GrOpt: index.md
   - Python:
       - Overview: python/gropt_py.md
-      - GroptParams Setup: python/problem.md
+      - Problem Init: python/problem.md
+      - Constraints: python/constraints.md
+      - Solving: python/solvers.md
   - Examples:
       - "examples/"

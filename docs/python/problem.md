@@ -1,6 +1,6 @@
 ## Helper Functions
 
-These helper functions set all necessary parameterss to define the function.
+These helper functions set all necessary parameterss to define the problem.  They define some common usage patterns for optimization, such as fully optimized waveforms that start and end at 0 (`vec_init_simple`), or the optimization of diffusion waveforms (`diff_init`).
 
 ::: gropt.GroptParams
     options:

@@ -9,4 +9,8 @@ For more information see [here](problem.md)
 
 The `GroptParams` object has a range of functions that add constraints.
 
+Available constraints can be seen [here](constraints.md)
+
 ## Solving
+
+Once the problem has been defined, and constraints and/or objective functions added, we solve for a solution with either the `GroptParams.solve()` function, which solves the problem with default options, or by specifying a solver and corresponding options as described here [here](solvers.md)

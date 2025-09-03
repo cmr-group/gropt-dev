@@ -1,6 +1,8 @@
 """
 Read ASC files from Siemens scanners.
+
 Taken directly from pypulseq: https://github.com/imr-framework/pypulseq/
+With some additional helper functions added
 """
 
 import re
