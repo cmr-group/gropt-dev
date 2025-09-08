@@ -8,6 +8,7 @@
 #include "op_identity.hpp"
 #include "op_bvalue.hpp"
 #include "op_safe.hpp"
+#include "op_safe2.hpp"
 #include "op_tv.hpp"
 #include "solver_groptsdmm.hpp"
 
@@ -252,6 +253,22 @@ void GroptParams::add_SAFE(double stim_thresh,
     all_op.push_back(op_F);
 }
 
+void GroptParams::add_SAFE2(double stim_thresh, 
+                           double *tau1, double *tau2, double *tau3, 
+                           double *a1, double *a2, double *a3,
+                           double *stim_limit, double *g_scale,
+                           int new_first_axis, bool demo_params, double weight_mod) 
+{
+    Op_SAFE2* op_F = new Op_SAFE2(*this, stim_thresh, weight_mod);
+    if (demo_params) {
+        op_F->safe_params.set_demo_params();
+    } else {
+        op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
+    }
+    op_F->safe_params.swap_first_axes(new_first_axis);
+    all_op.push_back(op_F);
+}
+
 void GroptParams::add_SAFE_vec(int N_vec, double *stim_thresh_vec,
                       double *tau1, double *tau2, double *tau3, 
                       double *a1, double *a2, double *a3,
@@ -269,8 +286,31 @@ void GroptParams::add_SAFE_vec(int N_vec, double *stim_thresh_vec,
     all_op.push_back(op_F);
 }
 
-void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod) {
-    all_op.push_back(new Op_BValue(*this, target, tol, start_idx0, stop_idx0, weight_mod));
+void GroptParams::add_SAFE2_vec(int N_vec, double *stim_thresh_vec,
+                      double *tau1, double *tau2, double *tau3, 
+                      double *a1, double *a2, double *a3,
+                      double *stim_limit, double *g_scale,
+                      int new_first_axis, bool demo_params, 
+                      double weight_mod)
+{
+    Op_SAFE2* op_F = new Op_SAFE2(*this, N_vec, stim_thresh_vec, weight_mod);
+    if (demo_params) {
+        op_F->safe_params.set_demo_params();
+    } else {
+        op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
+    }
+    op_F->safe_params.swap_first_axes(new_first_axis);
+    all_op.push_back(op_F);
+}
+
+
+void GroptParams::add_bvalue(double target, double tol, 
+                             int start_idx0, int stop_idx0, double weight_mod, 
+                             int mode, double max_scale) {
+    
+    all_op.push_back(new Op_BValue(*this, target, tol, 
+                     start_idx0, stop_idx0, weight_mod, 
+                     static_cast<BVALUE_MODE>(mode), max_scale));
 }
 
 void GroptParams::add_TV(double tv_lam, double weight_mod)
@@ -347,6 +387,16 @@ void GroptParams::get_output(double **out, int &out_size)
     for (int i = 0; i < out_size; i++) {
         (*out)[i] = final_X(i);
     }
+}
+
+double GroptParams::get_output_bvalue() {
+    Op_BValue *opB = new Op_BValue(*this, 1, 1, 
+                     -1, -1, 1, 
+                     static_cast<BVALUE_MODE>(1), 1.01);
+    opB->init();
+    double result = opB->get_bvalue(final_X);
+    delete opB;
+    return result;
 }
 
 Eigen::VectorXd linear_interpolate(const Eigen::VectorXd& in, int out_size) {
