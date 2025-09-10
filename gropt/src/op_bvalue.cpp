@@ -5,7 +5,7 @@
 namespace Gropt {
 
 Op_BValue::Op_BValue(GroptParams &_gparams, double _bval_target, double _bval_tol0,
-                     int _start_idx0, int _stop_idx0, double _weight_mod)
+                     int _start_idx0, int _stop_idx0, double _weight_mod, BVALUE_MODE _mode, double _max_scale)
     : Operator(_gparams)
 {
     name = "b-value"; 
@@ -20,6 +20,9 @@ Op_BValue::Op_BValue(GroptParams &_gparams, double _bval_target, double _bval_to
     stop_idx = stop_idx0;
 
     weight_mod = _weight_mod;
+
+    mode = _mode;
+    max_scale = _max_scale;
 }
 
 void Op_BValue::init()
@@ -93,16 +96,38 @@ void Op_BValue::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 void Op_BValue::prox(Eigen::VectorXd &X)
 {
     spdlog::trace("Starting Op_BValue::prox");
+    
     for (int j = 0; j < Naxis; j++) {
         double xnorm = X.segment(j*N, N).norm();
-        double min_val = sqrt(target - tol);
-        double max_val = sqrt(target + tol);
+        
 
-        if (xnorm < min_val) {
-            X.segment(j*N, N) *= (min_val/xnorm);
-        } else if (xnorm > max_val) {
-            X.segment(j*N, N) *= (max_val/xnorm);
+        if (mode == BVALUE_MODE_MINVAL) {
+            double min_val = sqrt(target);
+
+            if (xnorm < min_val) {
+                X.segment(j*N, N) *= (min_val/xnorm);
+            }
+        } else if (mode == BVALUE_MODE_MINVALMAX) {
+            double min_val = sqrt(target);
+
+            if (xnorm < min_val) {
+                X.segment(j*N, N) *= (max_scale*min_val/xnorm);
+            } else {
+                X.segment(j*N, N) *= max_scale;
+            }
+        } else if (mode == BVALUE_MODE_SETVAL) {
+            double min_val = sqrt(target - tol);
+            double max_val = sqrt(target + tol);
+
+            if (xnorm < min_val) {
+                X.segment(j*N, N) *= (min_val/xnorm);
+            } else if (xnorm > max_val) {
+                X.segment(j*N, N) *= (max_val/xnorm);
+            }
+        } else {
+            spdlog::error("Unknown BVALUE_MODE in Op_BValue::prox");
         }
+        
     }
 
     spdlog::trace("Finished Op_BValue::prox");
@@ -116,10 +141,21 @@ void Op_BValue::check(Eigen::VectorXd &X)
     for (int j = 0; j < Naxis; j++) {
         double bval_t = (X.segment(j*N, N)).squaredNorm();    
         
-        double d_bval = fabs(bval_t - target);
-        if (d_bval > tol0) {
-            is_feas = 0;
+        if (mode == BVALUE_MODE_MINVAL || mode == BVALUE_MODE_MINVALMAX) {
+            if (bval_t < target) {
+                is_feas = 0;
+            }
+        } else if (mode == BVALUE_MODE_SETVAL) {
+            double d_bval = fabs(bval_t - target);
+            if (d_bval > tol0) {
+                is_feas = 0;
+            }
+        } else {
+            spdlog::error("Unknown BVALUE_MODE in Op_BValue::check");
         }
+        
+
+        
 
     }
 

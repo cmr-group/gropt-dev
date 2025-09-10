@@ -18,7 +18,7 @@ class CustomBuildExt(build_ext):
         ext.extra_compile_args = ['-DFMT_UNICODE=0',  # Needed for spdlog
                                   ]
         if compiler_type == 'msvc':
-            ext.extra_compile_args += []
+            ext.extra_compile_args += ['/diagnostics:color']
         else:
             ext.extra_compile_args += ['-std=c++11']
 

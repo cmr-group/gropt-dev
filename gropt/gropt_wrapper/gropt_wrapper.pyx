@@ -186,7 +186,6 @@ cdef class GroptParams:
         """
         self.c_gparams.add_smax(smax, rot_variant, weight_mod)
 
-   
     def add_moment(self, 
                    order: int = 0, 
                    target: float = 0.0, 
@@ -302,7 +301,7 @@ cdef class GroptParams:
                                     _unused, _unused, _unused, _unused, _unused, _unused,
                                     _unused, _unused,
                                      new_first_axis, demo_params, weight_mod)
-
+    
     def add_SAFE_vec(self, 
                      stim_thresh_vec: np.ndarray,
                      new_first_axis: int = 0, 
@@ -370,14 +369,16 @@ cdef class GroptParams:
                                     _unused, _unused, _unused, _unused, _unused, _unused,
                                     _unused, _unused,
                                      new_first_axis, demo_params, weight_mod)
-    
-    
+
+
     def add_bvalue(self, 
                    target: float = 100.0, 
                    tol: float = 1.0,
                    start_idx0: int = -1, 
                    stop_idx0: int = -1, 
-                   weight_mod: float = 1.0):
+                   weight_mod: float = 1.0,
+                   mode: int | str = 2,
+                   max_scale: float = 1.01):
         """
         Adds a b-value constraint to the optimization problem.
         
@@ -399,8 +400,29 @@ cdef class GroptParams:
         weight_mod : float, optional
             A weighting factor for this specific constraint in the optimization problem. 
             Defaults to 1.0.
+        mode : int or string, optional
+            The mode for the b-value constraint. 
+            'setval' or 1 = set b-value to target
+            'minval' or 2 = set minimum b-value (default)
+            'minval_max' or 3 = set minimum b-value, but also try to increase each iteration by `max_scale`
+        max_scale : float, optional
+            How much to scale the proximal bvalue when mode=3, maximizing "constraint"
+            Defaults to 1.01 .
         """
-        self.c_gparams.add_bvalue(target, tol, start_idx0, stop_idx0, weight_mod)
+        if isinstance(mode, str):
+            if mode == 'setval':
+                mode = 1
+            elif mode == 'minval':
+                mode = 2
+            elif mode == 'minval_max':
+                mode = 3
+            else:
+                raise ValueError("Invalid mode string. Must be 'setval', 'minval', or 'minval_max'.")
+        
+        if mode not in [1, 2, 3]:
+            raise ValueError("Invalid mode integer. Must be 1, 2, or 3.")
+
+        self.c_gparams.add_bvalue(target, tol, start_idx0, stop_idx0, weight_mod, mode, max_scale)
 
     def add_TV(self, 
                tv_lam: float = 0.0, 
@@ -505,6 +527,17 @@ cdef class GroptParams:
         cdef int out_size
         self.c_gparams.get_output(&out, out_size)
         return np.asarray(<cnp.float64_t[:out_size]> out)
+
+    def get_output_bvalue(self) -> float:
+        """
+        Get the b-value of the current waveform.
+
+        Returns
+        -------
+        float
+            The b-value of the current waveform.
+        """
+        return self.c_gparams.get_output_bvalue()
 
     def test_reduce_and_solve(self):
         """

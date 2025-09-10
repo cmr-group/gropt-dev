@@ -2,7 +2,7 @@
 #define OP_SAFE_H
 
 /**
- * Constriant on FASE model prediction of waveforms.
+ * Constriant on SAFE model prediction of waveforms.
  */
 
 #include <iostream> 
@@ -11,7 +11,7 @@
 #include "Eigen/Dense"
 
 #include "op_main.hpp"
-
+ 
 namespace Gropt {
 
 class SAFEParams {
@@ -48,9 +48,9 @@ class Op_SAFE : public Operator
         double stim_thresh;
         Eigen::VectorXd stim_thresh_vec;
 
-        bool true_safe;
-
-        Eigen::VectorXd signs;
+        Eigen::VectorXd signs1;
+        Eigen::VectorXd signs2;
+        Eigen::VectorXd signs3;
         Eigen::VectorXd stim1;
         Eigen::VectorXd stim2;
         Eigen::VectorXd stim3;
@@ -58,8 +58,8 @@ class Op_SAFE : public Operator
     public:
         SAFEParams safe_params;
 
-        Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod, bool _true_safe);
-        Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod, bool _true_safe);
+        Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod);
+        Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

@@ -30,7 +30,7 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         void add_moment(double order, double target, 
                         double tol0, string units, int moment_axis, 
                         int start_idx0, int stop_idx0, int ref_idx0, double weight_mod)
-        
+
         void add_SAFE(double stim_thresh,
                       double *tau1, double *tau2, double *tau3, 
                       double *a1, double *a2, double *a3,
@@ -43,8 +43,9 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
                       double *stim_limit, double *g_scale,
                       int new_first_axis, bool demo_params, double weight_mod)
         
-        void add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod)
-        
+        void add_bvalue(double target, double tol, int start_idx0, int stop_idx0, 
+        double weight_mod, int mode, double max_scale)
+
         void add_TV(double tv_lam, double weight_mod)
 
         void add_obj_identity(double weight_mod)
@@ -63,6 +64,7 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         void test_reduce_and_solve()
 
         void get_output(double **out, int &out_size)
+        double get_output_bvalue()
 
 
 cdef extern from "solver_groptsdmm.hpp" namespace "Gropt":
@@ -79,6 +81,7 @@ cdef extern from "solver_groptsdmm.hpp" namespace "Gropt":
 cdef extern from "gropt_utils.hpp" namespace "Gropt":
     
     void set_verbose(int level)
+
     void get_SAFE(int N, int Naxis, double dt, double *G_in, 
                   bool true_safe, int new_first_axis, bool demo_params,
                   double *tau1, double *tau2, double *tau3,

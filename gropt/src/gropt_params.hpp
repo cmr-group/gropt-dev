@@ -83,7 +83,8 @@ class GroptParams
                       int new_first_axis, bool demo_params, 
                       double weight_mod);
 
-        void add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod);
+        void add_bvalue(double target, double tol, int start_idx0, int stop_idx0, 
+                        double weight_mod, int mode, double max_scale);
         void add_TV(double tv_lam, double weight_mod);
         
         
@@ -104,6 +105,7 @@ class GroptParams
         void test_reduce_and_solve(SolverGroptSDMM solver);
 
         void get_output(double **out, int &out_size);
+        double get_output_bvalue();  
 };
 
 Eigen::VectorXd linear_interpolate(const Eigen::VectorXd& in, int out_size);

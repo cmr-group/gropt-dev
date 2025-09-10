@@ -48,7 +48,7 @@ void get_SAFE(int N, int Naxis, double dt, double *G_in,
 
     spdlog::trace("get_SAFE(): finished params");
 
-    Op_SAFE opF(params, 1.0, 1.0, true_safe);
+    Op_SAFE opF(params, 1.0, 1.0);
     if (demo_params) {
         opF.safe_params.set_demo_params();
     } else {
