@@ -76,19 +76,7 @@ class GroptParams
                       double *stim_limit, double *g_scale,
                       int new_first_axis, bool demo_params, 
                       double weight_mod);
-        void add_SAFE2(double stim_thresh,
-                      double *tau1, double *tau2, double *tau3, 
-                      double *a1, double *a2, double *a3,
-                      double *stim_limit, double *g_scale,
-                      int new_first_axis, bool demo_params, 
-                      double weight_mod);
         void add_SAFE_vec(int N_vec, double *stim_thresh_vec,
-                      double *tau1, double *tau2, double *tau3, 
-                      double *a1, double *a2, double *a3,
-                      double *stim_limit, double *g_scale,
-                      int new_first_axis, bool demo_params, 
-                      double weight_mod);
-        void add_SAFE2_vec(int N_vec, double *stim_thresh_vec,
                       double *tau1, double *tau2, double *tau3, 
                       double *a1, double *a2, double *a3,
                       double *stim_limit, double *g_scale,

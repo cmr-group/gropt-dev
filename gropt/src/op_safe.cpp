@@ -4,20 +4,15 @@
 
 namespace Gropt {
 
-Op_SAFE::Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod, bool _true_safe)
+Op_SAFE::Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod)
     : Operator(_gparams)
 {
     name = "SAFE"; 
     stim_thresh = _stim_thresh;
     weight_mod = _weight_mod;
-
-    // Proper SAFE model is not stable in Krylov optimization, Setting to false removes the abs(), which
-    // makes it converge nicely, but does not give the proper SAFE, though in every example I have tried
-    // it still matches *PEAK* SAFE (it is the lower safe values that might not match up)
-    true_safe = _true_safe;
 }
 
-Op_SAFE::Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod, bool _true_safe)
+Op_SAFE::Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod)
     : Operator(_gparams)
 {
     name = "SAFE"; 
@@ -28,12 +23,6 @@ Op_SAFE::Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, do
     for (int i = 0; i < stim_thresh_vec.size(); i++) {
         stim_thresh_vec(i) = _stim_thresh_vec[i];
     }
-
-
-    // Proper SAFE model is not stable in Krylov optimization, Setting to false removes the abs(), which
-    // makes it converge nicely, but does not give the proper SAFE, though in every example I have tried
-    // it still matches *PEAK* SAFE (it is the lower safe values that might not match up)
-    true_safe = _true_safe;
 }
 
 void Op_SAFE::init()
@@ -66,7 +55,9 @@ void Op_SAFE::init()
         weight = 1e4;
     }
 
-    signs.setZero(gparams->Naxis*gparams->N);
+    signs1.setZero(gparams->Naxis*gparams->N);
+    signs2.setZero(gparams->Naxis*gparams->N);
+    signs3.setZero(gparams->Naxis*gparams->N);
     stim1.setZero(gparams->Naxis*gparams->N);
     stim2.setZero(gparams->Naxis*gparams->N);
     stim3.setZero(gparams->Naxis*gparams->N);
@@ -78,6 +69,7 @@ void Op_SAFE::init()
 
 void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
+    // out = diff(X)/dt
     for (int j = 0; j < Naxis; j++) {
         out(j*N) = X(j*N)/dt;
         for (int i = 1; i < N; i++) {
@@ -85,11 +77,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
         }
     }
 
-    for (int i = 0; i < signs.size(); i++) {
-        if (out(i) < 0) {signs(i) = -1.0;}
-        else {signs(i) = 1.0;}
-    }
-
+    // stim1 = tau_filter_1(dX/dt) 
     stim1.setZero();
     for (int j = 0; j < Naxis; j++) {
         stim1(j*N) = safe_params.alpha1[j] * out(j*N);
@@ -97,25 +85,40 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
             stim1(j*N+i) = safe_params.alpha1[j] * out(j*N+i) + (1.0-safe_params.alpha1[j]) * stim1(j*N+i-1);
         }
     }
-    if (true_safe) {
-        for (int i = 0; i < stim1.size(); i++) {
-            stim1(i) = abs(stim1(i));
-        }
+
+    // stim1 = abs(tau_filter_1(dX/dt)) 
+    for (int i = 0; i < stim1.size(); i++) {
+        if (stim1(i) < 0) {signs1(i) = -1.0;}
+        else {signs1(i) = 1.0;}
+        stim1(i) = abs(stim1(i));
     }
 
-    stim2.setZero();
+
+    // stim2 = dX/dt
     for (int j = 0; j < Naxis; j++) {
-        stim2(j*N) = safe_params.alpha2[j] * abs(out(j*N));
-        for (int i = 1; i < N; i++) {
-            stim2(j*N+i) = safe_params.alpha2[j] * abs(out(j*N+i)) + (1.0-safe_params.alpha2[j]) * stim2(j*N+i-1);
-        }
-    }
-    if (!true_safe) {
-        for (int i = 0; i < stim2.size(); i++) {
-            stim2(i) = signs(i) * stim2(i);
+        for (int i = 0; i < N; i++) {
+            stim2(j*N+i) = out(j*N+i);
         }
     }
 
+    // stim2 = abs(dX/dt)
+    for (int i = 0; i < stim1.size(); i++) {
+        if (stim2(i) < 0) {signs2(i) = -1.0;}
+        else {signs2(i) = 1.0;}
+        stim2(i) = abs(stim2(i));
+    }
+
+
+    // stim2 = tau_filter_2(abs(dX/dt))
+    for (int j = 0; j < Naxis; j++) {
+        stim2(j*N) = safe_params.alpha2[j] * stim2(j*N);
+        for (int i = 1; i < N; i++) {
+            stim2(j*N+i) = safe_params.alpha2[j] * stim2(j*N+i) + (1.0-safe_params.alpha2[j]) * stim2(j*N+i-1);
+        }
+    }
+
+
+    // stim3 = tau_filter_3(dX/dt) 
     stim3.setZero();
     for (int j = 0; j < Naxis; j++) {
         stim3(j*N) = safe_params.alpha3[j] * out(j*N);
@@ -123,23 +126,20 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
             stim3(j*N+i) = safe_params.alpha3[j] * out(j*N+i) + (1.0-safe_params.alpha3[j]) * stim3(j*N+i-1);
         }
     }
-    if (true_safe) {
-        for (int i = 0; i < stim3.size(); i++) {
-            stim3(i) = abs(stim3(i)); 
-        }
+
+    // stim3 = abs(tau_filter_3(dX/dt)) 
+    for (int i = 0; i < stim3.size(); i++) {
+        if (stim3(i) < 0) {signs3(i) = -1.0;}
+        else {signs3(i) = 1.0;}
+        stim3(i) = abs(stim3(i));
     }
 
-    // for (int j = 0; j < Naxis; j++) {
-    //     for (int i = 0; i < N; i++) {
-    //         out(j*N+i) = (a1(j)*stim1(j*N+i) + a2(j)*stim2(j*N+i) + a3(j)*stim3(j*N+i)) / stim_limit(j) * g_scale(j);
-    //     }
-    // }
-
+    // The return vector is [stim1; stim2; stim3] scaled by a, stim_limit, g_scale
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            out(j*3*N+i) = safe_params.a1[j] * stim1(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
-            out(j*3*N+i+N) = safe_params.a2[j] * stim2(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
-            out(j*3*N+i+2*N) = safe_params.a3[j] * stim3(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            out(j*3*N + i) = safe_params.a1[j] * stim1(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            out(j*3*N + i+N) = safe_params.a2[j] * stim2(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            out(j*3*N + i+2*N) = safe_params.a3[j] * stim3(j*N+i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
         }
     }
 
@@ -147,80 +147,66 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
 void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
-    x_temp.setZero();
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            x_temp(j*N+i) = X(j*3*N+i) + X(j*3*N+i+N) + X(j*3*N+i+2*N);
-        }
-    }
-
     
-    for (int i = 0; i < signs.size(); i++) {
-        if (x_temp(i) < 0) {signs(i) = -1.0;}
-        else {signs(i) = 1.0;}
-    }
-
-    // for (int j = 0; j < Naxis; j++) {
-    //     for (int i = 0; i < N; i++) {
-    //         if (X(j*3*N+i+N) < 0) {signs(j*N+i) = -1.0;}
-    //         else {signs(j*N+i) = 1.0;}
-    //     }
-    // }
-
-
-    stim1.setZero();
+    // Split and scale by a, stim_limit, g_scale
     for (int j = 0; j < Naxis; j++) {
-        stim1(j*N+N-1) = safe_params.alpha1[j] * x_temp(j*N+N-1);
-        for (int i = N-2; i >= 0; i--) {
-            stim1(j*N+i) = safe_params.alpha1[j] * x_temp(j*N+i) + (1-safe_params.alpha1[j]) * stim1(j*N+i+1);
+        for (int i = 0; i < N; i++) {
+            stim1(j*N+i) = safe_params.a1[j] * X(j*3*N + i) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            stim2(j*N+i) = safe_params.a2[j] * X(j*3*N + i+N) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            stim3(j*N+i) = safe_params.a3[j] * X(j*3*N + i+2*N) / safe_params.stim_limit[j] * safe_params.g_scale[j];
         }
     }
-    if (true_safe) {
-        for (int i = 0; i < x_temp.size(); i++) {
-            stim1(i) = abs(stim1(i));
-        }
+    
+    
+    // stim1 = signs1 * stim1
+    for (int i = 0; i < stim1.size(); i++) {
+        stim1(i) = signs1(i) * stim1(i);
     }
 
-
-    stim2.setZero();
+    // stim1 = tau_filter_1_T(stim1)    
     for (int j = 0; j < Naxis; j++) {
-        stim2(j*N+N-1) = safe_params.alpha2[j] * abs(x_temp(j*N+N-1));
+        stim1(j*N+N-1) = safe_params.alpha1[j] * stim1(j*N+N-1);
         for (int i = N-2; i >= 0; i--) {
-            stim2(j*N+i) = safe_params.alpha2[j] * abs(x_temp(j*N+i)) + (1-safe_params.alpha2[j]) * stim2(j*N+i+1);
-        }
-    }
-    if (!true_safe) {
-        for (int i = 0; i < x_temp.size(); i++) {
-            stim2(i) = signs(i) * stim2(i);
+            stim1(j*N+i) = safe_params.alpha1[j] * stim1(j*N+i) + (1-safe_params.alpha1[j]) * stim1(j*N+i+1);
         }
     }
 
 
-
-    stim3.setZero();
+    // stim2 = tau_filter_2_T(stim2)    
     for (int j = 0; j < Naxis; j++) {
-        stim3(j*N+N-1) = safe_params.alpha3[j] * x_temp(j*N+N-1);
+        stim2(j*N+N-1) = safe_params.alpha2[j] * stim2(j*N+N-1);
         for (int i = N-2; i >= 0; i--) {
-            stim3(j*N+i) = safe_params.alpha3[j] * x_temp(j*N+i) + (1-safe_params.alpha3[j]) * stim3(j*N+i+1);
-        }
-    }
-    if (true_safe) {
-        for (int i = 0; i < x_temp.size(); i++) {
-            stim3(i) = abs(stim3(i));
+            stim2(j*N+i) = safe_params.alpha2[j] * stim2(j*N+i) + (1-safe_params.alpha2[j]) * stim2(j*N+i+1);
         }
     }
 
+    // stim2 = signs2 * stim2
+    for (int i = 0; i < stim2.size(); i++) {
+        stim2(i) = signs2(i) * stim2(i);
+    }
+
+
+
+    // stim3 = signs3 * stim3
+    for (int i = 0; i < stim3.size(); i++) {
+        stim3(i) = signs3(i) * stim3(i);
+    }
+
+    // stim3 = tau_filter_3_T(stim3)    
+    for (int j = 0; j < Naxis; j++) {
+        stim3(j*N+N-1) = safe_params.alpha3[j] * stim3(j*N+N-1);
+        for (int i = N-2; i >= 0; i--) {
+            stim3(j*N+i) = safe_params.alpha3[j] * stim3(j*N+i) + (1-safe_params.alpha3[j]) * stim3(j*N+i+1);
+        }
+    }
 
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            // out(j*N+i) = signs(j*N+i) * (a1(j)*stim1(j*N+i) + a2(j)*stim2(j*N+i) + a3(j)*stim3(j*N+i)) / stim_limit(j) * g_scale(j);
-            out(j*N+i) = (safe_params.a1[j]*stim1(j*N+i) + 
-                          safe_params.a2[j]*stim2(j*N+i) + 
-                          safe_params.a3[j]*stim3(j*N+i)) / safe_params.stim_limit[j] * safe_params.g_scale[j];
+            out(j*N+i) = stim1(j*N+i) + stim2(j*N+i) + stim3(j*N+i);
         }
     }
 
-
+    // out = diff(stim1 + stim2 + stim3)/dt
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N-1; i++) {
             out(j*N+i) = (out(j*N+i) - out(j*N+i+1))/dt;
@@ -233,12 +219,11 @@ void Op_SAFE::prox(Eigen::VectorXd &X)
 {
     spdlog::trace("Starting Op_SAFE::prox");
 
-    // This just sums the three terms, it is not the cross axis sum.
+    // This just sums the three terms [stim1, stim2, stim3], it is not the cross axis sum.
     x_temp.setZero();
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            // x_temp(j*N+i) = X(j*3*N+i) + X(j*3*N+i+N) + X(j*3*N+i+2*N);
-            x_temp(j*N+i) = abs(X(j*3*N+i)) + abs(X(j*3*N+i+N)) + abs(X(j*3*N+i+2*N));
+            x_temp(j*N+i) = X(j*3*N+i) + X(j*3*N+i+N) + X(j*3*N+i+2*N);
         }
     }
 
@@ -283,8 +268,7 @@ void Op_SAFE::check(Eigen::VectorXd &X)
     x_temp.setZero();
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            // x_temp(j*N+i) = X(j*3*N+i) + X(j*3*N+i+N) + X(j*3*N+i+2*N);
-            x_temp(j*N+i) = abs(X(j*3*N+i)) + abs(X(j*3*N+i+N)) + abs(X(j*3*N+i+2*N));
+            x_temp(j*N+i) = X(j*3*N+i) + X(j*3*N+i+N) + X(j*3*N+i+2*N);
         }
     }
 

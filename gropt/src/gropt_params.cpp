@@ -8,7 +8,6 @@
 #include "op_identity.hpp"
 #include "op_bvalue.hpp"
 #include "op_safe.hpp"
-#include "op_safe2.hpp"
 #include "op_tv.hpp"
 #include "solver_groptsdmm.hpp"
 
@@ -243,23 +242,7 @@ void GroptParams::add_SAFE(double stim_thresh,
                            double *stim_limit, double *g_scale,
                            int new_first_axis, bool demo_params, double weight_mod) 
 {
-    Op_SAFE* op_F = new Op_SAFE(*this, stim_thresh, weight_mod, false);
-    if (demo_params) {
-        op_F->safe_params.set_demo_params();
-    } else {
-        op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
-    }
-    op_F->safe_params.swap_first_axes(new_first_axis);
-    all_op.push_back(op_F);
-}
-
-void GroptParams::add_SAFE2(double stim_thresh, 
-                           double *tau1, double *tau2, double *tau3, 
-                           double *a1, double *a2, double *a3,
-                           double *stim_limit, double *g_scale,
-                           int new_first_axis, bool demo_params, double weight_mod) 
-{
-    Op_SAFE2* op_F = new Op_SAFE2(*this, stim_thresh, weight_mod);
+    Op_SAFE* op_F = new Op_SAFE(*this, stim_thresh, weight_mod);
     if (demo_params) {
         op_F->safe_params.set_demo_params();
     } else {
@@ -276,24 +259,7 @@ void GroptParams::add_SAFE_vec(int N_vec, double *stim_thresh_vec,
                       int new_first_axis, bool demo_params, 
                       double weight_mod)
 {
-    Op_SAFE* op_F = new Op_SAFE(*this, N_vec, stim_thresh_vec, weight_mod, false);
-    if (demo_params) {
-        op_F->safe_params.set_demo_params();
-    } else {
-        op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
-    }
-    op_F->safe_params.swap_first_axes(new_first_axis);
-    all_op.push_back(op_F);
-}
-
-void GroptParams::add_SAFE2_vec(int N_vec, double *stim_thresh_vec,
-                      double *tau1, double *tau2, double *tau3, 
-                      double *a1, double *a2, double *a3,
-                      double *stim_limit, double *g_scale,
-                      int new_first_axis, bool demo_params, 
-                      double weight_mod)
-{
-    Op_SAFE2* op_F = new Op_SAFE2(*this, N_vec, stim_thresh_vec, weight_mod);
+    Op_SAFE* op_F = new Op_SAFE(*this, N_vec, stim_thresh_vec, weight_mod);
     if (demo_params) {
         op_F->safe_params.set_demo_params();
     } else {

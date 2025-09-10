@@ -186,7 +186,6 @@ cdef class GroptParams:
         """
         self.c_gparams.add_smax(smax, rot_variant, weight_mod)
 
-   
     def add_moment(self, 
                    order: int = 0, 
                    target: float = 0.0, 
@@ -302,71 +301,7 @@ cdef class GroptParams:
                                     _unused, _unused, _unused, _unused, _unused, _unused,
                                     _unused, _unused,
                                      new_first_axis, demo_params, weight_mod)
-
-    def add_SAFE2(self, 
-                 stim_thresh: float = 1.0,
-                 new_first_axis: int = 0, 
-                 demo_params: bool = True, 
-                 safe_params: dict = None,
-                 weight_mod: float = 1.0):
-        """
-        Adds a SAFE constraint to the optimization problem.
-
-        Parameters
-        ----------
-        stim_thresh : float
-            The stimulus threshold for the SAFE constraint.
-            Defaults to 1.0.
-        new_first_axis : int
-            Swaps the first axis of the SAFE parameters used for the constraint. 
-            This is useful for a single-axis optimization, where you want to test
-            the SAFE parameters for a different axis than the first.
-            Defaults to 0.
-        demo_params : bool
-            Whether to use demo parameters for the SAFE constraint.
-            NOTE: If `safe_params` is not None, this parameter is ignored.
-            Defaults to True.
-        safe_params : dict, optional
-            A dictionary of SAFE parameters. See `gropt.readasc`
-        weight_mod : float, optional
-            A weighting factor for this specific constraint in the optimization
-            problem. Defaults to 1.0.
-        """
-        if safe_params is None and not demo_params:
-            raise ValueError("If safe_params is None, demo_params must be True.")
-        
-        cdef double[::1] tau1_view
-        cdef double[::1] tau2_view
-        cdef double[::1] tau3_view
-        cdef double[::1] a1_view
-        cdef double[::1] a2_view
-        cdef double[::1] a3_view
-        cdef double[::1] stim_limit_view
-        cdef double[::1] g_scale_view
-
-        cdef double *_unused = NULL
-
-        if safe_params is not None:
-            tau1_view = array_prep(safe_params['tau1'], np.float64)
-            tau2_view = array_prep(safe_params['tau2'], np.float64)
-            tau3_view = array_prep(safe_params['tau3'], np.float64)
-            a1_view = array_prep(safe_params['a1'], np.float64)
-            a2_view = array_prep(safe_params['a2'], np.float64)
-            a3_view = array_prep(safe_params['a3'], np.float64)
-            stim_limit_view = array_prep(safe_params['stim_limit'], np.float64)
-            g_scale_view = array_prep(safe_params['g_scale'], np.float64)
-
-            self.c_gparams.add_SAFE2(stim_thresh,
-                                    &tau1_view[0], &tau2_view[0], &tau3_view[0],
-                                    &a1_view[0], &a2_view[0], &a3_view[0],
-                                    &stim_limit_view[0], &g_scale_view[0],
-                                    new_first_axis, False, weight_mod)
-        else:
-            self.c_gparams.add_SAFE2(stim_thresh,
-                                    _unused, _unused, _unused, _unused, _unused, _unused,
-                                    _unused, _unused,
-                                     new_first_axis, demo_params, weight_mod)
-
+    
     def add_SAFE_vec(self, 
                      stim_thresh_vec: np.ndarray,
                      new_first_axis: int = 0, 
@@ -434,74 +369,6 @@ cdef class GroptParams:
                                     _unused, _unused, _unused, _unused, _unused, _unused,
                                     _unused, _unused,
                                      new_first_axis, demo_params, weight_mod)
-    
-    def add_SAFE2_vec(self, 
-                     stim_thresh_vec: np.ndarray,
-                     new_first_axis: int = 0, 
-                     demo_params: bool = True, 
-                     safe_params: dict = None,
-                     weight_mod: float = 1.0):
-        """
-        Adds a SAFE constraint to the optimization problem with a vector stimulation limit.
-
-
-        Parameters
-        ----------
-        stim_thresh : float
-            The stimulus threshold for the SAFE constraint.
-            Defaults to 1.0.
-        new_first_axis : int
-            Swaps the first axis of the SAFE parameters used for the constraint. 
-            This is useful for a single-axis optimization, where you want to test
-            the SAFE parameters for a different axis than the first.
-            Defaults to 0.
-        demo_params : bool
-            Whether to use demo parameters for the SAFE constraint.
-            NOTE: If `safe_params` is not None, this parameter is ignored.
-            Defaults to True.
-        safe_params : dict, optional
-            A dictionary of SAFE parameters. See `gropt.readasc`
-        weight_mod : float, optional
-            A weighting factor for this specific constraint in the optimization
-            problem. Defaults to 1.0.
-        """
-        if safe_params is None and not demo_params:
-            raise ValueError("If safe_params is None, demo_params must be True.")
-        
-        cdef double[::1] stim_view = array_prep(stim_thresh_vec, np.float64)
-        cdef int N_vec = stim_thresh_vec.size
-
-        cdef double[::1] tau1_view
-        cdef double[::1] tau2_view
-        cdef double[::1] tau3_view
-        cdef double[::1] a1_view
-        cdef double[::1] a2_view
-        cdef double[::1] a3_view
-        cdef double[::1] stim_limit_view
-        cdef double[::1] g_scale_view
-
-        cdef double *_unused = NULL
-
-        if safe_params is not None:
-            tau1_view = array_prep(safe_params['tau1'], np.float64)
-            tau2_view = array_prep(safe_params['tau2'], np.float64)
-            tau3_view = array_prep(safe_params['tau3'], np.float64)
-            a1_view = array_prep(safe_params['a1'], np.float64)
-            a2_view = array_prep(safe_params['a2'], np.float64)
-            a3_view = array_prep(safe_params['a3'], np.float64)
-            stim_limit_view = array_prep(safe_params['stim_limit'], np.float64)
-            g_scale_view = array_prep(safe_params['g_scale'], np.float64)
-
-            self.c_gparams.add_SAFE2_vec(N_vec, &stim_view[0],
-                                    &tau1_view[0], &tau2_view[0], &tau3_view[0],
-                                    &a1_view[0], &a2_view[0], &a3_view[0],
-                                    &stim_limit_view[0], &g_scale_view[0],
-                                    new_first_axis, False, weight_mod)
-        else:
-            self.c_gparams.add_SAFE2_vec(N_vec, &stim_view[0],
-                                    _unused, _unused, _unused, _unused, _unused, _unused,
-                                    _unused, _unused,
-                                     new_first_axis, demo_params, weight_mod)
 
 
     def add_bvalue(self, 
@@ -510,7 +377,7 @@ cdef class GroptParams:
                    start_idx0: int = -1, 
                    stop_idx0: int = -1, 
                    weight_mod: float = 1.0,
-                   mode: int = 1,
+                   mode: int | str = 2,
                    max_scale: float = 1.01):
         """
         Adds a b-value constraint to the optimization problem.
@@ -533,14 +400,28 @@ cdef class GroptParams:
         weight_mod : float, optional
             A weighting factor for this specific constraint in the optimization problem. 
             Defaults to 1.0.
-        mode : int, optional
+        mode : int or string, optional
             The mode for the b-value constraint. 
-            1 = set b-value to target (default)
-            2 = set minimum b-value to target
+            'setval' or 1 = set b-value to target
+            'minval' or 2 = set minimum b-value (default)
+            'minval_max' or 3 = set minimum b-value, but also try to increase each iteration by `max_scale`
         max_scale : float, optional
             How much to scale the proximal bvalue when mode=3, maximizing "constraint"
             Defaults to 1.01 .
         """
+        if isinstance(mode, str):
+            if mode == 'setval':
+                mode = 1
+            elif mode == 'minval':
+                mode = 2
+            elif mode == 'minval_max':
+                mode = 3
+            else:
+                raise ValueError("Invalid mode string. Must be 'setval', 'minval', or 'minval_max'.")
+        
+        if mode not in [1, 2, 3]:
+            raise ValueError("Invalid mode integer. Must be 1, 2, or 3.")
+
         self.c_gparams.add_bvalue(target, tol, start_idx0, stop_idx0, weight_mod, mode, max_scale)
 
     def add_TV(self, 
@@ -910,64 +791,6 @@ def get_SAFE(G: np.ndarray,
                        &out, out_size)
     else:
         c_gropt.get_SAFE(N, Naxis, dt, &G_view[0], true_safe, new_first_axis, demo_params,
-                        _unused, _unused, _unused, 
-                        _unused, _unused, _unused,
-                        _unused, _unused,
-                        &out, out_size)
-
-    
-    return np.asarray(<cnp.float64_t[:out_size]> out)
-
-def get_SAFE2(G: np.ndarray, 
-             dt: float, 
-             true_safe: bool = True, 
-             new_first_axis: int = 0, 
-             demo_params: bool = True, 
-             safe_params: dict = None) -> np.ndarray:
-
-    if safe_params is None and not demo_params:
-        raise ValueError("If safe_params is None, demo_params must be True.")
-    
-    cdef double[::1] G_view = array_prep(G, np.float64)
-
-    if G.ndim == 1:
-        N = G.size
-        Naxis = 1
-    else:
-        N = G.shape[1]
-        Naxis = G.shape[0]
-
-    cdef double *out
-    cdef int out_size
-
-    cdef double[::1] tau1_view
-    cdef double[::1] tau2_view
-    cdef double[::1] tau3_view
-    cdef double[::1] a1_view
-    cdef double[::1] a2_view
-    cdef double[::1] a3_view
-    cdef double[::1] stim_limit_view
-    cdef double[::1] g_scale_view
-
-    cdef double *_unused = NULL
-
-    if safe_params is not None:
-        tau1_view = array_prep(safe_params['tau1'], np.float64)
-        tau2_view = array_prep(safe_params['tau2'], np.float64)
-        tau3_view = array_prep(safe_params['tau3'], np.float64)
-        a1_view = array_prep(safe_params['a1'], np.float64)
-        a2_view = array_prep(safe_params['a2'], np.float64)
-        a3_view = array_prep(safe_params['a3'], np.float64)
-        stim_limit_view = array_prep(safe_params['stim_limit'], np.float64)
-        g_scale_view = array_prep(safe_params['g_scale'], np.float64)
-
-        c_gropt.get_SAFE2(N, Naxis, dt, &G_view[0], true_safe, new_first_axis, False,
-                       &tau1_view[0], &tau2_view[0], &tau3_view[0],
-                       &a1_view[0], &a2_view[0], &a3_view[0],
-                       &stim_limit_view[0], &g_scale_view[0],
-                       &out, out_size)
-    else:
-        c_gropt.get_SAFE2(N, Naxis, dt, &G_view[0], true_safe, new_first_axis, demo_params,
                         _unused, _unused, _unused, 
                         _unused, _unused, _unused,
                         _unused, _unused,

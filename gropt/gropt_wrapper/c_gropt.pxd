@@ -30,26 +30,14 @@ cdef extern from "gropt_params.hpp" namespace "Gropt":
         void add_moment(double order, double target, 
                         double tol0, string units, int moment_axis, 
                         int start_idx0, int stop_idx0, int ref_idx0, double weight_mod)
-        
+
         void add_SAFE(double stim_thresh,
                       double *tau1, double *tau2, double *tau3, 
                       double *a1, double *a2, double *a3,
                       double *stim_limit, double *g_scale,
                       int new_first_axis, bool demo_params, double weight_mod)
 
-        void add_SAFE2(double stim_thresh,
-                      double *tau1, double *tau2, double *tau3, 
-                      double *a1, double *a2, double *a3,
-                      double *stim_limit, double *g_scale,
-                      int new_first_axis, bool demo_params, double weight_mod)
-
         void add_SAFE_vec(int N_vec, double *stim_thresh_vec,
-                      double *tau1, double *tau2, double *tau3, 
-                      double *a1, double *a2, double *a3,
-                      double *stim_limit, double *g_scale,
-                      int new_first_axis, bool demo_params, double weight_mod)
-
-        void add_SAFE2_vec(int N_vec, double *stim_thresh_vec,
                       double *tau1, double *tau2, double *tau3, 
                       double *a1, double *a2, double *a3,
                       double *stim_limit, double *g_scale,
@@ -93,14 +81,8 @@ cdef extern from "solver_groptsdmm.hpp" namespace "Gropt":
 cdef extern from "gropt_utils.hpp" namespace "Gropt":
     
     void set_verbose(int level)
-    void get_SAFE(int N, int Naxis, double dt, double *G_in, 
-                  bool true_safe, int new_first_axis, bool demo_params,
-                  double *tau1, double *tau2, double *tau3,
-                  double *a1, double *a2, double *a3,
-                  double *stim_limit, double *g_scale,
-                  double **out, int &out_size)
 
-    void get_SAFE2(int N, int Naxis, double dt, double *G_in, 
+    void get_SAFE(int N, int Naxis, double dt, double *G_in, 
                   bool true_safe, int new_first_axis, bool demo_params,
                   double *tau1, double *tau2, double *tau3,
                   double *a1, double *a2, double *a3,

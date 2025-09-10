@@ -587,7 +587,7 @@ packages:
 - pypi: .
   name: gropt
   version: 0.1.0
-  sha256: c68e16f9014ef32be000556ccb51350e342acd2c60fe2a0fa20a12616d76bae1
+  sha256: 620be6fede4c1784e52df89b2fe264d5f0b2a68dd3ca061e2e2d67997a6e2c9b
   requires_dist:
   - numpy
   - matplotlib
