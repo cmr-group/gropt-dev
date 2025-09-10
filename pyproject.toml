@@ -1,6 +1,6 @@
 [project]
 name = "gropt"
-version = "0.1.0"
+version = "2.0.0.dev1"
 dependencies = [
   "numpy",
   "matplotlib",
@@ -9,7 +9,7 @@ dependencies = [
 
 
 [project.optional-dependencies]
-dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen", "scipy"]
+dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen", "scipy", "twine"]
 docs = ["mkdocs", "mkdocs-material", "mkdocs-jupyter", "mkdocstrings-python", "mkdocs-awesome-nav", "pybind11-stubgen"]
 
 [build-system]
