@@ -97,15 +97,23 @@ void Op_Slew::check(Eigen::VectorXd &X)
 
     if (rot_variant) {
         for (int i = 0; i < X.size(); i++) {
+
+            bool should_check = isnan(gparams->set_vals(i)); 
+            if (i > 0) {should_check = should_check || isnan(gparams->set_vals(i-1)); }
+            if (i < X.size()-1) {should_check = should_check || isnan(gparams->set_vals(i+1)); }
             double lower_bound = (target-tol0);
             double upper_bound = (target+tol0);
 
-            if ((X(i) < lower_bound) || (X(i) > upper_bound) && isnan(gparams->set_vals(i))) {
+            if (((X(i) < lower_bound) || (X(i) > upper_bound)) && should_check) {
                 is_feas = 0;
             }
         }   
     } else {
         for (int i = 0; i < N-1; i++) {
+            bool should_check = isnan(gparams->set_vals(i)); 
+            if (i > 0) {should_check = should_check || isnan(gparams->set_vals(i-1)); }
+            if (i < N-1) {should_check = should_check || isnan(gparams->set_vals(i+1)); }
+
             double upper_bound = (target+tol0);
             
             double val = 0.0;
@@ -114,7 +122,7 @@ void Op_Slew::check(Eigen::VectorXd &X)
             }
             val = sqrt(val);
 
-            if ((val > upper_bound) && isnan(gparams->set_vals(i))) {
+            if ((val > upper_bound) && should_check) {
                 is_feas = 0;
             }
         }
