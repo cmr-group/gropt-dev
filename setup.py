@@ -1,7 +1,7 @@
 import os
 
 import numpy as np
-from setuptools import Extension, setup
+from setuptools import Extension, setup, find_packages
 from setuptools.command.build_ext import build_ext
 
 
@@ -64,8 +64,12 @@ ext = Extension("gropt.gropt_wrapper",
                 undef_macros=['NDEBUG'], # This will *re-enable* the Eigen assertions
             )
 
+print('find_packages():', find_packages())
+
 setup(
-    packages=['gropt', 'gropt.gropt_wrapper'],
+    packages=['gropt',
+              'gropt.gropt_wrapper',
+              *find_packages()],
     ext_modules=[ext],
     cmdclass={'build_ext': CustomBuildExt},
 )
