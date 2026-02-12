@@ -36,6 +36,8 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
     double pAp;
 
     x = x0;
+    Eigen::VectorXd x_out = x;
+    double r_min = std::numeric_limits<double>::max();
 
     b.setZero();
     get_rhs(x0, b);
@@ -67,6 +69,13 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
         gamma_new = r.dot(r);
         beta = gamma_new / gamma;
         gamma = gamma_new;
+        
+        // if (gamma < r_min) {
+        //     r_min = gamma;
+        //     x_out = x;
+        // } else if (gamma > r_min) {
+        //     break;
+        // }
 
         p = beta * p + r;
 
