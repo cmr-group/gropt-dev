@@ -4,11 +4,11 @@ version = "2.0.0.dev2"
 dependencies = [
   "numpy",
   "matplotlib",
-  "pyqt6",
 ]
 
 
 [project.optional-dependencies]
+gui = ["pyqt6"]
 dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen", "scipy", "twine", "seaborn"]
 docs = ["mkdocs", "mkdocs-material", "mkdocs-jupyter", "mkdocstrings-python", "mkdocs-awesome-nav", "pybind11-stubgen"]
 
