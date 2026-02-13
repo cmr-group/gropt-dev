@@ -1,7 +1,6 @@
 from . import gropt_wrapper
-import matplotlib.pyplot as plt
 
-def demo(plot=True):
+def demo(plot=False):
     print('Starting demo...', flush=True)
     
     gparams = gropt_wrapper.GroptParams()
@@ -27,6 +26,7 @@ def demo(plot=True):
     print(f'{out.shape = }', flush=True)
 
     if plot:
+        import matplotlib.pyplot as plt
         plt.figure()
         plt.plot(out)
         plt.show()
