@@ -1,27 +1,25 @@
-# gropt-dev
+<div align="center">
+
+<img src="docs/img/gropt_logo.png" alt="GrOpt" width="200">
+
+**Gradient waveform optimization for MRI pulse sequence design**
 
 [![Build](https://github.com/cmr-group/gropt-dev/actions/workflows/build-and-publish.yml/badge.svg)](https://github.com/cmr-group/gropt-dev/actions/workflows/build-and-publish.yml)
+[![PyPI](https://img.shields.io/pypi/v/gropt)](https://pypi.org/project/gropt/)
+[![Python](https://img.shields.io/pypi/pyversions/gropt)](https://pypi.org/project/gropt/)
 
-Staging for the next major update to GrOpt.
+</div>
+
+---
 
 ## Installation
-Clone the respository:
 
-`git clone https://github.com/cmr-group/gropt-dev.git`
-
-Then install with (modify path to the folder you just cloned):
-
-`pip install path/to/gropt-dev/`
-
-or if you already have it installed:
-
-`pip install --upgrade path/to/gropt-dev/`
-
-## Getting Started
-
-A simple test of operation can be performed in a python console with:
+```bash
+pip install --pre gropt
 ```
-import gropt_dev as gropt
-gropt.demo()
-```
-For more, see the jupyter notebooks in `./examples/`
+
+> **Note:** GrOpt 2.0 is currently in pre-release. The `--pre` flag is required to install it for now.
+
+## Documentation
+
+See the [documentation site](https://cmr-group.github.io/gropt-dev/) and the [`examples/`](./examples/) folder to get started.
