@@ -1,10 +1,13 @@
 [project]
 name = "gropt"
 dynamic = ["version"]
+dependencies = [
+    "numpy",
+]
 
 [project.optional-dependencies]
 gui = ["pyqt6", "matplotlib"]
-dev = ["numpy", "jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen", "scipy", "twine", "seaborn"]
+dev = ["jupyterlab", "setuptools>=18.0", "cython>=0.18", "wheel", "pybind11-stubgen", "scipy", "twine", "seaborn"]
 docs = ["mkdocs", "mkdocs-material", "mkdocs-jupyter", "mkdocstrings-python", "mkdocs-awesome-nav", "pybind11-stubgen"]
 
 [build-system]
