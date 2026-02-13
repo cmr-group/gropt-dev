@@ -1,4 +1,6 @@
 [data-md-color-primary="custom"] {
-  --md-primary-fg-color: #8B1A1A;
+  --md-primary-fg-color: #8C1515;
   --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #ffa726;
+  --md-typeset-a-color: #ffa726;
 }
