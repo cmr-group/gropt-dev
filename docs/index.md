@@ -1,5 +1,3 @@
-# GrOpt
-
 GrOpt is a toolbox for MRI Gradient Optimization (GrOpT). Rather than analytical combinations of trapezoids, the software uses optimization methods to generate arbitrary waveforms that are (hopefully) the most time optimal solution.
 
 The main workhorse of the package are the optimization routines written in C++, which for final applications are designed to be compiled into a pulse sequence as needed. 
@@ -10,7 +8,8 @@ The main workhorse of the package are the optimization routines written in C++, 
 pip install --pre gropt
 ```
 
-> **Note:** GrOpt 2.0 is currently in pre-release. The `--pre` flag is required for now — an official release is coming shortly.
+!!! note
+    GrOpt 2.0 is currently in pre-release. The `--pre` flag is required for now — an official release is coming shortly.
 
 ## Quick Start
 
@@ -45,4 +44,5 @@ Which produces the waveform:
 
 ## Next Steps
 
-
+- [Python API Reference](python/gropt_py.md) — full documentation of the Python wrapper
+- [Examples](examples/) — Jupyter notebooks demonstrating common use cases

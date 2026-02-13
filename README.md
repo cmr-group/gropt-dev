@@ -1,6 +1,6 @@
 <div align="center">
 
-# GrOpt
+<img src="docs/img/gropt_logo.png" alt="GrOpt" width="200">
 
 **Gradient waveform optimization for MRI pulse sequence design**
 
@@ -18,8 +18,8 @@
 pip install --pre gropt
 ```
 
-> **Note:** GrOpt is currently in pre-release. The `--pre` flag is required to install it.
+> **Note:** GrOpt 2.0 is currently in pre-release. The `--pre` flag is required to install it for now.
 
 ## Documentation
 
-See the [documentation site](https://cmr-group.github.io/gropt-dev/) and the [`examples/`](./examples/) folder.
+See the [documentation site](https://cmr-group.github.io/gropt-dev/) and the [`examples/`](./examples/) folder to get started.
