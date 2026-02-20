@@ -8,17 +8,34 @@
 
 namespace Gropt {
 
-void SolverGroptSDMM::solve(GroptParams &_gparams)  
+SolveResult SolverGroptSDMM::solve(GroptParams &_gparams)
 {
     spdlog::trace("Starting SolverGroptSDMM::solve");
     gparams = &_gparams;
-    gparams->solver_method = GROPT_SDMM;
     if (gparams->op_prep_status != gparams->N) {
         spdlog::info("Operators do not seem prepared, calling prepare()");
         gparams->prepare();
     }
 
-    Eigen::VectorXd X = gparams->X0;
+    // Initialize per-operator SDMM workspaces
+    ws.resize(gparams->all_op.size());
+    for (int i = 0; i < gparams->all_op.size(); i++) {
+        Operator *op = gparams->all_op[i].get();
+
+        // Set initial weight based on operator type
+        ws[i].weight = 1.0;
+        // Slew, moment, bvalue, SAFE, TV operators start with higher weight
+        if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" ||
+            op->name == "SAFE" || op->name == "TotalVariation") {
+            ws[i].weight = 1e4;
+        }
+        ws[i].weight *= op->weight_mod;
+
+        ws[i].init(op->Ax_size);
+        ws[i].prep(*op, gparams->pdata.X0);
+    }
+
+    Eigen::VectorXd X = gparams->pdata.X0;
     Eigen::VectorXd Xhat;
 
     Px.setZero(X.size());
@@ -32,20 +49,19 @@ void SolverGroptSDMM::solve(GroptParams &_gparams)
         ils_solver = new ILS_BiCGstabl(*gparams, ils_tol, ils_sigma, ils_max_iter, ils_tik_lam);
     } else {
         spdlog::error("SolverGroptSDMM::solve()  Unknown Indirect Linear Solver method");
-        return;
+        return SolveResult{};
     }
+    ils_solver->set_workspace(&ws);
 
     total_Ax_size = 0;
     for (int i = 0; i < gparams->all_op.size(); i++) {
         total_Ax_size += gparams->all_op[i]->Ax_size;
     }
     r_primal.setZero(total_Ax_size);
-    
+
     int total_feval = 0;
-    int iiter;
     for (iiter = 0; iiter < max_iter; ++iiter) {
         spdlog::trace("Starting GroptSDMM iteration {:d} SolverGroptSDMM::solve", iiter);
-        gparams->iiter = iiter;
 
         if (iiter > 0) {
             Xhat = ils_solver->solve(X);
@@ -57,9 +73,8 @@ void SolverGroptSDMM::solve(GroptParams &_gparams)
             spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         };
-        // Xhat.array() *= gparams->fixer.array();
- 
-        // Update all constraints (do prox operations)        
+
+        // Update all constraints (do prox operations)
         update(Xhat);
 
         X = gamma_x * Xhat + (1 - gamma_x) * X;
@@ -67,9 +82,9 @@ void SolverGroptSDMM::solve(GroptParams &_gparams)
         get_residuals(X);
 
         if (extra_debug) {hist_X.push_back(X);}
-        
+
         if ((logger(X) > 0) && (iiter > min_iter)) {break;}
-        
+
         total_feval += ils_solver->hist_n_iter.back();
         if (total_feval > max_feval) {
             spdlog::info("Maximum function evaluations reached");
@@ -78,12 +93,16 @@ void SolverGroptSDMM::solve(GroptParams &_gparams)
 
     }
 
-    gparams->final_X = X;
-    final_log(X);
+    SolveResult result;
+    result.X = X;
+    result.n_iter = iiter;
+    final_log(X, result);
 
-    delete ils_solver; 
-    spdlog::trace("Finished Starting SolverGroptSDMM::solve");
+    delete ils_solver;
+    spdlog::trace("Finished SolverGroptSDMM::solve");
 
+    last_result = result;
+    return result;
 }
 
 void SolverGroptSDMM::update(Eigen::VectorXd &X)
@@ -91,28 +110,26 @@ void SolverGroptSDMM::update(Eigen::VectorXd &X)
     spdlog::trace("Starting SolverGroptSDMM::update");
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
-        Operator *op = gparams->all_op[i];
-        
+        Operator *op = gparams->all_op[i].get();
+        SDMMWorkspace &w = ws[i];
+
         // s = Ax
-        op->forward_op(X, op->s1);
+        op->forward_op(X, w.s1);
 
         // z = prox(as + 1-a)z0 + p^-1y0)
-        op->z1 = op->gamma * op->s1 + (1 - op->gamma) * op->z0 + op->y0 / op->weight;
-        op->prox(op->z1);
+        w.z1 = w.gamma * w.s1 + (1 - w.gamma) * w.z0 + w.y0 / w.weight;
+        op->prox(w.z1);
 
         // y = y0 + p*(as + (1-a)z0 - z1)
-        op->y1 = op->y0 + op->weight * (op->gamma * op->s1 + (1 - op->gamma) * op->z0 - op->z1);
+        w.y1 = w.y0 + w.weight * (w.gamma * w.s1 + (1 - w.gamma) * w.z0 - w.z1);
 
-        if ((op->do_rw) && (gparams->iiter > rw_interval) && (gparams->iiter%rw_interval == 0)) {
-            op->reweight_parsdmm(rw_eps, rw_e_corr, rw_scalelim);
+        if ((w.do_rw) && (iiter > rw_interval) && (iiter%rw_interval == 0)) {
+            w.reweight(rw_eps, rw_e_corr, rw_scalelim);
         }
 
-        // op->dyk = op->yk1 - op->yk0;
-        // op->dzk = op->zk1 - op->zk0;
-
-        op->y0 = op->y1;
-        op->z0 = op->z1;
-    }       
+        w.y0 = w.y1;
+        w.z0 = w.z1;
+    }
 
     spdlog::trace("Finished SolverGroptSDMM::update");
 }
@@ -121,14 +138,14 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
 {
     // Update feasibility metrics
     for (int i = 0; i < gparams->all_op.size(); i++) {
-        Operator *op = gparams->all_op[i];
+        Operator *op = gparams->all_op[i].get();
         op->forward_op(X, op->Ax_temp);
         op->get_feas(op->Ax_temp);
         op->check(op->Ax_temp);
     }
 
-    
-    if (gparams->iiter > 2*grw_min_infeasible && gparams->iiter % grw_interval == 0) {
+
+    if (iiter > 2*grw_min_infeasible && iiter % grw_interval == 0) {
         double max_feas = 0.0;
         int max_index = -1;
         for (int i = 0; i < gparams->all_op.size(); i++) {
@@ -137,10 +154,10 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
                     max_feas = gparams->all_op[i]->hist_r_feas.back();
                     max_index = i;
                 }
-            } 
+            }
         }
         if (max_index >= 0) {
-            gparams->all_op[max_index]->weight *= grw_mod;
+            ws[max_index].weight *= grw_mod;
         }
     }
 
@@ -158,68 +175,12 @@ void SolverGroptSDMM::set_sdmm_params(int rw_interval, double rw_e_corr, double 
     this->grw_min_infeasible = grw_min_infeasible;
     this->grw_interval = grw_interval;
     this->grw_mod = grw_mod;
-}   
-
-/*
-void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
-{
-    double max_Ax = 0.0;
-    double max_z = 0.0;
-    double max_Aty = 0.0;
-    double max_Px = 0.0;
-    double max_q = 0.0;
-    
-    Px.setZero();
-    r_dual.setZero();
-    for (int i = 0; i < gparams->all_obj.size(); i++) {
-        Operator *op = gparams->all_obj[i];
-        op->x_temp_obj.setZero();
-        op->add_obj(X, op->x_temp_obj);
-        Px += op->x_temp_obj;
-    }
-    max_Px = Px.cwiseAbs().maxCoeff();
-    r_dual += Px;
-
-
-    int i_total = 0;
-    for (int i = 0; i < gparams->all_op.size(); i++) {
-        Operator *op = gparams->all_op[i];
-        
-        // ---  r_primal = Ax - z
-        op->forward_op(X, op->Ax_temp);
-        // op->r_primal = op->Ax_temp - op->zk1;
-        r_primal.segment(i_total, op->Ax_size) = op->Ax_temp - op->z1;
-        
-        max_Ax = std::max(op->Ax_temp.cwiseAbs().maxCoeff(), max_Ax);
-        max_z = std::max(op->z1.cwiseAbs().maxCoeff(), max_z);
-
-
-        // ---  r_dual = Px + q + A'y
-        op->transpose_op(op->y1, op->x_temp);
-        // op->r_dual = Px + op->x_temp; 
-        r_dual += op->x_temp;
-
-        max_Aty = std::max(op->x_temp.cwiseAbs().maxCoeff(), max_Aty);
-        
-        i_total += op->Ax_size;
-    }       
-
-    double max_primal = std::max({max_Ax, max_z});
-    double max_dual = std::max({max_Px, max_q, max_Aty});
-
-    double scale_numer = r_primal.cwiseAbs().maxCoeff() / max_primal;
-    double scale_denom = r_dual.cwiseAbs().maxCoeff() / max_dual;
-    double scale_factor = sqrt(scale_numer / scale_denom);
-
-    // if (gparams->iiter > 0 && gparams->iiter % 10 == 0 && (scale_factor > 5.0 || scale_factor < 0.2)) {
-    //     for (int i = 0; i < gparams->all_op.size(); i++) {
-    //         gparams->all_op[i]->weight *= scale_factor;
-    //     }
-    // }
-
-    // spdlog::debug("~~ max_Px {:.2e}  scale_factor {:.2e}", max_Px, scale_factor);
-
 }
-*/
+
+void SolverGroptSDMM::get_result_X(double **out, int &out_size)
+{
+    out_size = last_result.X.size();
+    *out = last_result.X.data();
+}
 
 } // namespace Gropt

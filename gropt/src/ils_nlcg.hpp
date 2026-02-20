@@ -1,7 +1,7 @@
 #ifndef ILS_NLCG_H
 #define ILS_NLCG_H
 
-#include <iostream> 
+#include <iostream>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -26,7 +26,6 @@ class ILS_NLCG : public IndirectLinearSolver
 
         ILS_NLCG(GroptParams &_gparams, double _sigma, int _n_iter, double _tik_lam);
 
-        // Runs conventional conjugate gradient
         Eigen::VectorXd solve(Eigen::VectorXd &x0) override;
 
 };

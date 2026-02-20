@@ -1,6 +1,8 @@
 __all__ = [
     "GroptParams",
     "SolverGroptSDMM",
+    "SolveResult",
+    "solve",
     "demo",
     "get_SAFE",
     "readasc",
@@ -8,7 +10,7 @@ __all__ = [
 ]
 
 from . import readasc
-from .gropt_wrapper import GroptParams, SolverGroptSDMM, get_SAFE, set_verbose
+from .gropt_wrapper import GroptParams, SolverGroptSDMM, SolveResult, solve, get_SAFE, set_verbose
 from .utils import demo
 
 set_verbose(mode = "warning")

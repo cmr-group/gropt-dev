@@ -4,10 +4,10 @@
 
 namespace Gropt {
 
-Op_Gradient::Op_Gradient(GroptParams &_gparams, double _gmax, bool _rot_variant, double _weight_mod)
-    : Operator(_gparams)
+Op_Gradient::Op_Gradient(const ProblemData &_pdata, double _gmax, bool _rot_variant, double _weight_mod)
+    : Operator(_pdata)
 {
-    name = "Gradient"; 
+    name = "Gradient";
     gmax = _gmax;
     rot_variant = _rot_variant;
     weight_mod = _weight_mod;
@@ -15,8 +15,8 @@ Op_Gradient::Op_Gradient(GroptParams &_gparams, double _gmax, bool _rot_variant,
 
 void Op_Gradient::init()
 {
-    spdlog::trace("Op_Gradient::init  N = {}", gparams->N);
-    
+    spdlog::trace("Op_Gradient::init  N = {}", pdata->N);
+
     target = 0;
     tol0 = gmax;
     tol = (1.0-cushion) * tol0;
@@ -24,13 +24,10 @@ void Op_Gradient::init()
     spec_norm2 = 1.0;
     spec_norm = 1.0;
 
-    Ax_size = gparams->Naxis * gparams->N;
+    Ax_size = pdata->Naxis * pdata->N;
 
     if (do_init_weights) {
-        weight = 1.0;
         obj_weight = 1.0;
-
-        weight *= weight_mod;
         obj_weight *= weight_mod;
     }
 
@@ -44,7 +41,7 @@ void Op_Gradient::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
 void Op_Gradient::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
-    out = X;    
+    out = X;
 }
 
 void Op_Gradient::prox(Eigen::VectorXd &X)
@@ -57,16 +54,16 @@ void Op_Gradient::prox(Eigen::VectorXd &X)
             double upper_bound = (target+tol);
             X(i) = X(i) < lower_bound ? lower_bound:X(i);
             X(i) = X(i) > upper_bound ? upper_bound:X(i);
-            
+
             // This is specific to the Op_Gradient operator
-            if (!isnan(gparams->set_vals(i))) {
-                X(i) = gparams->set_vals(i);
+            if (!isnan(pdata->set_vals(i))) {
+                X(i) = pdata->set_vals(i);
             }
-        }   
+        }
     } else {
         for (int i = 0; i < N; i++) {
             double upper_bound = (target+tol);
-            
+
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
                 val += X(i_ax*N+i)*X(i_ax*N+i);
@@ -81,8 +78,8 @@ void Op_Gradient::prox(Eigen::VectorXd &X)
         }
 
         for (int i = 0; i < X.size(); i++) {
-            if (!isnan(gparams->set_vals(i))) {
-                X(i) = gparams->set_vals(i);
+            if (!isnan(pdata->set_vals(i))) {
+                X(i) = pdata->set_vals(i);
             }
         }
     }
@@ -100,21 +97,21 @@ void Op_Gradient::check(Eigen::VectorXd &X)
             double lower_bound = (target-tol0);
             double upper_bound = (target+tol0);
 
-            if ((X(i) < lower_bound) || (X(i) > upper_bound) && isnan(gparams->set_vals(i))) {
+            if ((X(i) < lower_bound) || (X(i) > upper_bound) && isnan(pdata->set_vals(i))) {
                 is_feas = 0;
             }
-        }   
+        }
     } else {
         for (int i = 0; i < N; i++) {
             double upper_bound = (target+tol0);
-            
+
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
                 val += X(i_ax*N+i)*X(i_ax*N+i);
             }
             val = sqrt(val);
 
-            if ((val > upper_bound) && isnan(gparams->set_vals(i))) {
+            if ((val > upper_bound) && isnan(pdata->set_vals(i))) {
                 is_feas = 0;
             }
         }

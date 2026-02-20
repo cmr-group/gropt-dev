@@ -5,18 +5,19 @@
 namespace Gropt {
 
 ILS_CG::ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma, int _n_iter, double _tik_lam)
-    : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam), 
-    tol(_tol), 
+    : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam),
+    tol(_tol),
     min_iter(_min_iter)
 {
-    name = "CG"; 
+    name = "CG";
 
-    b.setZero(gparams->N);
-    Ax.setZero(gparams->N);
-    Ap.setZero(gparams->N);
-    r.setZero(gparams->N);
-    p.setZero(gparams->N);
-    x.setZero(gparams->N);
+    int size = gparams->N * gparams->Naxis;
+    b.setZero(size);
+    Ax.setZero(size);
+    Ap.setZero(size);
+    r.setZero(size);
+    p.setZero(size);
+    x.setZero(size);
 }
 
 Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
@@ -29,7 +30,7 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
     double tol0;
     double res;
 
-    double alpha; 
+    double alpha;
     double beta;
     double gamma;
 
@@ -69,13 +70,6 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
         gamma_new = r.dot(r);
         beta = gamma_new / gamma;
         gamma = gamma_new;
-        
-        // if (gamma < r_min) {
-        //     r_min = gamma;
-        //     x_out = x;
-        // } else if (gamma > r_min) {
-        //     break;
-        // }
 
         p = beta * p + r;
 
@@ -85,8 +79,6 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
             break;
         }
 
-        
-        
     }
 
     spdlog::debug("ILS_CG::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, r.norm(), ii);

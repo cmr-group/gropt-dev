@@ -1,14 +1,9 @@
 #ifndef OP_BVALUE_H
 #define OP_BVALUE_H
 
-/**
- * Return identity matrix, to be used for regularization most likely.abort
- * i.e. simple duty cycle minimization can be accomplished with this.
- */
-
-#include <iostream> 
+#include <iostream>
 #include <string>
-#include <math.h>  
+#include <math.h>
 #include "Eigen/Dense"
 
 #include "op_main.hpp"
@@ -23,7 +18,7 @@ enum BVALUE_MODE {
 
 
 class Op_BValue : public Operator
-{  
+{
     protected:
         // These are the user inputted values
         int start_idx0 = -1;
@@ -47,7 +42,7 @@ class Op_BValue : public Operator
         double max_scale = 1.01;
 
     public:
-        Op_BValue(GroptParams &_gparams, double _bval_target, double _bval_tol0,
+        Op_BValue(const ProblemData &_pdata, double _bval_target, double _bval_tol0,
                   int _start_idx0, int _stop_idx0, double _weight_mod, BVALUE_MODE _mode, double _max_scale);
         virtual void init();
 

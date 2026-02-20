@@ -8,7 +8,7 @@ ILS_BiCGstabl::ILS_BiCGstabl(GroptParams &_gparams, double _tol, double _sigma, 
     : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam),
     tol(_tol)
 {
-    name = "BiCGStabl"; 
+    name = "BiCGStabl";
 
     int n = gparams->N * gparams->Naxis;
     rs.resize(ell + 1);
@@ -58,8 +58,6 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
 
     int ii;
     for (ii = 0; ii < n_iter; ii++) {
-        // First row from algorithm handled above, and redundant with last line (in printed algorithm)
-        
         rho0 = -omega*rho0;
 
         for (int jj = 0; jj < ell; jj++) {
@@ -119,7 +117,7 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
         rnorm = rs[0].norm();
         if ((rnorm <= tol * rnorm0))
         {
-            spdlog::trace("ILS_CG::solve  break for (res <= tol)  ii = {:d}", ii);
+            spdlog::trace("ILS_BiCGstabl::solve  break for (res <= tol)  ii = {:d}", ii);
             break;
         }
     }

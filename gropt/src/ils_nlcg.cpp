@@ -7,11 +7,12 @@ namespace Gropt {
 ILS_NLCG::ILS_NLCG(GroptParams &_gparams, double _sigma, int _n_iter, double _tik_lam)
     : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam)
 {
-    name = "NLCG"; 
+    name = "NLCG";
 
-    b.setZero(gparams->N);
-    Ax.setZero(gparams->N);
-    x0.setZero(gparams->N);
+    int size = gparams->N * gparams->Naxis;
+    b.setZero(size);
+    Ax.setZero(size);
+    x0.setZero(size);
 }
 
 
@@ -50,7 +51,7 @@ Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x_in)
     double alpha;
     double rnorm_xad;
     double beta;
-    
+
     int ii;
     for (ii = 0; ii < n_iter; ii++) {
         alpha = alpha0;
@@ -59,7 +60,7 @@ Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x_in)
         get_lhs(xad, Ax);
         r = (Ax - b);
         rnorm_xad = r.squaredNorm();
-        
+
         while (rnorm_xad > rnorm_x0 + eta*alpha*g0.dot(d0)) {
             alpha *= theta;
             xad = x0 + alpha*d0;
@@ -69,7 +70,7 @@ Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x_in)
             if (alpha < 1e-32) {
                 spdlog::warn("ILS_NLCG::solve  alpha < 1e-32, stopping line search");
                 break;
-            } 
+            }
         }
 
         x1 = xad;
@@ -78,15 +79,10 @@ Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x_in)
 
         y = g1 - g0;
 
-        // ymid = y - 2*d0*y.squaredNorm()/d0.dot(y);
-        // beta = 1.0/(d0.dot(y)) * ymid.dot(g1);
-
         beta = g1.dot(y) / g0.squaredNorm();
         if (beta < 0.0) {
             beta = 0.0;
         }
-
-        // beta = g1.squaredNorm() / g0.squaredNorm();
 
         d1 = -g1 + beta*d0;
 

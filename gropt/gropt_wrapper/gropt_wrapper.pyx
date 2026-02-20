@@ -1,6 +1,7 @@
 # distutils: language = c++
 import time
 
+from libc.stdlib cimport free
 from libcpp.string cimport string
 from libcpp.vector cimport vector
 
@@ -39,19 +40,22 @@ def array_prep(A, dtype, linear=True):
     """
     if not A.flags['C_CONTIGUOUS']:
         A = np.ascontiguousarray(A)
-    
+
     A = A.astype(dtype, order='C', copy=False)
-    
+
     if linear:
         A = A.ravel()
 
-    return A 
+    return A
 
 cdef class GroptParams:
-    cdef c_gropt.GroptParams c_gparams
+    cdef c_gropt.GroptParams *c_gparams
 
-    def __init__(self):
-        self.c_gparams = c_gropt.GroptParams() 
+    def __cinit__(self):
+        self.c_gparams = new c_gropt.GroptParams()
+
+    def __dealloc__(self):
+        del self.c_gparams
 
 
     def vec_init_simple(self,
@@ -100,12 +104,12 @@ cdef class GroptParams:
         T_readout : float, optional
             Time to TE of the readout in seconds.
         """
-        
+
         self.c_gparams.diff_init(dt, TE, T_90, T_180, T_readout)
 
 
-    def setvec_X0(self, 
-                  X0: np.ndarray,  
+    def setvec_X0(self,
+                  X0: np.ndarray,
                   set_others: bool = True):
         """
         Set the initial waveform guess.
@@ -143,7 +147,7 @@ cdef class GroptParams:
         self.c_gparams.set_ils_solver(ils_method.encode('utf-8'))
 
 
-    def add_gmax(self, 
+    def add_gmax(self,
                  gmax: float = 0.03,
                  rot_variant: bool = True,
                  weight_mod: float = 1.0):
@@ -165,7 +169,7 @@ cdef class GroptParams:
         self.c_gparams.add_gmax(gmax, rot_variant, weight_mod)
 
 
-    def add_smax(self, 
+    def add_smax(self,
                  smax: float = 80.0,
                  rot_variant: bool = True,
                  weight_mod: float = 1.0):
@@ -186,18 +190,18 @@ cdef class GroptParams:
         """
         self.c_gparams.add_smax(smax, rot_variant, weight_mod)
 
-    def add_moment(self, 
-                   order: int = 0, 
-                   target: float = 0.0, 
-                   tol: float = 1e-6, 
+    def add_moment(self,
+                   order: int = 0,
+                   target: float = 0.0,
+                   tol: float = 1e-6,
                    units: str = 'mT*ms/m',
-                   axis: int = 0, 
-                   start_idx: int = -1, 
-                   stop_idx: int = -1, 
+                   axis: int = 0,
+                   start_idx: int = -1,
+                   stop_idx: int = -1,
                    ref_idx: int = 0,
                    weight_mod: float = 1.0):
         """
-        
+
         Adds a moment constraint to the optimization problem.
 
         Parameters
@@ -221,15 +225,15 @@ cdef class GroptParams:
         start_idx : int, optional
             The starting index (inclusive) for the range over which the
             moment is calculated. A value of -1 indicates the beginning of the
-            axis. 
+            axis.
             Defaults to -1.
         stop_idx : int, optional
             The stopping index (exclusive) for the range over which the
             moment is calculated. A value of -1 indicates the end of the
-            axis. 
+            axis.
             Defaults to -1.
         ref_idx : int, optional
-            The reference index, (i.e. index where t=0 in moment calculations), 
+            The reference index, (i.e. index where t=0 in moment calculations),
             which often could be the time of excitation.
             Defaults to 0.
         weight_mod : float, optional
@@ -238,10 +242,10 @@ cdef class GroptParams:
         """
         self.c_gparams.add_moment(order, target, tol, units.encode('utf-8'), axis, start_idx, stop_idx, ref_idx, weight_mod)
 
-    def add_SAFE(self, 
+    def add_SAFE(self,
                  stim_thresh: float = 1.0,
-                 new_first_axis: int = 0, 
-                 demo_params: bool = True, 
+                 new_first_axis: int = 0,
+                 demo_params: bool = True,
                  safe_params: dict = None,
                  weight_mod: float = 1.0):
         """
@@ -253,7 +257,7 @@ cdef class GroptParams:
             The stimulus threshold for the SAFE constraint.
             Defaults to 1.0.
         new_first_axis : int
-            Swaps the first axis of the SAFE parameters used for the constraint. 
+            Swaps the first axis of the SAFE parameters used for the constraint.
             This is useful for a single-axis optimization, where you want to test
             the SAFE parameters for a different axis than the first.
             Defaults to 0.
@@ -269,7 +273,7 @@ cdef class GroptParams:
         """
         if safe_params is None and not demo_params:
             raise ValueError("If safe_params is None, demo_params must be True.")
-        
+
         cdef double[::1] tau1_view
         cdef double[::1] tau2_view
         cdef double[::1] tau3_view
@@ -301,11 +305,11 @@ cdef class GroptParams:
                                     _unused, _unused, _unused, _unused, _unused, _unused,
                                     _unused, _unused,
                                      new_first_axis, demo_params, weight_mod)
-    
-    def add_SAFE_vec(self, 
+
+    def add_SAFE_vec(self,
                      stim_thresh_vec: np.ndarray,
-                     new_first_axis: int = 0, 
-                     demo_params: bool = True, 
+                     new_first_axis: int = 0,
+                     demo_params: bool = True,
                      safe_params: dict = None,
                      weight_mod: float = 1.0):
         """
@@ -318,7 +322,7 @@ cdef class GroptParams:
             The stimulus threshold for the SAFE constraint.
             Defaults to 1.0.
         new_first_axis : int
-            Swaps the first axis of the SAFE parameters used for the constraint. 
+            Swaps the first axis of the SAFE parameters used for the constraint.
             This is useful for a single-axis optimization, where you want to test
             the SAFE parameters for a different axis than the first.
             Defaults to 0.
@@ -334,7 +338,7 @@ cdef class GroptParams:
         """
         if safe_params is None and not demo_params:
             raise ValueError("If safe_params is None, demo_params must be True.")
-        
+
         cdef double[::1] stim_view = array_prep(stim_thresh_vec, np.float64)
         cdef int N_vec = stim_thresh_vec.size
 
@@ -371,37 +375,37 @@ cdef class GroptParams:
                                      new_first_axis, demo_params, weight_mod)
 
 
-    def add_bvalue(self, 
-                   target: float = 100.0, 
+    def add_bvalue(self,
+                   target: float = 100.0,
                    tol: float = 1.0,
-                   start_idx0: int = -1, 
-                   stop_idx0: int = -1, 
+                   start_idx0: int = -1,
+                   stop_idx0: int = -1,
                    weight_mod: float = 1.0,
                    mode: int | str = 2,
                    max_scale: float = 1.01):
         """
         Adds a b-value constraint to the optimization problem.
-        
+
         Parameters
         ----------
         target : float, optional
-            The target b-value for the constraint. 
+            The target b-value for the constraint.
             Defaults to 100.0.
         tol : float, optional
-            The tolerance for the b-value constraint. 
+            The tolerance for the b-value constraint.
             Keeping this value a little larger (>0.1) might make the optimization faster.
             Defaults to 1.0.
         start_idx0 : int, optional
-            The starting index (inclusive) for the range over which the constraint is applied. 
+            The starting index (inclusive) for the range over which the constraint is applied.
             Defaults to -1 ( = full waveform).
         stop_idx0 : int, optional
-            The stopping index (exclusive) for the range over which the constraint is applied. 
+            The stopping index (exclusive) for the range over which the constraint is applied.
             Defaults to -1 ( = full waveform).
         weight_mod : float, optional
-            A weighting factor for this specific constraint in the optimization problem. 
+            A weighting factor for this specific constraint in the optimization problem.
             Defaults to 1.0.
         mode : int or string, optional
-            The mode for the b-value constraint. 
+            The mode for the b-value constraint.
             'setval' or 1 = set b-value to target
             'minval' or 2 = set minimum b-value (default)
             'minval_max' or 3 = set minimum b-value, but also try to increase each iteration by `max_scale`
@@ -418,14 +422,14 @@ cdef class GroptParams:
                 mode = 3
             else:
                 raise ValueError("Invalid mode string. Must be 'setval', 'minval', or 'minval_max'.")
-        
+
         if mode not in [1, 2, 3]:
             raise ValueError("Invalid mode integer. Must be 1, 2, or 3.")
 
         self.c_gparams.add_bvalue(target, tol, start_idx0, stop_idx0, weight_mod, mode, max_scale)
 
-    def add_TV(self, 
-               tv_lam: float = 0.0, 
+    def add_TV(self,
+               tv_lam: float = 0.0,
                weight_mod: float = 1.0):
         """
         Add total variation regularization parameters.
@@ -438,12 +442,12 @@ cdef class GroptParams:
             Regularization strength for total variation.  This wont do
             anything if it is not > 0.0.
         weight_mod : float, optional
-            A weighting factor for this specific constraint in the optimization problem. 
+            A weighting factor for this specific constraint in the optimization problem.
             Defaults to 1.0.
         """
         self.c_gparams.add_TV(tv_lam, weight_mod)
 
-    def add_obj_identity(self, 
+    def add_obj_identity(self,
                          weight_mod: float = 1.0):
         """
         Add an identity objective function to the problem.
@@ -465,90 +469,12 @@ cdef class GroptParams:
         """
         Force a preparation of the GroptParams object.
 
-        This mostly just allocates vectors in each of the constraints, and 
+        This mostly just allocates vectors in each of the constraints, and
         sets up the initial optimization variables.  It is automatically done in solve
         if it has not been done yet.
         """
         self.c_gparams.prepare()
 
-    def solve(self,
-              min_iter: int = 1,
-              max_iter: int = 2000,
-              gamma_x: float = 1.6,
-              ils_tol: float = 1e-3,
-              ils_max_iter: int = 20,
-              ils_min_iter: int = 2,
-              ils_sigma: float = 1e-4,
-              ils_tik_lam: float = 0.0):
-        """
-        Run the optimization solver.
-
-        Parameters
-        ----------
-        min_iter : int, optional
-            Minimum number of iterations for the main SDMM loop. The solver will
-            run for at least this many iterations. Defaults to 1.
-        max_iter : int, optional
-            Maximum number of iterations for the main SDMM loop. Defaults to 2000.
-        gamma_x : float, optional
-            Relaxation parameter for the SDMM update step.
-            correspond to over-relaxation, which can speed up convergence.
-            Defaults to 1.6.
-        ils_tol : float, optional
-            Relative tolerance for the inner-loop indirect linear solver (e.g., CG).
-            The ILS stops when the residual norm is less than `ils_tol` times
-            the initial residual norm. Defaults to 1e-3.
-        ils_max_iter : int, optional
-            Maximum number of iterations for the indirect linear solver per main
-            SDMM iteration. Defaults to 20.
-        ils_min_iter : int, optional
-            Minimum number of iterations for the indirect linear solver.
-            Defaults to 2.
-        ils_sigma : float, optional
-            Regularization parameter for the linear system solved in the inner
-            loop, related to the ADMM penalty parameter. Defaults to 1e-4.
-        ils_tik_lam : float, optional
-            Tikhonov (L2) regularization parameter for the indirect linear
-            solver. Adds a penalty on the norm of the solution to improve
-            conditioning. Defaults to 0.0.
-        """
-        self.c_gparams.solve(min_iter, max_iter, gamma_x, ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam)
-
-    def get_out(self) -> np.ndarray:
-        """
-        Get the gradient waveform output from the C++ layer.
-
-        Returns
-        -------
-        np.ndarray
-            The output array.
-        """
-        cdef double *out
-        cdef int out_size
-        self.c_gparams.get_output(&out, out_size)
-        return np.asarray(<cnp.float64_t[:out_size]> out)
-
-    def get_output_bvalue(self) -> float:
-        """
-        Get the b-value of the current waveform.
-
-        Returns
-        -------
-        float
-            The b-value of the current waveform.
-        """
-        return self.c_gparams.get_output_bvalue()
-
-    def test_reduce_and_solve(self):
-        """
-        Test the reduction and solve process.
-
-        This method will call the `test_reduce_and_solve` method in the C++ layer,
-        which will reduce the problem and then solve it.
-        """
-        self.c_gparams.test_reduce_and_solve()
-
-    # TODO: Make these protected and use getter/setters (except final_good)
     @property
     def N(self):
         return self.c_gparams.N
@@ -570,19 +496,32 @@ cdef class GroptParams:
     def dt(self, val):
         self.c_gparams.dt = val
 
-    @property
-    def final_good(self):
-        return self.c_gparams.final_good
-    @final_good.setter
-    def final_good(self, val):
-        self.c_gparams.final_good = val
 
-    @property
-    def final_n_feval(self):
-        return self.c_gparams.final_n_feval
-    @final_n_feval.setter
-    def final_n_feval(self, val):
-        self.c_gparams.final_n_feval = val
+class SolveResult:
+    """Result from a GrOpt solve operation.
+
+    Attributes
+    ----------
+    X : np.ndarray
+        The optimized gradient waveform.
+    converged : bool
+        Whether all constraints were satisfied.
+    n_iter : int
+        Number of outer SDMM iterations.
+    n_feval : int
+        Total number of inner linear solver iterations.
+    """
+
+    def __init__(self, X, converged, n_iter, n_feval):
+        self.X = X
+        self.converged = converged
+        self.n_iter = n_iter
+        self.n_feval = n_feval
+
+    def __repr__(self):
+        return (f"SolveResult(converged={self.converged}, n_iter={self.n_iter}, "
+                f"n_feval={self.n_feval}, X.shape={self.X.shape})")
+
 
 cdef class SolverGroptSDMM:
     cdef c_gropt.SolverGroptSDMM c_solver
@@ -590,10 +529,10 @@ cdef class SolverGroptSDMM:
     def __init__(self):
         self.c_solver = c_gropt.SolverGroptSDMM()
 
-    def set_general_params(self, 
-                        min_iter: int = 1, 
-                        max_iter: int = 2000, 
-                        log_interval: int = 20, 
+    def set_general_params(self,
+                        min_iter: int = 1,
+                        max_iter: int = 2000,
+                        log_interval: int = 20,
                         gamma_x: float = 1.6,
                         max_feval: int = 12000):
         """
@@ -607,7 +546,7 @@ cdef class SolverGroptSDMM:
         max_iter : int, optional
             Maximum number of iterations for the main SDMM loop. Defaults to 2000.
         log_interval : int, optional
-            Interval at which to log the progress of the solver. 
+            Interval at which to log the progress of the solver.
             This will only be seen when verbose logging is enabled.
             Defaults to 20.
         gamma_x : float, optional
@@ -618,13 +557,13 @@ cdef class SolverGroptSDMM:
         self.c_solver.set_general_params(min_iter, max_iter, log_interval, gamma_x, max_feval)
 
 
-    def set_ils_params(self, 
-                    ils_tol: float = 1e-3, 
-                    ils_max_iter: int = 20, 
-                    ils_min_iter: int = 2, 
-                    ils_sigma: float = 1e-4, 
+    def set_ils_params(self,
+                    ils_tol: float = 1e-3,
+                    ils_max_iter: int = 20,
+                    ils_min_iter: int = 2,
+                    ils_sigma: float = 1e-4,
                     ils_tik_lam: float = 0.0):
-        """ 
+        """
         Set parameters for the indirect linear solver used in the SDMM.
 
         Parameters
@@ -649,13 +588,13 @@ cdef class SolverGroptSDMM:
         """
         self.c_solver.set_ils_params(ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam)
 
-    def set_sdmm_params(self, 
-                        rw_interval: int = 8, 
-                        rw_e_corr: float = 0.4, 
-                        rw_eps: float = 1e-36, 
+    def set_sdmm_params(self,
+                        rw_interval: int = 8,
+                        rw_e_corr: float = 0.4,
+                        rw_eps: float = 1e-36,
                         rw_scalelim: float = 1.5,
-                        grw_min_infeasible: int = 20, 
-                        grw_interval: int = 20, 
+                        grw_min_infeasible: int = 20,
+                        grw_interval: int = 20,
                         grw_mod: float = 2.0):
         """
         Set parameters specific to the SDMM algorithm.
@@ -663,25 +602,25 @@ cdef class SolverGroptSDMM:
         Parameters
         ----------
         rw_interval : int, optional
-            Interval for reweighting operations. 
+            Interval for reweighting operations.
             Defaults to 8.
         rw_e_corr : float, optional
-            Error correction parameter for reweighting. 
+            Error correction parameter for reweighting.
             Defaults to 0.4.
         rw_eps : float, optional
-            Small epsilon value for numerical stability in reweighting. 
+            Small epsilon value for numerical stability in reweighting.
             Defaults to 1e-36.
         rw_scalelim : float, optional
-            Scale limit for reweighting operations. 
+            Scale limit for reweighting operations.
             Defaults to 1.5.
         grw_min_infeasible : int, optional
-            Minimum number of infeasible iterations before adaptive reweighting is allowed. 
+            Minimum number of infeasible iterations before adaptive reweighting is allowed.
             Defaults to 20.
         grw_interval : int, optional
-            Interval for adaptive reweighting checks. 
+            Interval for adaptive reweighting checks.
             Defaults to 20.
         grw_mod : float, optional
-            Modification factor for adaptive reweighting. 
+            Modification factor for adaptive reweighting.
             Defaults to 2.0.
         """
         self.c_solver.set_sdmm_params(rw_interval, rw_e_corr, rw_eps, rw_scalelim,
@@ -691,14 +630,69 @@ cdef class SolverGroptSDMM:
         """
         Run the SDMM solver.
 
-        Uses the problem definitions set during the initialization of the solver.
+        Parameters
+        ----------
+        gparams : GroptParams
+            The problem definition.
+
+        Returns
+        -------
+        SolveResult
+            The optimization result containing the waveform and convergence info.
         """
-        self.c_solver.solve(gparams.c_gparams)
+        self.c_solver.solve(gparams.c_gparams[0])
+
+        cdef double *out
+        cdef int out_size
+        self.c_solver.get_result_X(&out, out_size)
+        X = np.asarray(<cnp.float64_t[:out_size]> out).copy()
+
+        return SolveResult(
+            X=X,
+            converged=bool(self.c_solver.last_result_converged),
+            n_iter=self.c_solver.last_result_n_iter,
+            n_feval=self.c_solver.last_result_n_feval,
+        )
+
+
+def solve(params, **kwargs):
+    """
+    Convenience function to solve a GrOpt problem.
+
+    Parameters
+    ----------
+    params : GroptParams
+        The problem definition.
+    **kwargs
+        Additional keyword arguments passed to the solver. Supports:
+        - min_iter, max_iter, gamma_x, max_feval, log_interval (general params)
+        - ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam (ILS params)
+
+    Returns
+    -------
+    SolveResult
+        The optimization result.
+    """
+    solver = SolverGroptSDMM()
+
+    general_keys = {'min_iter', 'max_iter', 'gamma_x', 'max_feval', 'log_interval'}
+    ils_keys = {'ils_tol', 'ils_max_iter', 'ils_min_iter', 'ils_sigma', 'ils_tik_lam'}
+
+    general_kwargs = {k: v for k, v in kwargs.items() if k in general_keys}
+    ils_kwargs = {k: v for k, v in kwargs.items() if k in ils_keys}
+
+    if general_kwargs:
+        solver.set_general_params(**general_kwargs)
+    if ils_kwargs:
+        solver.set_ils_params(**ils_kwargs)
+
+    return solver.solve(params)
+
 
 # ---------------------------------------------------------
 # gropt_utils
 # ---------------------------------------------------------
-def set_verbose(level:int = 4, 
+def set_verbose(level:int = 4,
                 mode: str | None = None):
     """
     Set the verbosity level for the C++ gropt library.
@@ -713,11 +707,11 @@ def set_verbose(level:int = 4,
     6: Trace
 
     Parameters
-    ----------  
+    ----------
     level : int
         The verbosity level to set.
     mode : str, optional
-        The mode to set the verbosity level to. 
+        The mode to set the verbosity level to.
         Overrides the level if provided.
     """
 
@@ -738,19 +732,19 @@ def set_verbose(level:int = 4,
             level = 6
         else:
             raise ValueError(f"Unknown verbosity mode: {mode}")
-    
+
     c_gropt.set_verbose(level)
 
-def get_SAFE(G: np.ndarray, 
-             dt: float, 
-             true_safe: bool = True, 
-             new_first_axis: int = 0, 
-             demo_params: bool = True, 
+def get_SAFE(G: np.ndarray,
+             dt: float,
+             true_safe: bool = True,
+             new_first_axis: int = 0,
+             demo_params: bool = True,
              safe_params: dict = None) -> np.ndarray:
 
     if safe_params is None and not demo_params:
         raise ValueError("If safe_params is None, demo_params must be True.")
-    
+
     cdef double[::1] G_view = array_prep(G, np.float64)
 
     if G.ndim == 1:
@@ -791,10 +785,12 @@ def get_SAFE(G: np.ndarray,
                        &out, out_size)
     else:
         c_gropt.get_SAFE(N, Naxis, dt, &G_view[0], true_safe, new_first_axis, demo_params,
-                        _unused, _unused, _unused, 
+                        _unused, _unused, _unused,
                         _unused, _unused, _unused,
                         _unused, _unused,
                         &out, out_size)
 
-    
-    return np.asarray(<cnp.float64_t[:out_size]> out)
+
+    result = np.asarray(<cnp.float64_t[:out_size]> out).copy()
+    free(out)
+    return result

@@ -41,6 +41,7 @@ sources = ['gropt_params',
            'op_safe',
            'op_slew',
            'op_tv',
+           'sdmm_workspace',
            'solver',
            'solver_groptsdmm',
            ]

@@ -4,32 +4,29 @@
 
 namespace Gropt {
 
-Op_TV::Op_TV(GroptParams &_gparams, double _tv_lam, double _weight_mod)
-    : Operator(_gparams)
+Op_TV::Op_TV(const ProblemData &_pdata, double _tv_lam, double _weight_mod)
+    : Operator(_pdata)
 {
-    name = "TotalVariation"; 
+    name = "TotalVariation";
     weight_mod = _weight_mod;
     tv_lam = _tv_lam;
 }
 
 void Op_TV::init()
 {
-    spdlog::trace("Op_TV::init  N = {}", gparams->N);
-    
+    spdlog::trace("Op_TV::init  N = {}", pdata->N);
+
     target = 0;
     tol0 = tv_lam;
     tol = (1.0-cushion) * tol0;
 
-    spec_norm2 = 4.0/gparams->dt/gparams->dt;
+    spec_norm2 = 4.0/pdata->dt/pdata->dt;
     spec_norm = sqrt(spec_norm2);
 
-    Ax_size = gparams->Naxis * (gparams->N-1);
+    Ax_size = pdata->Naxis * (pdata->N-1);
 
     if (do_init_weights) {
-        weight = 1e4;
         obj_weight = 1.0;
-
-        weight *= weight_mod;
         obj_weight *= weight_mod;
     }
 
@@ -40,7 +37,7 @@ void Op_TV::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
     for (int i_ax = 0; i_ax < Naxis; i_ax++) {
         for (int i = 0; i < (N-1); i++) {
-            out(i_ax*(N-1)+i) = (X(i_ax*N+i+1) - X(i_ax*N+i))/gparams->dt;
+            out(i_ax*(N-1)+i) = (X(i_ax*N+i+1) - X(i_ax*N+i))/pdata->dt;
         }
     }
 }
@@ -48,11 +45,11 @@ void Op_TV::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 void Op_TV::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
     for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-        out(i_ax*N+0) = -X(i_ax*(N-1)+0) / gparams->dt;
+        out(i_ax*N+0) = -X(i_ax*(N-1)+0) / pdata->dt;
         for (int i = 1; i < (N-1); i++) {
-            out(i_ax*N+i) = (X(i_ax*(N-1)+i-1) - X(i_ax*(N-1)+i)) / gparams->dt;
+            out(i_ax*N+i) = (X(i_ax*(N-1)+i-1) - X(i_ax*(N-1)+i)) / pdata->dt;
         }
-        out(i_ax*N+N-1) = X(i_ax*(N-1)+N-2) / gparams->dt;
+        out(i_ax*N+N-1) = X(i_ax*(N-1)+N-2) / pdata->dt;
     }
 }
 
@@ -65,7 +62,7 @@ void Op_TV::prox(Eigen::VectorXd &X)
             X(i) = X(i) > 0 ? X(i) - tv_lam : X(i) + tv_lam;
         } else {
             X(i) = 0.0;
-        } 
+        }
     }
 
     spdlog::trace("Finished Op_TV::prox");

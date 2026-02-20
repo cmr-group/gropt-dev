@@ -5,14 +5,14 @@
 namespace Gropt {
 
 IndirectLinearSolver::IndirectLinearSolver(GroptParams &_gparams, int _n_iter, double _sigma, double _tik_lam)
-    : name("IndirectLinearSolver"), 
-    n_iter(_n_iter), 
-    sigma(_sigma), 
+    : name("IndirectLinearSolver"),
+    n_iter(_n_iter),
+    sigma(_sigma),
     tik_lam(_tik_lam)
 {
     gparams = &_gparams;
     hist_n_iter.push_back(-1);
-} 
+}
 
 Eigen::VectorXd IndirectLinearSolver::solve(Eigen::VectorXd &x0)
 {
@@ -31,13 +31,13 @@ void IndirectLinearSolver::get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out)
     out.array() += sigma * x.array();
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
-        gparams->all_op[i]->add_AtAx(x, out);
+        gparams->all_op[i]->add_AtAx(x, out, (*ws)[i]);
     }
 
     for (int i = 0; i < gparams->all_obj.size(); i++) {
         gparams->all_obj[i]->add_obj(x, out);
     }
-} 
+}
 
 void IndirectLinearSolver::get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out)
 {
@@ -47,12 +47,8 @@ void IndirectLinearSolver::get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out)
 
     spdlog::trace("IndirectLinearSolver::get_rhs  iteration size = {:d}", gparams->all_op.size());
     for (int i = 0; i < gparams->all_op.size(); i++) {
-        gparams->all_op[i]->add_Atb(out);
+        gparams->all_op[i]->add_Atb(out, (*ws)[i]);
     }
-
-    // for (int i = 0; i < gparams->all_obj.size(); i++) {
-    //     gparams->all_obj[i]->add_b(out);
-    // }
 
 }
 

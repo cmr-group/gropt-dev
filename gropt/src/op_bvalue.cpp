@@ -4,11 +4,11 @@
 
 namespace Gropt {
 
-Op_BValue::Op_BValue(GroptParams &_gparams, double _bval_target, double _bval_tol0,
+Op_BValue::Op_BValue(const ProblemData &_pdata, double _bval_target, double _bval_tol0,
                      int _start_idx0, int _stop_idx0, double _weight_mod, BVALUE_MODE _mode, double _max_scale)
-    : Operator(_gparams)
+    : Operator(_pdata)
 {
-    name = "b-value"; 
+    name = "b-value";
 
     bval_target = _bval_target;
     bval_tol0 = _bval_tol0;
@@ -27,14 +27,14 @@ Op_BValue::Op_BValue(GroptParams &_gparams, double _bval_target, double _bval_to
 
 void Op_BValue::init()
 {
-    spdlog::trace("Op_BValue::init  N = {}", gparams->N);
-    
+    spdlog::trace("Op_BValue::init  N = {}", pdata->N);
+
     target = bval_target;
     tol0 = bval_tol0;
     tol = (1.0-cushion) * tol0;
 
     GAMMA = 267.5221900e6;  // rad/S/T
-    MAT_SCALE = pow((GAMMA / 1000.0 * gparams->dt), 2.0) * gparams->dt;  // 1/1000 is for m->mm in b-value
+    MAT_SCALE = pow((GAMMA / 1000.0 * pdata->dt), 2.0) * pdata->dt;  // 1/1000 is for m->mm in b-value
 
     // If start and stop indices are not set, constraint covers the whole axis
     if (start_idx <= 0) {
@@ -44,7 +44,7 @@ void Op_BValue::init()
     }
 
     if (stop_idx <= 0) {
-        i_stop = gparams->N;
+        i_stop = pdata->N;
     } else {
         i_stop = stop_idx;
     }
@@ -53,13 +53,10 @@ void Op_BValue::init()
     spec_norm2 = (Nnorm*Nnorm + Nnorm)/2.0 * MAT_SCALE;
     spec_norm = sqrt(spec_norm2);
 
-    Ax_size = gparams->Naxis * gparams->N;
+    Ax_size = pdata->Naxis * pdata->N;
 
     if (do_init_weights) {
-        weight = 1.0e4;
         obj_weight = -1.0;
-
-        weight *= weight_mod;
         obj_weight *= weight_mod;
     }
 
@@ -71,9 +68,9 @@ void Op_BValue::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
     out.setZero();
     for (int j = 0; j < Naxis; j++) {
         int jN = j*N;
-        double gt = 0;    
+        double gt = 0;
         for (int i = i_start; i < i_stop; i++) {
-            gt += X(jN + i) * gparams->inv_vec(jN + i);
+            gt += X(jN + i) * pdata->inv_vec(jN + i);
             out(jN + i) = gt * sqrt(MAT_SCALE);
         }
     }
@@ -81,13 +78,13 @@ void Op_BValue::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
 void Op_BValue::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
-    out.setZero(); 
+    out.setZero();
     for (int j = 0; j < Naxis; j++) {
         int jN = j*N;
-        double gt = 0;    
+        double gt = 0;
         for (int i = i_stop-1; i >= i_start; i--) {
             gt += X(jN + i) * sqrt(MAT_SCALE);
-            out(jN + i) = gt * gparams->inv_vec(jN + i);
+            out(jN + i) = gt * pdata->inv_vec(jN + i);
         }
     }
 }
@@ -96,10 +93,10 @@ void Op_BValue::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 void Op_BValue::prox(Eigen::VectorXd &X)
 {
     spdlog::trace("Starting Op_BValue::prox");
-    
+
     for (int j = 0; j < Naxis; j++) {
         double xnorm = X.segment(j*N, N).norm();
-        
+
 
         if (mode == BVALUE_MODE_MINVAL) {
             double min_val = sqrt(target);
@@ -127,7 +124,7 @@ void Op_BValue::prox(Eigen::VectorXd &X)
         } else {
             spdlog::error("Unknown BVALUE_MODE in Op_BValue::prox");
         }
-        
+
     }
 
     spdlog::trace("Finished Op_BValue::prox");
@@ -139,8 +136,8 @@ void Op_BValue::check(Eigen::VectorXd &X)
     int is_feas = 1;
 
     for (int j = 0; j < Naxis; j++) {
-        double bval_t = (X.segment(j*N, N)).squaredNorm();    
-        
+        double bval_t = (X.segment(j*N, N)).squaredNorm();
+
         if (mode == BVALUE_MODE_MINVAL || mode == BVALUE_MODE_MINVALMAX) {
             if (bval_t < target) {
                 is_feas = 0;
@@ -153,9 +150,6 @@ void Op_BValue::check(Eigen::VectorXd &X)
         } else {
             spdlog::error("Unknown BVALUE_MODE in Op_BValue::check");
         }
-        
-
-        
 
     }
 

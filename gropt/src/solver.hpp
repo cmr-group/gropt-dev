@@ -1,13 +1,14 @@
 #ifndef SOLVER_H
 #define SOLVER_H
 
-#include <iostream> 
+#include <iostream>
 #include <string>
 #include <numeric>
 #include <vector>
 #include "Eigen/Dense"
 
 #include "gropt_params.hpp"
+#include "sdmm_workspace.hpp"
 #include "ils.hpp"
 
 namespace Gropt {
@@ -20,6 +21,9 @@ class Solver
 
         GroptParams *gparams;
         IndirectLinearSolver *ils_solver;
+
+        // Per-operator SDMM workspaces
+        std::vector<SDMMWorkspace> ws;
 
         int max_iter = 2000;
         int max_feval = 12000;
@@ -35,14 +39,17 @@ class Solver
 
         bool extra_debug = false;
         std::vector<Eigen::VectorXd> hist_X;
-        std::vector<int> hist_cg_iter; 
+        std::vector<int> hist_cg_iter;
+
+        // Iteration counter (was on GroptParams)
+        int iiter = 0;
 
         Solver() = default;
         ~Solver() = default;
 
-        virtual void solve(GroptParams &_gparams);
+        virtual SolveResult solve(GroptParams &_gparams);
         virtual int logger(Eigen::VectorXd &X);
-        virtual void final_log(Eigen::VectorXd &X);
+        virtual void final_log(Eigen::VectorXd &X, SolveResult &result);
         virtual void set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval);
         virtual void set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam);
 };

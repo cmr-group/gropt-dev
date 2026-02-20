@@ -26,6 +26,7 @@ set(SRC_FILES
     op_slew.cpp
     op_safe.cpp
     op_tv.cpp
+    sdmm_workspace.cpp
     solver.cpp
     solver_groptsdmm.cpp
 )
