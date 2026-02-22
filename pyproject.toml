@@ -48,3 +48,4 @@ dev = { features = ["dev", "docs"], solve-group = "default" }
 
 [tool.pixi.tasks]
 rebuild = "python -m pip install --no-build-isolation -e ."
+rebuild-test = "python -m pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON"

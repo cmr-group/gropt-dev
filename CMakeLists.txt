@@ -44,6 +44,18 @@ target_include_directories(gropt_wrapper PRIVATE
 
 target_compile_definitions(gropt_wrapper PRIVATE FMT_UNICODE=0)
 
+# Eigen assertion control: ON = keep assertions + NaN-init for testing,
+#                          OFF = disable assertions for distribution wheels
+option(GROPT_EIGEN_ASSERTIONS "Enable Eigen runtime assertions (for testing)" OFF)
+if(GROPT_EIGEN_ASSERTIONS)
+    target_compile_options(gropt_wrapper PRIVATE
+        $<IF:$<CXX_COMPILER_ID:MSVC>,/UNDEBUG,-UNDEBUG>
+    )
+    target_compile_definitions(gropt_wrapper PRIVATE EIGEN_INITIALIZE_MATRICES_BY_NAN)
+else()
+    target_compile_definitions(gropt_wrapper PRIVATE EIGEN_NO_DEBUG)
+endif()
+
 install(TARGETS gropt_wrapper LIBRARY DESTINATION gropt)
 
 nanobind_add_stub(gropt_wrapper_stub
