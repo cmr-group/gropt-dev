@@ -60,6 +60,7 @@ class GroptParams
         void vec_init_simple(int _N, int _Naxis, double first_val, double last_val);
         void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
         void setvec_X0(int _N, int _Naxis, double *_X0, bool set_others);
+        void setvec_X0(const Eigen::VectorXd &_X0, int _Naxis, bool set_others);
 
         void vec_reduce_simple(int N_reduce);
 
@@ -77,12 +78,29 @@ class GroptParams
                       double *stim_limit, double *g_scale,
                       int new_first_axis, bool demo_params,
                       double weight_mod);
+        // Eigen overload: demo params (no arrays needed)
+        void add_SAFE(double stim_thresh, int new_first_axis, double weight_mod);
+        // Eigen overload: custom params
+        void add_SAFE(double stim_thresh,
+                      const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3,
+                      const Eigen::VectorXd &a1, const Eigen::VectorXd &a2, const Eigen::VectorXd &a3,
+                      const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
+                      int new_first_axis, double weight_mod);
+
         void add_SAFE_vec(int N_vec, double *stim_thresh_vec,
                       double *tau1, double *tau2, double *tau3,
                       double *a1, double *a2, double *a3,
                       double *stim_limit, double *g_scale,
                       int new_first_axis, bool demo_params,
                       double weight_mod);
+        // Eigen overload: demo params
+        void add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, int new_first_axis, double weight_mod);
+        // Eigen overload: custom params
+        void add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec,
+                          const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3,
+                          const Eigen::VectorXd &a1, const Eigen::VectorXd &a2, const Eigen::VectorXd &a3,
+                          const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
+                          int new_first_axis, double weight_mod);
 
         void add_bvalue(double target, double tol, int start_idx0, int stop_idx0,
                         double weight_mod, int mode, double max_scale);
