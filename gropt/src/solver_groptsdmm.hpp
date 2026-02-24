@@ -9,14 +9,18 @@
 
 #include "solver.hpp"
 #include "gropt_params.hpp"
+#include "workspace_sdmm.hpp"
 
-namespace Gropt {
-
-class SolverGroptSDMM : public Solver
+namespace Gropt
 {
-    public:
 
+    class SolverGroptSDMM : public Solver
+    {
+    public:
         SolverGroptSDMM() = default;
+
+        // Per-operator SDMM workspaces (typed; base class Solver::ws points into this)
+        std::vector<WorkspaceSDMM> sdmm_ws;
 
         int total_Ax_size;
 
@@ -41,7 +45,7 @@ class SolverGroptSDMM : public Solver
         void set_sdmm_params(int rw_interval, double rw_e_corr, double rw_eps, double rw_scalelim,
                              int grw_min_infeasible, int grw_interval, double grw_mod);
         void get_result_X(double **out, int &out_size);
-};
+    };
 
 } // namespace Gropt
 

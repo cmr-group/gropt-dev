@@ -8,7 +8,7 @@
 #include "Eigen/Dense"
 
 #include "gropt_params.hpp"
-#include "sdmm_workspace.hpp"
+#include "workspace_solver.hpp"
 
 namespace Gropt {
 
@@ -22,7 +22,7 @@ class IndirectLinearSolver
         std::vector<int> hist_n_iter;
 
         GroptParams *gparams;
-        const std::vector<SDMMWorkspace> *ws = nullptr;
+        std::vector<const WorkspaceSolver*> ws;
 
         int n_iter;
         double sigma;
@@ -31,7 +31,9 @@ class IndirectLinearSolver
         IndirectLinearSolver(GroptParams &gparams, int _n_iter, double _sigma, double _tik_lam);
         ~IndirectLinearSolver() = default;
 
-        void set_workspace(const std::vector<SDMMWorkspace> *_ws) { ws = _ws; }
+        void set_workspace(const std::vector<WorkspaceSolver*>& _ws) {
+            ws.assign(_ws.begin(), _ws.end());
+        }
 
         virtual Eigen::VectorXd solve(Eigen::VectorXd &x0);
         virtual void get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out);

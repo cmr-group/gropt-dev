@@ -1,11 +1,11 @@
-#include "sdmm_workspace.hpp"
+#include "workspace_sdmm.hpp"
 #include "op_main.hpp"
 
 namespace Gropt {
 
-void SDMMWorkspace::init(int Ax_size)
+void WorkspaceSDMM::init(int Ax_size)
 {
-    SolverWorkspace::init(Ax_size);
+    WorkspaceSolver::init(Ax_size);
 
     yhat1.setZero(Ax_size);
     dyhat.setZero(Ax_size);
@@ -19,9 +19,9 @@ void SDMMWorkspace::init(int Ax_size)
     z00.setZero(Ax_size);
 }
 
-void SDMMWorkspace::reinit(int Ax_size)
+void WorkspaceSDMM::reinit(int Ax_size)
 {
-    SolverWorkspace::reinit(Ax_size);
+    WorkspaceSolver::reinit(Ax_size);
 
     if (yhat00.size() != Ax_size) { yhat00.setZero(Ax_size); }
     if (y00.size() != Ax_size)    { y00.setZero(Ax_size); }
@@ -36,13 +36,13 @@ void SDMMWorkspace::reinit(int Ax_size)
     z00.setZero(Ax_size);
 }
 
-void SDMMWorkspace::prep(Operator &op, const Eigen::VectorXd &X)
+void WorkspaceSDMM::prep(Operator &op, const Eigen::VectorXd &X)
 {
-    SolverWorkspace::prep(op, X);
+    WorkspaceSolver::prep(op, X);
     z00 = z0;
 }
 
-void SDMMWorkspace::reweight(double rw_eps, double e_corr, double rw_scalelim)
+void WorkspaceSDMM::reweight(double rw_eps, double e_corr, double rw_scalelim)
 {
     double rho0 = weight;
 

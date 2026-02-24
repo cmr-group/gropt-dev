@@ -18,21 +18,27 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams)
     }
 
     // Initialize per-operator SDMM workspaces
-    ws.resize(gparams->all_op.size());
+    sdmm_ws.resize(gparams->all_op.size());
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
 
         // Set initial weight based on operator type
-        ws[i].weight = 1.0;
+        sdmm_ws[i].weight = 1.0;
         // Slew, moment, bvalue, SAFE, TV operators start with higher weight
         if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" ||
             op->name == "SAFE" || op->name == "TotalVariation") {
-            ws[i].weight = 1e4;
+            sdmm_ws[i].weight = 1e4;
         }
-        ws[i].weight *= op->weight_mod;
+        sdmm_ws[i].weight *= op->weight_mod;
 
-        ws[i].init(op->Ax_size);
-        ws[i].prep(*op, gparams->pdata.X0);
+        sdmm_ws[i].init(op->Ax_size);
+        sdmm_ws[i].prep(*op, gparams->pdata.X0);
+    }
+
+    // Populate base class ws pointers
+    ws.resize(sdmm_ws.size());
+    for (int i = 0; i < sdmm_ws.size(); i++) {
+        ws[i] = &sdmm_ws[i];
     }
 
     Eigen::VectorXd X = gparams->pdata.X0;
@@ -51,7 +57,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams)
         spdlog::error("SolverGroptSDMM::solve()  Unknown Indirect Linear Solver method");
         return SolveResult{};
     }
-    ils_solver->set_workspace(&ws);
+    ils_solver->set_workspace(ws);
 
     total_Ax_size = 0;
     for (int i = 0; i < gparams->all_op.size(); i++) {
@@ -111,7 +117,7 @@ void SolverGroptSDMM::update(Eigen::VectorXd &X)
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
-        SDMMWorkspace &w = ws[i];
+        WorkspaceSDMM &w = sdmm_ws[i];
 
         // s = Ax
         op->forward_op(X, w.s1);
@@ -157,7 +163,7 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
             }
         }
         if (max_index >= 0) {
-            ws[max_index].weight *= grw_mod;
+            sdmm_ws[max_index].weight *= grw_mod;
         }
     }
 

@@ -1,13 +1,13 @@
-#ifndef SDMM_WORKSPACE_H
-#define SDMM_WORKSPACE_H
+#ifndef WORKSPACE_SDMM_H
+#define WORKSPACE_SDMM_H
 
-#include "solver_workspace.hpp"
+#include "workspace_solver.hpp"
 
 namespace Gropt {
 
 class Operator;  // Forward declaration
 
-struct SDMMWorkspace : SolverWorkspace {
+struct WorkspaceSDMM : WorkspaceSolver {
     // SDMM-specific reweighting history
     Eigen::VectorXd yhat1, dyhat, dy, dhhat, dghat;
     Eigen::VectorXd yhat00, y00, s00, z00;

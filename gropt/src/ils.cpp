@@ -31,7 +31,7 @@ void IndirectLinearSolver::get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out)
     out.array() += sigma * x.array();
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
-        gparams->all_op[i]->add_AtAx(x, out, (*ws)[i]);
+        gparams->all_op[i]->add_AtAx(x, out, *ws[i]);
     }
 
     for (int i = 0; i < gparams->all_obj.size(); i++) {
@@ -47,7 +47,7 @@ void IndirectLinearSolver::get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out)
 
     spdlog::trace("IndirectLinearSolver::get_rhs  iteration size = {:d}", gparams->all_op.size());
     for (int i = 0; i < gparams->all_op.size(); i++) {
-        gparams->all_op[i]->add_Atb(out, (*ws)[i]);
+        gparams->all_op[i]->add_Atb(out, *ws[i]);
     }
 
 }

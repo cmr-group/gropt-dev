@@ -27,9 +27,10 @@ set(GROPT_SOURCES
     ${GROPT_SRC_DIR}/op_slew.cpp
     ${GROPT_SRC_DIR}/op_safe.cpp
     ${GROPT_SRC_DIR}/op_tv.cpp
-    ${GROPT_SRC_DIR}/sdmm_workspace.cpp
     ${GROPT_SRC_DIR}/solver.cpp
     ${GROPT_SRC_DIR}/solver_groptsdmm.cpp
+    ${GROPT_SRC_DIR}/workspace_sdmm.cpp
+    ${GROPT_SRC_DIR}/workspace_solver.cpp
 )
 
 nanobind_add_module(gropt_wrapper

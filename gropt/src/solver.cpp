@@ -25,7 +25,7 @@ int Solver::logger(Eigen::VectorXd &X)
     for (int i = 0; i < gparams->all_op.size(); i++) {
         if (do_print) {
             spdlog::debug("    {:^16}    {:d}       {:.1e}    {:.1e}   {:.1e}",
-                gparams->all_op[i]->name, gparams->all_op[i]->hist_feas.back(), ws[i].weight, ws[i].gamma, gparams->all_op[i]->hist_r_feas.back());
+                gparams->all_op[i]->name, gparams->all_op[i]->hist_feas.back(), ws[i]->weight, ws[i]->gamma, gparams->all_op[i]->hist_r_feas.back());
         }
         if (gparams->all_op[i]->hist_feas.back() == 0) {
             all_feasible = 0;

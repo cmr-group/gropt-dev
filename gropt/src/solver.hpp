@@ -8,22 +8,22 @@
 #include "Eigen/Dense"
 
 #include "gropt_params.hpp"
-#include "sdmm_workspace.hpp"
+#include "workspace_solver.hpp"
 #include "ils.hpp"
 
-namespace Gropt {
-
-class GroptParams;  // Forward declaration of GroptParams class
-
-class Solver
+namespace Gropt
 {
-    public:
 
+    class GroptParams; // Forward declaration of GroptParams class
+
+    class Solver
+    {
+    public:
         GroptParams *gparams;
         IndirectLinearSolver *ils_solver;
 
-        // Per-operator SDMM workspaces
-        std::vector<SDMMWorkspace> ws;
+        // Per-operator workspaces (pointers into subclass-owned typed vectors)
+        std::vector<WorkspaceSolver*> ws;
 
         int max_iter = 2000;
         int max_feval = 12000;
@@ -52,7 +52,7 @@ class Solver
         virtual void final_log(Eigen::VectorXd &X, SolveResult &result);
         virtual void set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval);
         virtual void set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam);
-};
+    };
 
 } // namespace Gropt
 

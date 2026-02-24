@@ -1,7 +1,7 @@
 #include "spdlog/spdlog.h"
 
 #include "op_main.hpp"
-#include "sdmm_workspace.hpp"
+#include "workspace_solver.hpp"
 
 namespace Gropt {
 
@@ -49,7 +49,7 @@ namespace Gropt {
         out.array() /= spec_norm2;
     }
 
-    void Operator::add_Atb(Eigen::VectorXd &b, const SDMMWorkspace &ws)
+    void Operator::add_Atb(Eigen::VectorXd &b, const WorkspaceSolver &ws)
     {
         spdlog::trace("Operator::add_Atb  start  name = {}", name);
 
@@ -64,7 +64,7 @@ namespace Gropt {
         spdlog::trace("Operator::add_Atb  end    name = {}", name);
     }
 
-    void Operator::add_AtAx(Eigen::VectorXd &X, Eigen::VectorXd &out, const SDMMWorkspace &ws)
+    void Operator::add_AtAx(Eigen::VectorXd &X, Eigen::VectorXd &out, const WorkspaceSolver &ws)
     {
         spdlog::trace("Operator::add_AtAx  start  name = {}", name);
 

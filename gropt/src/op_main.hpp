@@ -17,7 +17,7 @@
 
 namespace Gropt {
 
-struct SDMMWorkspace;  // Forward declaration
+struct WorkspaceSolver;  // Forward declaration
 
 class Operator  // This is the main parent class for every operator in GrOpt
 {
@@ -71,8 +71,8 @@ class Operator  // This is the main parent class for every operator in GrOpt
         virtual void check(Eigen::VectorXd &X);
         virtual void prox(Eigen::VectorXd &X);
         virtual void get_feas(Eigen::VectorXd &s);
-        virtual void add_Atb(Eigen::VectorXd &b, const SDMMWorkspace &ws);
-        void add_AtAx(Eigen::VectorXd &x, Eigen::VectorXd &out, const SDMMWorkspace &ws);
+        virtual void add_Atb(Eigen::VectorXd &b, const WorkspaceSolver &ws);
+        void add_AtAx(Eigen::VectorXd &x, Eigen::VectorXd &out, const WorkspaceSolver &ws);
         virtual void add_obj(Eigen::VectorXd &x, Eigen::VectorXd &out);
 };
 
