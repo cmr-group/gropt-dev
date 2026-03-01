@@ -62,9 +62,25 @@ endif()
 
 install(TARGETS gropt_wrapper LIBRARY DESTINATION gropt)
 
-nanobind_add_stub(gropt_wrapper_stub
-    MODULE gropt_wrapper
-    OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/gropt/gropt_wrapper.pyi"
-    PYTHON_PATH "$<TARGET_FILE_DIR:gropt_wrapper>"
-    DEPENDS gropt_wrapper
-)
+# Stub generation requires importing the built module, so it only works for native builds.
+# Skip when cross-compiling on macOS (e.g. building x86_64 on an arm64 runner).
+set(_generate_stubs ON)
+if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    execute_process(
+        COMMAND uname -m
+        OUTPUT_VARIABLE _host_arch
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(NOT CMAKE_OSX_ARCHITECTURES STREQUAL _host_arch)
+        set(_generate_stubs OFF)
+    endif()
+endif()
+
+if(_generate_stubs)
+    nanobind_add_stub(gropt_wrapper_stub
+        MODULE gropt_wrapper
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/gropt/gropt_wrapper.pyi"
+        PYTHON_PATH "$<TARGET_FILE_DIR:gropt_wrapper>"
+        DEPENDS gropt_wrapper
+    )
+endif()
