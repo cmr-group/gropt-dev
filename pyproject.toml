@@ -31,7 +31,6 @@ test-command = "python -c \"import gropt; gropt.demo()\""
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
-test-skip = "*-macosx_x86_64"
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
@@ -56,4 +55,6 @@ clean = "python clean.py"
 rebuild = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
     "clean",
 ] }
-rebuild-test = "python -m pip uninstall gropt -y; python -m pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON"
+rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON", depends-on = [
+    "clean",
+] }
