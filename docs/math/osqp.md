@@ -52,7 +52,7 @@ We define the primal and dual residuals of problem $\eqref{pb:main}$ as
 1.  **given** initial values $x^0$, $z^0$, $y^0$ and parameters $\rho>0$, $\sigma>0$, $\alpha \in (0,2)$
 2.  **Repeat**
 3.  &nbsp;&nbsp;&nbsp;&nbsp; $(\tilde{x}^{k+1}, \nu^{k+1}) \gets$ solve linear system $\begin{bmatrix} P + \sigma I & A^\tpose \\ A & -\rho^{-1}I \end{bmatrix} \begin{bmatrix} \tilde{x}^{k+1} \\ \nu^{k+1} \end{bmatrix}= \begin{bmatrix}\sigma x^{k} - q \\ z^{k} - \rho^{-1} y^k \end{bmatrix}$
-4.  &nbsp;&nbsp;&nbsp;&nbsp; $\tilde{z}^{k+1} \gets z^k + \rho^{-1}(\nu^{k+1} - y^{k})$
+4.  &nbsp;&nbsp;&nbsp;&nbsp; $\tilde{z}^{k+1} \gets z^k + \rho^{-1}(\nu^{k+1} - y^{k})$ OR with Indirect Solver: $\tilde{z}^{k+1} = A\tilde{x}^{k+1}$
 5.  &nbsp;&nbsp;&nbsp;&nbsp; $x^{k+1} \gets \alpha \tilde{x}^{k+1} + (1-\alpha)x^{k}$
 6.  &nbsp;&nbsp;&nbsp;&nbsp; $z^{k+1} \gets \Pi\left(\alpha \tilde{z}^{k+1} + (1-\alpha)z^{k} + \rho^{-1} y^{k} \right)$
 7.  &nbsp;&nbsp;&nbsp;&nbsp; $y^{k+1} \gets y^{k} + \rho \left( \alpha \tilde{z}^{k+1} + (1-\alpha)z^{k} - z^{k+1} \right)$

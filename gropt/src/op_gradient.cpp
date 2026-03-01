@@ -5,21 +5,19 @@
 namespace Gropt {
 
 Op_Gradient::Op_Gradient(const ProblemData &_pdata, double _gmax, bool _rot_variant, double _weight_mod)
-    : Operator(_pdata)
-{
+    : Operator(_pdata) {
     name = "Gradient";
     gmax = _gmax;
     rot_variant = _rot_variant;
     weight_mod = _weight_mod;
 }
 
-void Op_Gradient::init()
-{
+void Op_Gradient::init() {
     spdlog::trace("Op_Gradient::init  N = {}", pdata->N);
 
     target = 0;
     tol0 = gmax;
-    tol = (1.0-cushion) * tol0;
+    tol = (1.0 - cushion) * tol0;
 
     spec_norm2 = 1.0;
     spec_norm = 1.0;
@@ -34,26 +32,23 @@ void Op_Gradient::init()
     Operator::init();
 }
 
-void Op_Gradient::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
-{
-    out = X;
-}
+void Op_Gradient::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = X; }
 
-void Op_Gradient::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
-{
-    out = X;
-}
+void Op_Gradient::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = X; }
 
-void Op_Gradient::prox(Eigen::VectorXd &X)
-{
+void Op_Gradient::prox(Eigen::VectorXd &X) {
     spdlog::trace("Starting Op_Gradient::prox");
+
+    if (do_equil) {
+        X.array() /= eq_rows.array();
+    }
 
     if (rot_variant) {
         for (int i = 0; i < X.size(); i++) {
-            double lower_bound = (target-tol);
-            double upper_bound = (target+tol);
-            X(i) = X(i) < lower_bound ? lower_bound:X(i);
-            X(i) = X(i) > upper_bound ? upper_bound:X(i);
+            double lower_bound = (target - tol);
+            double upper_bound = (target + tol);
+            X(i) = X(i) < lower_bound ? lower_bound : X(i);
+            X(i) = X(i) > upper_bound ? upper_bound : X(i);
 
             // This is specific to the Op_Gradient operator
             if (!isnan(pdata->set_vals(i))) {
@@ -62,17 +57,17 @@ void Op_Gradient::prox(Eigen::VectorXd &X)
         }
     } else {
         for (int i = 0; i < N; i++) {
-            double upper_bound = (target+tol);
+            double upper_bound = (target + tol);
 
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                val += X(i_ax*N+i)*X(i_ax*N+i);
+                val += X(i_ax * N + i) * X(i_ax * N + i);
             }
             val = sqrt(val);
 
             if (val > upper_bound) {
                 for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                    X(i_ax*N+i) *= (upper_bound/val);
+                    X(i_ax * N + i) *= (upper_bound / val);
                 }
             }
         }
@@ -84,18 +79,24 @@ void Op_Gradient::prox(Eigen::VectorXd &X)
         }
     }
 
+    if (do_equil) {
+        X.array() *= eq_rows.array();
+    }
+
     spdlog::trace("Finished Op_Gradient::prox");
 }
 
-
-void Op_Gradient::check(Eigen::VectorXd &X)
-{
+void Op_Gradient::check(Eigen::VectorXd &X) {
     int is_feas = 1;
+
+    if (do_equil) {
+        X.array() /= eq_rows.array();
+    }
 
     if (rot_variant) {
         for (int i = 0; i < X.size(); i++) {
-            double lower_bound = (target-tol0);
-            double upper_bound = (target+tol0);
+            double lower_bound = (target - tol0);
+            double upper_bound = (target + tol0);
 
             if ((X(i) < lower_bound) || (X(i) > upper_bound) && isnan(pdata->set_vals(i))) {
                 is_feas = 0;
@@ -103,11 +104,11 @@ void Op_Gradient::check(Eigen::VectorXd &X)
         }
     } else {
         for (int i = 0; i < N; i++) {
-            double upper_bound = (target+tol0);
+            double upper_bound = (target + tol0);
 
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                val += X(i_ax*N+i)*X(i_ax*N+i);
+                val += X(i_ax * N + i) * X(i_ax * N + i);
             }
             val = sqrt(val);
 
@@ -117,8 +118,11 @@ void Op_Gradient::check(Eigen::VectorXd &X)
         }
     }
 
-    hist_feas.push_back(is_feas);
+    if (do_equil) {
+        X.array() *= eq_rows.array();
+    }
 
+    hist_feas.push_back(is_feas);
 }
 
-}  // close "namespace Gropt"
+} // namespace Gropt

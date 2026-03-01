@@ -13,6 +13,7 @@ find_package(nanobind CONFIG REQUIRED)
 # C++ source files (same as gropt/src/CMakeLists.txt minus main.cpp and fft_helper.cpp)
 set(GROPT_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gropt/src")
 set(GROPT_SOURCES
+    ${GROPT_SRC_DIR}/equilibrate.cpp
     ${GROPT_SRC_DIR}/gropt_params.cpp
     ${GROPT_SRC_DIR}/gropt_utils.cpp
     ${GROPT_SRC_DIR}/ils.cpp
@@ -29,6 +30,8 @@ set(GROPT_SOURCES
     ${GROPT_SRC_DIR}/op_tv.cpp
     ${GROPT_SRC_DIR}/solver.cpp
     ${GROPT_SRC_DIR}/solver_groptsdmm.cpp
+    ${GROPT_SRC_DIR}/solver_osqp.cpp
+    ${GROPT_SRC_DIR}/workspace_osqp.cpp
     ${GROPT_SRC_DIR}/workspace_sdmm.cpp
     ${GROPT_SRC_DIR}/workspace_solver.cpp
 )

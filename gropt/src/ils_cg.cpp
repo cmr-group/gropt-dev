@@ -5,10 +5,7 @@
 namespace Gropt {
 
 ILS_CG::ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma, int _n_iter, double _tik_lam)
-    : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam),
-    tol(_tol),
-    min_iter(_min_iter)
-{
+    : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam), tol(_tol), min_iter(_min_iter) {
     name = "CG";
 
     int size = gparams->N * gparams->Naxis;
@@ -20,8 +17,7 @@ ILS_CG::ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma,
     x.setZero(size);
 }
 
-Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
-{
+Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     start_time = std::chrono::steady_clock::now();
     spdlog::trace("ILS_CG::solve  start");
 
@@ -60,7 +56,7 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
         spdlog::trace("ILS_CG::solve  ii = {:d}  start", ii);
 
         Ap.setZero();
-        get_lhs(p, Ap);  // Ap = A*p
+        get_lhs(p, Ap); // Ap = A*p
         pAp = p.dot(Ap);
         alpha = gamma / pAp;
 
@@ -73,23 +69,20 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0)
 
         p = beta * p + r;
 
-        if ((gamma <= tol * rnorm0) && (ii > min_iter))
-        {
+        if ((std::sqrt(gamma) <= tol * rnorm0) && (ii > min_iter)) {
             spdlog::trace("ILS_CG::solve  break for (res <= tol)  ii = {:d}", ii);
             break;
         }
-
     }
 
-    spdlog::debug("ILS_CG::solve  rnorm0 = {:e}   rnorm = {:e}   ii = {:d}", rnorm0, r.norm(), ii);
+    spdlog::trace("ILS_CG::solve  rnorm0 = {:e}   rnorm = {:e}  gamma = {:e}  ii = {:d}", rnorm0, r.norm(), gamma, ii);
 
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
 
-    hist_n_iter.push_back(ii+1);
+    hist_n_iter.push_back(ii + 1);
 
     return x;
 }
-
 
 } // namespace Gropt

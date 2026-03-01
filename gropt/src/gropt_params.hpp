@@ -108,6 +108,8 @@ class GroptParams
 
         void add_obj_identity(double weight_mod);
 
+        void reset_op_weights();
+
         double get_output_bvalue(const Eigen::VectorXd &X);
 };
 

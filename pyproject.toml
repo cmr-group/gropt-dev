@@ -2,14 +2,18 @@
 name = "gropt"
 dynamic = ["version"]
 requires-python = ">=3.10"
-dependencies = [
-    "numpy",
-]
+dependencies = ["numpy"]
 
 [project.optional-dependencies]
 gui = ["pyqt6", "matplotlib"]
 dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn"]
-docs = ["mkdocs", "mkdocs-material", "mkdocs-jupyter", "mkdocstrings-python", "mkdocs-awesome-nav"]
+docs = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocs-jupyter",
+    "mkdocstrings-python",
+    "mkdocs-awesome-nav",
+]
 
 [build-system]
 requires = ["scikit-build-core>=0.10", "nanobind>=2.0", "setuptools-scm>=8"]
@@ -47,5 +51,8 @@ default = { solve-group = "default" }
 dev = { features = ["dev", "docs"], solve-group = "default" }
 
 [tool.pixi.tasks]
-rebuild = "python -m pip install --no-build-isolation -e ."
-rebuild-test = "python -m pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON"
+clean = "python clean.py"
+rebuild = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
+    "clean",
+] }
+rebuild-test = "python -m pip uninstall gropt -y; python -m pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON"

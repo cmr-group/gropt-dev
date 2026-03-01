@@ -322,6 +322,19 @@ void GroptParams::add_obj_identity(double weight_mod) {
     all_obj.push_back(std::make_unique<Op_Identity>(pdata, weight_mod));
 }
 
+void GroptParams::reset_op_weights() {
+    for (auto &op : all_op) {
+        op->weight_mod = 1.0;
+        op->spec_norm = 1.0;
+        op->spec_norm2 = 1.0;
+    }
+    for (auto &op : all_obj) {
+        op->weight_mod = 1.0;
+        op->spec_norm = 1.0;
+        op->spec_norm2 = 1.0;
+    }
+}
+
 double GroptParams::get_output_bvalue(const Eigen::VectorXd &X) {
     Op_BValue opB(pdata, 1, 1,
                      -1, -1, 1,
