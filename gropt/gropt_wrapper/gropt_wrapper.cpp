@@ -1,16 +1,49 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/eigen/dense.h>
+
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/callback_sink.h"
 
 #include "gropt_params.hpp"
 #include "solver_groptsdmm.hpp"
+#include "solver_osqp.hpp"
 #include "gropt_utils.hpp"
+#include "equilibrate.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
 
 NB_MODULE(gropt_wrapper, m) {
     m.doc() = "GrOpt: Gradient Optimization for MRI";
+
+
+    // These allow you to get spdlogs into jupyter notebooks
+    m.def("set_log_level", [](int level) {
+      spdlog::set_level(static_cast<spdlog::level::level_enum>(level));
+    }, "level"_a,
+R"doc(Set the log level for the C++ gropt library.
+
+Uses spdlog/Python logging convention: lower = more verbose.
+
+Level mapping: 0=Trace, 1=Debug, 2=Info, 3=Warning, 4=Error, 5=Critical, 6=Off.
+
+Parameters
+----------
+level : int
+    Log level (0–6).)doc");
+
+    m.def("set_log_callback", [](nb::callable cb) {
+        auto sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
+            [cb](const spdlog::details::log_msg &msg) {
+                std::string formatted(msg.payload.begin(), msg.payload.end());
+                nb::gil_scoped_acquire gil;
+                cb(static_cast<int>(msg.level), formatted);
+            }
+        );
+        spdlog::default_logger()->sinks() = {sink};
+    });
 
     
     //////////////////////////////////////////////////////////
@@ -362,6 +395,14 @@ R"doc(Prepare the problem for solving.
 
 Allocates vectors and sets up initial optimization variables.
 Automatically called by solve() if not already done.)doc"
+        )
+
+        // reset_op_weights
+        .def("reset_op_weights", &Gropt::GroptParams::reset_op_weights,
+R"doc(Reset all operator weights and spectral norms to 1.0.
+
+Sets weight_mod, spec_norm, and spec_norm2 to 1.0 on every
+operator in all_op and all_obj.)doc"
         );
     
     
@@ -378,7 +419,7 @@ Automatically called by solve() if not already done.)doc"
             "gamma_x"_a = 1.6, "max_feval"_a = 12000,
 R"doc(Set general solver parameters.
 
-Parameters
+Parameters 
 ----------
 min_iter : int, optional
     Minimum SDMM iterations.
@@ -452,6 +493,73 @@ SolveResult
     The optimization result containing the waveform and convergence info.)doc"
         );
     
+
+
+
+    //////////////////////////////////////////////////////////
+    // -------------------------------------------------------
+    // SolverOSQP
+    // -------------------------------------------------------
+    nb::class_<Gropt::SolverOSQP>(m, "SolverOSQP",
+        "OSQP solver for GrOpt gradient optimization problems.")
+        .def(nb::init<>())
+
+        .def("set_general_params", &Gropt::SolverOSQP::set_general_params,
+            "min_iter"_a = 1, "max_iter"_a = 2000, "log_interval"_a = 20,
+            "gamma_x"_a = 1.6, "max_feval"_a = 12000,
+R"doc(Set general solver parameters.
+
+Parameters 
+----------
+min_iter : int, optional
+    Minimum OSQP iterations.
+max_iter : int, optional
+    Maximum OSQP iterations.
+log_interval : int, optional
+    Logging interval (only visible with verbose logging).
+gamma_x : float, optional
+    Relaxation parameter for OSQP updates.
+max_feval : int, optional
+    Maximum total function evaluations.)doc"
+        )
+
+        .def("set_ils_params", &Gropt::SolverOSQP::set_ils_params,
+            "ils_tol"_a = 1e-3, "ils_max_iter"_a = 20, "ils_min_iter"_a = 2,
+            "ils_sigma"_a = 1e-4, "ils_tik_lam"_a = 0.0,
+R"doc(Set indirect linear solver parameters.
+
+Parameters
+----------
+ils_tol : float, optional
+    Relative tolerance for the inner solver.
+ils_max_iter : int, optional
+    Maximum ILS iterations per OSQP iteration.
+ils_min_iter : int, optional
+    Minimum ILS iterations.
+ils_sigma : float, optional
+    ADMM penalty parameter.
+ils_tik_lam : float, optional
+    Tikhonov regularization parameter.)doc"
+        )
+
+        .def("solve", [](Gropt::SolverOSQP &self, Gropt::GroptParams &gparams) {
+            Gropt::SolveResult result = self.solve(gparams);
+            return result;
+        }, "gparams"_a,
+R"doc(Run the OSQP solver.
+
+Parameters
+----------
+gparams : GroptParams
+    The problem definition.
+
+Returns
+-------
+SolveResult
+    The optimization result containing the waveform and convergence info.)doc"
+        );
+
+
     
     //////////////////////////////////////////////////////////
     // -------------------------------------------------------
@@ -488,33 +596,114 @@ SolveResult
     The optimization result.)doc"
     );
 
-    // set_verbose
-    m.def("set_verbose", [](int level, nb::object mode_obj) {
-        if (!mode_obj.is_none()) {
-            std::string mode = nb::cast<std::string>(mode_obj);
-            if (mode == "off") level = 0;
-            else if (mode == "critical") level = 1;
-            else if (mode == "error") level = 2;
-            else if (mode == "warning") level = 3;
-            else if (mode == "info") level = 4;
-            else if (mode == "debug") level = 5;
-            else if (mode == "trace") level = 6;
-            else throw std::invalid_argument("Unknown verbosity mode: " + mode);
-        }
-        Gropt::set_verbose(level);
-    }, "level"_a = 4, "mode"_a = nb::none(),
-R"doc(Set the verbosity level for the C++ gropt library.
+    // NormType enum
+    nb::enum_<Gropt::NormType>(m, "NormType")
+        .value("L2", Gropt::NormType::L2)
+        .value("Inf", Gropt::NormType::Inf);
 
-Level mapping: 0=Off, 1=Critical, 2=Error, 3=Warning,
-4=Info, 5=Debug, 6=Trace.
+    // estimate_row_col_norms
+    m.def("estimate_row_col_norms", [](Gropt::GroptParams &gparams, int n_reps, Gropt::NormType norm_type)
+            -> std::pair<Eigen::VectorXd, Eigen::VectorXd> {
+        Eigen::VectorXd row_norms, col_norms;
+        Gropt::estimate_row_col_norms(gparams, n_reps, norm_type, row_norms, col_norms);
+        return {row_norms, col_norms};
+    }, "gparams"_a, "n_reps"_a = 10, "norm_type"_a = Gropt::NormType::Inf,
+R"doc(Estimate row and column norms of the operator matrix.
 
 Parameters
 ----------
-level : int, optional
-    Verbosity level (0-6).
-mode : str, optional
-    Mode name ('off', 'critical', 'error', 'warning', 'info',
-    'debug', 'trace'). Overrides level if provided.)doc"
+gparams : GroptParams
+    The problem definition (must have operators added).
+n_reps : int, optional
+    Number of random vector repetitions for the estimate.
+norm_type : NormType, optional
+    NormType.Inf (default) or NormType.L2.
+
+Returns
+-------
+row_norms : np.ndarray
+    Estimated norm for each constraint row.
+col_norms : np.ndarray
+    Estimated norm for each variable column.)doc"
+    );
+
+    // get_eq_vecs
+    m.def("get_eq_vecs", [](Gropt::GroptParams &gparams)
+            -> std::pair<Eigen::VectorXd, Eigen::VectorXd> {
+        Eigen::VectorXd row_norms, col_norms;
+        Gropt::get_eq_vecs(gparams, row_norms, col_norms);
+        return {row_norms, col_norms};
+    }, "gparams"_a,
+R"doc(Get the current equilibration vectors from all operators.
+
+Returns the accumulated eq_rows and eq_cols stored on each operator
+after a call to equilibrate().
+
+Parameters
+----------
+gparams : GroptParams
+    The problem definition (must have operators prepared and equilibrated).
+
+Returns
+-------
+row_norms : np.ndarray
+    Accumulated row equilibration vector.
+col_norms : np.ndarray
+    Accumulated column equilibration vector.)doc"
+    );
+
+    // equilibrate
+    m.def("equilibrate", &Gropt::equilibrate,
+        "gparams"_a, "n_iter"_a = 5, "n_reps"_a = 10,
+R"doc(Ruiz equilibration of the operator matrix.
+
+Iteratively scales operator rows and columns so that the maximum
+absolute value in each row and column approaches 1, improving
+solver conditioning.
+
+Parameters
+----------
+gparams : GroptParams
+    The problem definition (operators will be modified in place).
+n_iter : int, optional
+    Number of equilibration iterations.
+n_reps : int, optional
+    Number of random vector repetitions per norm estimate.)doc"
+    );
+
+    // rescale_eq_vecs
+    m.def("rescale_eq_vecs", &Gropt::rescale_eq_vecs,
+        "gparams"_a, "row_scale"_a, "col_scale"_a,
+R"doc(Rescale equilibration vectors by scalar factors.
+
+Multiplies all operator eq_rows by row_scale and eq_cols by col_scale.
+
+Parameters
+----------
+gparams : GroptParams
+    The problem definition.
+row_scale : float
+    Scale factor applied to all row equilibration vectors.
+col_scale : float
+    Scale factor applied to all column equilibration vectors.)doc"
+    );
+
+    // estimate_spec_norm
+    m.def("estimate_spec_norm", &Gropt::estimate_spec_norm,
+        "gparams"_a, "n_iters"_a = 20,
+R"doc(Estimate the spectral norm of the operator matrix via power iteration.
+
+Parameters
+----------
+gparams : GroptParams
+    The problem definition (must have operators prepared).
+n_iters : int, optional
+    Number of power iterations.
+
+Returns
+-------
+float
+    Estimated spectral norm.)doc"
     );
 
     // get_SAFE

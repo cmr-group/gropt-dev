@@ -8,24 +8,6 @@
 
 namespace Gropt {
 
-void set_verbose(int level) {
-    if (level == 0) {
-        spdlog::set_level(spdlog::level::off);
-    } else if (level == 1) {
-        spdlog::set_level(spdlog::level::critical);
-    } else if (level == 2) {
-        spdlog::set_level(spdlog::level::err);
-    } else if (level == 3) {
-        spdlog::set_level(spdlog::level::warn);
-    } else if (level == 4) {
-        spdlog::set_level(spdlog::level::info);
-    } else if (level == 5) {
-        spdlog::set_level(spdlog::level::debug);
-    } else {
-        spdlog::set_level(spdlog::level::trace);
-    }
-}
-
 void get_SAFE(int N, int Naxis, double dt, double *G_in,
               bool true_safe, int new_first_axis, bool demo_params,
               double *tau1, double *tau2, double *tau3,

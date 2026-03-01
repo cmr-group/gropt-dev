@@ -1,8 +1,26 @@
+from collections.abc import Callable
+import enum
 from typing import Annotated, overload
 
 import numpy
 from numpy.typing import NDArray
 
+
+def set_log_level(level: int) -> None:
+    """
+    Set the log level for the C++ gropt library.
+
+    Uses spdlog/Python logging convention: lower = more verbose.
+
+    Level mapping: 0=Trace, 1=Debug, 2=Info, 3=Warning, 4=Error, 5=Critical, 6=Off.
+
+    Parameters
+    ----------
+    level : int
+        Log level (0–6).
+    """
+
+def set_log_callback(arg: Callable, /) -> None: ...
 
 class SolveResult:
     """
@@ -293,6 +311,14 @@ class GroptParams:
         Automatically called by solve() if not already done.
         """
 
+    def reset_op_weights(self) -> None:
+        """
+        Reset all operator weights and spectral norms to 1.0.
+
+        Sets weight_mod, spec_norm, and spec_norm2 to 1.0 on every
+        operator in all_op and all_obj.
+        """
+
 class SolverGroptSDMM:
     """SDMM solver for GrOpt gradient optimization problems."""
 
@@ -302,7 +328,7 @@ class SolverGroptSDMM:
         """
         Set general solver parameters.
 
-        Parameters
+        Parameters 
         ----------
         min_iter : int, optional
             Minimum SDMM iterations.
@@ -371,6 +397,62 @@ class SolverGroptSDMM:
             The optimization result containing the waveform and convergence info.
         """
 
+class SolverOSQP:
+    """OSQP solver for GrOpt gradient optimization problems."""
+
+    def __init__(self) -> None: ...
+
+    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000) -> None:
+        """
+        Set general solver parameters.
+
+        Parameters 
+        ----------
+        min_iter : int, optional
+            Minimum OSQP iterations.
+        max_iter : int, optional
+            Maximum OSQP iterations.
+        log_interval : int, optional
+            Logging interval (only visible with verbose logging).
+        gamma_x : float, optional
+            Relaxation parameter for OSQP updates.
+        max_feval : int, optional
+            Maximum total function evaluations.
+        """
+
+    def set_ils_params(self, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> None:
+        """
+        Set indirect linear solver parameters.
+
+        Parameters
+        ----------
+        ils_tol : float, optional
+            Relative tolerance for the inner solver.
+        ils_max_iter : int, optional
+            Maximum ILS iterations per OSQP iteration.
+        ils_min_iter : int, optional
+            Minimum ILS iterations.
+        ils_sigma : float, optional
+            ADMM penalty parameter.
+        ils_tik_lam : float, optional
+            Tikhonov regularization parameter.
+        """
+
+    def solve(self, gparams: GroptParams) -> SolveResult:
+        """
+        Run the OSQP solver.
+
+        Parameters
+        ----------
+        gparams : GroptParams
+            The problem definition.
+
+        Returns
+        -------
+        SolveResult
+            The optimization result containing the waveform and convergence info.
+        """
+
 def solve(params: GroptParams, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> SolveResult:
     """
     Convenience function to solve a GrOpt problem.
@@ -390,20 +472,101 @@ def solve(params: GroptParams, min_iter: int = 1, max_iter: int = 2000, log_inte
         The optimization result.
     """
 
-def set_verbose(level: int = 4, mode: object | None = None) -> None:
-    """
-    Set the verbosity level for the C++ gropt library.
+class NormType(enum.Enum):
+    L2 = 0
 
-    Level mapping: 0=Off, 1=Critical, 2=Error, 3=Warning,
-    4=Info, 5=Debug, 6=Trace.
+    Inf = 1
+
+def estimate_row_col_norms(gparams: GroptParams, n_reps: int = 10, norm_type: NormType = NormType.Inf) -> tuple[Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]]:
+    """
+    Estimate row and column norms of the operator matrix.
 
     Parameters
     ----------
-    level : int, optional
-        Verbosity level (0-6).
-    mode : str, optional
-        Mode name ('off', 'critical', 'error', 'warning', 'info',
-        'debug', 'trace'). Overrides level if provided.
+    gparams : GroptParams
+        The problem definition (must have operators added).
+    n_reps : int, optional
+        Number of random vector repetitions for the estimate.
+    norm_type : NormType, optional
+        NormType.Inf (default) or NormType.L2.
+
+    Returns
+    -------
+    row_norms : np.ndarray
+        Estimated norm for each constraint row.
+    col_norms : np.ndarray
+        Estimated norm for each variable column.
+    """
+
+def get_eq_vecs(gparams: GroptParams) -> tuple[Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]]:
+    """
+    Get the current equilibration vectors from all operators.
+
+    Returns the accumulated eq_rows and eq_cols stored on each operator
+    after a call to equilibrate().
+
+    Parameters
+    ----------
+    gparams : GroptParams
+        The problem definition (must have operators prepared and equilibrated).
+
+    Returns
+    -------
+    row_norms : np.ndarray
+        Accumulated row equilibration vector.
+    col_norms : np.ndarray
+        Accumulated column equilibration vector.
+    """
+
+def equilibrate(gparams: GroptParams, n_iter: int = 5, n_reps: int = 10) -> None:
+    """
+    Ruiz equilibration of the operator matrix.
+
+    Iteratively scales operator rows and columns so that the maximum
+    absolute value in each row and column approaches 1, improving
+    solver conditioning.
+
+    Parameters
+    ----------
+    gparams : GroptParams
+        The problem definition (operators will be modified in place).
+    n_iter : int, optional
+        Number of equilibration iterations.
+    n_reps : int, optional
+        Number of random vector repetitions per norm estimate.
+    """
+
+def rescale_eq_vecs(gparams: GroptParams, row_scale: float, col_scale: float) -> None:
+    """
+    Rescale equilibration vectors by scalar factors.
+
+    Multiplies all operator eq_rows by row_scale and eq_cols by col_scale.
+
+    Parameters
+    ----------
+    gparams : GroptParams
+        The problem definition.
+    row_scale : float
+        Scale factor applied to all row equilibration vectors.
+    col_scale : float
+        Scale factor applied to all column equilibration vectors.
+    """
+
+def estimate_spec_norm(gparams: GroptParams, n_iters: int = 20) -> float:
+    """
+    Estimate the spectral norm of the operator matrix via power iteration.
+
+    Parameters
+    ----------
+    gparams : GroptParams
+        The problem definition (must have operators prepared).
+    n_iters : int, optional
+        Number of power iterations.
+
+    Returns
+    -------
+    float
+        Estimated spectral norm.
     """
 
 def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, true_safe: bool = True, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
