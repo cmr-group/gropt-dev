@@ -5,18 +5,18 @@
  * Constriant on SAFE model prediction of waveforms.
  */
 
-#include <iostream> 
+#include <iostream>
 #include <string>
-#include <math.h>  
+#include <math.h>
 #include "Eigen/Dense"
 
 #include "op_main.hpp"
- 
+
 namespace Gropt {
 
 class SAFEParams {
 
-    public:  // Code is too messy if this isnt public, any better way?
+    public:
 
         std::vector<double> tau1 = std::vector<double>(3, 0.0);
         std::vector<double> tau2 = std::vector<double>(3, 0.0);
@@ -32,10 +32,10 @@ class SAFEParams {
         std::vector<double> alpha2 = std::vector<double>(3, 0.0);
         std::vector<double> alpha3 = std::vector<double>(3, 0.0);
 
-    
+
         SAFEParams() = default;
         void set_demo_params();
-        void set_params(double *_tau1, double *_tau2, double *_tau3, 
+        void set_params(double *_tau1, double *_tau2, double *_tau3,
                             double *_a1, double *_a2, double *_a3,
                             double *_stim_limit, double *_g_scale);
         void calc_alphas(double dt);
@@ -43,7 +43,7 @@ class SAFEParams {
 };
 
 class Op_SAFE : public Operator
-{  
+{
     protected:
         double stim_thresh;
         Eigen::VectorXd stim_thresh_vec;
@@ -58,8 +58,8 @@ class Op_SAFE : public Operator
     public:
         SAFEParams safe_params;
 
-        Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod);
-        Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod);
+        Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod);
+        Op_SAFE(const ProblemData &_pdata, int _N_vec, double *_stim_thresh_vec, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

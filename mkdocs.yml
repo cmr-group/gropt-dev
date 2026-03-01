@@ -31,6 +31,7 @@ extra_css:
   - css/extra.css
 
 extra_javascript:
+  - javascripts/mathjax.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 plugins:
@@ -47,4 +48,6 @@ plugins:
               show_signature_annotations: true
               show_labels: false
               show_root_toc_entry: false
+              allow_inspection: false
+              show_source: false
 

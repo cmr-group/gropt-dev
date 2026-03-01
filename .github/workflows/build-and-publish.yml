@@ -55,9 +55,30 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
+  test:
+    name: Test with Eigen assertions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build dependencies
+        run: pip install scikit-build-core nanobind setuptools-scm
+
+      - name: Install gropt with Eigen assertions enabled
+        run: pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON
+
+      - name: Smoke test
+        run: python -c "import gropt; gropt.demo()"
+
   publish:
     name: Publish to PyPI
-    needs: [build_wheels, build_sdist]
+    needs: [build_wheels, build_sdist, test]
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'created'
     environment:

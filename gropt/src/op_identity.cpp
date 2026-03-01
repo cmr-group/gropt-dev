@@ -4,35 +4,32 @@
 
 namespace Gropt {
 
-Op_Identity::Op_Identity(GroptParams &_gparams)
-    : Operator(_gparams)
+Op_Identity::Op_Identity(const ProblemData &_pdata)
+    : Operator(_pdata)
 {
-    name = "Identity"; 
+    name = "Identity";
 }
 
-Op_Identity::Op_Identity(GroptParams &_gparams, double _weight_mod)
-    : Operator(_gparams)
+Op_Identity::Op_Identity(const ProblemData &_pdata, double _weight_mod)
+    : Operator(_pdata)
 {
-    name = "Identity"; 
+    name = "Identity";
     weight_mod = _weight_mod;
 }
 
 void Op_Identity::init()
 {
-    spdlog::trace("Op_Identity::init  N = {}", gparams->N);
-    
+    spdlog::trace("Op_Identity::init  N = {}", pdata->N);
+
     target = 0;
 
     spec_norm2 = 1.0;
     spec_norm = 1.0;
 
-    Ax_size = gparams->Naxis * gparams->N;
+    Ax_size = pdata->Naxis * pdata->N;
 
     if (do_init_weights) {
-        weight = 1.0;
         obj_weight = 1.0;
-
-        weight *= weight_mod;
         obj_weight *= weight_mod;
     }
 
@@ -46,7 +43,7 @@ void Op_Identity::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
 void Op_Identity::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
-    out = X;    
+    out = X;
 }
 
 void Op_Identity::prox(Eigen::VectorXd &X)

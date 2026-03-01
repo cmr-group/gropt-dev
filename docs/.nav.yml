@@ -7,3 +7,5 @@ nav:
       - Solving: python/solvers.md
   - Examples:
       - "examples/"
+  - Math:
+      - "math/"

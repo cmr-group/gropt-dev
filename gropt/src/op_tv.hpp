@@ -1,16 +1,9 @@
 #ifndef OP_TV_H
 #define OP_TV_H
 
-/**
- * Constriant on total variation, i.e. |dG|_1 <= TV
- * This is basically the slew rate constriant, but the prox function has been changed to 
- * a shrinkage operator.  They could probably be merged into one operator, or even considering
- * some way to make all constraints have shrinkage as a prox function option.
- */
-
-#include <iostream> 
+#include <iostream>
 #include <string>
-#include <math.h>  
+#include <math.h>
 #include "Eigen/Dense"
 
 #include "op_main.hpp"
@@ -18,12 +11,12 @@
 namespace Gropt {
 
 class Op_TV : public Operator
-{  
+{
     protected:
         double tv_lam = 0.0;
 
     public:
-        Op_TV(GroptParams &_gparams, double _tv_lam, double _weight_mod);
+        Op_TV(const ProblemData &_pdata, double _tv_lam, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

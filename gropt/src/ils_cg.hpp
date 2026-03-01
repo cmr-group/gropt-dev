@@ -1,7 +1,7 @@
 #ifndef ILS_CG_H
 #define ILS_CG_H
 
-#include <iostream> 
+#include <iostream>
 #include <string>
 #include <vector>
 #include "Eigen/Dense"
@@ -19,13 +19,12 @@ class ILS_CG : public IndirectLinearSolver
         Eigen::VectorXd Ap;
         Eigen::VectorXd r;
         Eigen::VectorXd p;
-        
+
         double tol;
         int min_iter;
 
         ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma, int _n_iter, double _tik_lam);
 
-        // Runs conventional conjugate gradient
         Eigen::VectorXd solve(Eigen::VectorXd &x0) override;
 
 };

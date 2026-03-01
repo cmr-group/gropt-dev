@@ -4,18 +4,18 @@
 
 namespace Gropt {
 
-Op_SAFE::Op_SAFE(GroptParams &_gparams, double _stim_thresh, double _weight_mod)
-    : Operator(_gparams)
+Op_SAFE::Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod)
+    : Operator(_pdata)
 {
-    name = "SAFE"; 
+    name = "SAFE";
     stim_thresh = _stim_thresh;
     weight_mod = _weight_mod;
 }
 
-Op_SAFE::Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, double _weight_mod)
-    : Operator(_gparams)
+Op_SAFE::Op_SAFE(const ProblemData &_pdata, int _N_vec, double *_stim_thresh_vec, double _weight_mod)
+    : Operator(_pdata)
 {
-    name = "SAFE"; 
+    name = "SAFE";
     stim_thresh = 1.0;
     weight_mod = _weight_mod;
 
@@ -27,40 +27,40 @@ Op_SAFE::Op_SAFE(GroptParams &_gparams, int _N_vec, double *_stim_thresh_vec, do
 
 void Op_SAFE::init()
 {
-    spdlog::trace("Op_SAFE::init  N = {}", gparams->N);
+    spdlog::trace("Op_SAFE::init  N = {}", pdata->N);
 
-    safe_params.calc_alphas(gparams->dt);
+    safe_params.calc_alphas(pdata->dt);
 
     // We will ignore this for now and just use stim_thresh_vec directly
     target = 0;
     tol0 = stim_thresh;
     tol = (1.0-cushion) * tol0;
 
-    if (stim_thresh_vec.size() != gparams->Naxis * gparams->N) {
+    if (stim_thresh_vec.size() != pdata->Naxis * pdata->N) {
         if (stim_thresh_vec.size() != 0) {
             spdlog::warn("Op_SAFE::init  stim_thresh_vec size does not match Naxis * N, resizing to match");
         }
-        stim_thresh_vec.resize(gparams->Naxis * gparams->N);
+        stim_thresh_vec.resize(pdata->Naxis * pdata->N);
         for (int i = 0; i < stim_thresh_vec.size(); i++) {
             stim_thresh_vec(i) = stim_thresh;
         }
     }
 
-    spec_norm2 = 4.0/gparams->dt/gparams->dt;
+    spec_norm2 = 4.0/pdata->dt/pdata->dt;
     spec_norm = sqrt(spec_norm2);
 
-    Ax_size = 3 * gparams->Naxis * gparams->N;
+    Ax_size = 3 * pdata->Naxis * pdata->N;
 
     if (do_init_weights) {
-        weight = 1e4;
+        // weight is set on workspace, not here
     }
 
-    signs1.setZero(gparams->Naxis*gparams->N);
-    signs2.setZero(gparams->Naxis*gparams->N);
-    signs3.setZero(gparams->Naxis*gparams->N);
-    stim1.setZero(gparams->Naxis*gparams->N);
-    stim2.setZero(gparams->Naxis*gparams->N);
-    stim3.setZero(gparams->Naxis*gparams->N);
+    signs1.setZero(pdata->Naxis*pdata->N);
+    signs2.setZero(pdata->Naxis*pdata->N);
+    signs3.setZero(pdata->Naxis*pdata->N);
+    stim1.setZero(pdata->Naxis*pdata->N);
+    stim2.setZero(pdata->Naxis*pdata->N);
+    stim3.setZero(pdata->Naxis*pdata->N);
 
     Operator::init();
 
@@ -77,7 +77,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
         }
     }
 
-    // stim1 = tau_filter_1(dX/dt) 
+    // stim1 = tau_filter_1(dX/dt)
     stim1.setZero();
     for (int j = 0; j < Naxis; j++) {
         stim1(j*N) = safe_params.alpha1[j] * out(j*N);
@@ -86,7 +86,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
         }
     }
 
-    // stim1 = abs(tau_filter_1(dX/dt)) 
+    // stim1 = abs(tau_filter_1(dX/dt))
     for (int i = 0; i < stim1.size(); i++) {
         if (stim1(i) < 0) {signs1(i) = -1.0;}
         else {signs1(i) = 1.0;}
@@ -118,7 +118,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
     }
 
 
-    // stim3 = tau_filter_3(dX/dt) 
+    // stim3 = tau_filter_3(dX/dt)
     stim3.setZero();
     for (int j = 0; j < Naxis; j++) {
         stim3(j*N) = safe_params.alpha3[j] * out(j*N);
@@ -127,7 +127,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
         }
     }
 
-    // stim3 = abs(tau_filter_3(dX/dt)) 
+    // stim3 = abs(tau_filter_3(dX/dt))
     for (int i = 0; i < stim3.size(); i++) {
         if (stim3(i) < 0) {signs3(i) = -1.0;}
         else {signs3(i) = 1.0;}
@@ -147,7 +147,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 
 void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
-    
+
     // Split and scale by a, stim_limit, g_scale
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
@@ -156,14 +156,14 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
             stim3(j*N+i) = safe_params.a3[j] * X(j*3*N + i+2*N) / safe_params.stim_limit[j] * safe_params.g_scale[j];
         }
     }
-    
-    
+
+
     // stim1 = signs1 * stim1
     for (int i = 0; i < stim1.size(); i++) {
         stim1(i) = signs1(i) * stim1(i);
     }
 
-    // stim1 = tau_filter_1_T(stim1)    
+    // stim1 = tau_filter_1_T(stim1)
     for (int j = 0; j < Naxis; j++) {
         stim1(j*N+N-1) = safe_params.alpha1[j] * stim1(j*N+N-1);
         for (int i = N-2; i >= 0; i--) {
@@ -172,7 +172,7 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
     }
 
 
-    // stim2 = tau_filter_2_T(stim2)    
+    // stim2 = tau_filter_2_T(stim2)
     for (int j = 0; j < Naxis; j++) {
         stim2(j*N+N-1) = safe_params.alpha2[j] * stim2(j*N+N-1);
         for (int i = N-2; i >= 0; i--) {
@@ -192,7 +192,7 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
         stim3(i) = signs3(i) * stim3(i);
     }
 
-    // stim3 = tau_filter_3_T(stim3)    
+    // stim3 = tau_filter_3_T(stim3)
     for (int j = 0; j < Naxis; j++) {
         stim3(j*N+N-1) = safe_params.alpha3[j] * stim3(j*N+N-1);
         for (int i = N-2; i >= 0; i--) {
@@ -239,7 +239,7 @@ void Op_SAFE::prox(Eigen::VectorXd &X)
                 X(j*3*N+i+2*N) *= (upper_bound/val);
             }
         }
-        }   
+        }
     } else {
         for (int i = 0; i < N; i++) {
             double val = 0.0;
@@ -282,7 +282,7 @@ void Op_SAFE::check(Eigen::VectorXd &X)
                 is_feas = 0;
             }
         }
-        }   
+        }
     } else {
         for (int i = 0; i < N; i++) {
             double val = 0.0;
@@ -302,9 +302,9 @@ void Op_SAFE::check(Eigen::VectorXd &X)
 }
 
 
-void SAFEParams::set_demo_params() 
+void SAFEParams::set_demo_params()
 {
-    tau1[0] = 0.135/1000.0; 
+    tau1[0] = 0.135/1000.0;
     tau2[0] = 12.0/1000.0;
     tau3[0] = 0.5175/1000.0;
     a1[0] = 0.3130;
@@ -332,39 +332,23 @@ void SAFEParams::set_demo_params()
     g_scale[2] = 0.25;
 }
 
-void SAFEParams::set_params(double *_tau1, double *_tau2, double *_tau3, 
+void SAFEParams::set_params(double *_tau1, double *_tau2, double *_tau3,
                             double *_a1, double *_a2, double *_a3,
-                            double *_stim_limit, double *_g_scale) 
+                            double *_stim_limit, double *_g_scale)
 {
-    tau1[0] = _tau1[0]; 
-    tau2[0] = _tau2[0];
-    tau3[0] = _tau3[0];
-    a1[0] = _a1[0];
-    a2[0] = _a2[0];
-    a3[0] = _a3[0];
-    stim_limit[0] = _stim_limit[0];
-    g_scale[0] = _g_scale[0];
-
-    tau1[1] = _tau1[1];
-    tau2[1] = _tau2[1];
-    tau3[1] = _tau3[1];
-    a1[1] = _a1[1];
-    a2[1] = _a2[1];
-    a3[1] = _a3[1];
-    stim_limit[1] = _stim_limit[1];
-    g_scale[1] = _g_scale[1];
-
-    tau1[2] = _tau1[2];
-    tau2[2] = _tau2[2];
-    tau3[2] = _tau3[2];
-    a1[2] = _a1[2];
-    a2[2] = _a2[2];
-    a3[2] = _a3[2];
-    stim_limit[2] = _stim_limit[2];
-    g_scale[2] = _g_scale[2];
+    for (int i = 0; i < 3; i++) {
+        tau1[i] = _tau1[i];
+        tau2[i] = _tau2[i];
+        tau3[i] = _tau3[i];
+        a1[i] = _a1[i];
+        a2[i] = _a2[i];
+        a3[i] = _a3[i];
+        stim_limit[i] = _stim_limit[i];
+        g_scale[i] = _g_scale[i];
+    }
 }
 
-void SAFEParams::swap_first_axes(int new_first_axis) 
+void SAFEParams::swap_first_axes(int new_first_axis)
 {
     if (new_first_axis < 0 || new_first_axis >= 3) {
         spdlog::error("Invalid axis index: {}", new_first_axis);
@@ -381,7 +365,7 @@ void SAFEParams::swap_first_axes(int new_first_axis)
     }
 }
 
-void SAFEParams::calc_alphas(double dt) 
+void SAFEParams::calc_alphas(double dt)
 {
     for (int i = 0; i < 3; i++) {
         alpha1[i] = dt/(tau1[i] + dt);

@@ -28,6 +28,10 @@ set(SRC_FILES
     op_tv.cpp
     solver.cpp
     solver_groptsdmm.cpp
+    solver_osqp.cpp
+    workspace_osqp.cpp
+    workspace_sdmm.cpp
+    workspace_solver.cpp
 )
 
 add_executable(gropt main.cpp ${SRC_FILES})

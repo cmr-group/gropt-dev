@@ -7,9 +7,9 @@
  * or the slew magnitude.
  */
 
-#include <iostream> 
+#include <iostream>
 #include <string>
-#include <math.h>  
+#include <math.h>
 #include "Eigen/Dense"
 
 #include "op_main.hpp"
@@ -17,12 +17,12 @@
 namespace Gropt {
 
 class Op_Slew : public Operator
-{  
+{
     protected:
         double smax;
 
     public:
-        Op_Slew(GroptParams &_gparams, double _smax, bool _rot_variant, double _weight_mod);
+        Op_Slew(const ProblemData &_pdata, double _smax, bool _rot_variant, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

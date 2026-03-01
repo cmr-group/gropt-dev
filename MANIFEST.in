@@ -1,2 +1,0 @@
-include gropt/gropt_wrapper/c_gropt.pxd
-graft gropt/src

@@ -1,7 +1,7 @@
 #ifndef ILS_BICGSTABL_H
 #define ILS_BICGSTABL_H
 
-#include <iostream> 
+#include <iostream>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -23,12 +23,12 @@ class ILS_BiCGstabl : public IndirectLinearSolver
         Eigen::VectorXd x;
         Eigen::VectorXd r_shadow;
         Eigen::VectorXd r;
-        
+
         Eigen::VectorXd Ax;
         Eigen::VectorXd b;
-        
+
         Eigen::VectorXd sigma;
-        Eigen::VectorXd gamma;  
+        Eigen::VectorXd gamma;
         Eigen::VectorXd gammap;
         Eigen::VectorXd gammapp;
 
@@ -36,7 +36,6 @@ class ILS_BiCGstabl : public IndirectLinearSolver
 
         ILS_BiCGstabl(GroptParams &_gparams, double _tol, double _sigma, int _n_iter, double _tik_lam);
 
-        // Runs conventional conjugate gradient
         Eigen::VectorXd solve(Eigen::VectorXd &x_in) override;
 
 };
