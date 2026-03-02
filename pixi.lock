@@ -620,8 +620,8 @@ packages:
   requires_python: '>=3.9'
 - pypi: ./
   name: gropt
-  version: 2.0.0rc3.dev16
-  sha256: 12cd27c12a7f063bdb81a8f58f281cd3e067ed12eead109a7e64aad6d5736525
+  version: 2.0.0rc3.dev13+g907a738b2.d20260302
+  sha256: 41d4e5e431f3c0136b98e0b66c8e84f523358be20676a2bdab45e6bf80e0dd2b
   requires_dist:
   - numpy
   - pyqt6 ; extra == 'gui'

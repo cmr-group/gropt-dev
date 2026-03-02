@@ -754,4 +754,19 @@ Returns
 np.ndarray
     SAFE response curve.)doc"
     );
+
+    m.def("_test_eigen_assertions", &Gropt::test_eigen_assertions,
+        "test_type"_a,
+R"doc(Test that assertions are running in Eigen. 
+
+Each test is a different assertion that should be triggered in Eigen.  All tests are
+expected to pass in normal execution.
+
+Parameters
+----------
+test_type : int
+    The type of assertion test to run, (1, 2, or 3).)doc"
+    );
+
+    
 }
