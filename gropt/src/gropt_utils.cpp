@@ -135,19 +135,29 @@ Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, b
 void test_eigen_assertions(int test_type) {
     switch (test_type) {
     case 1: {
+        spdlog::info("Starting test_eigen_assertions(1)...");
         Eigen::VectorXd v(3);
         double x = v(10); // out of bounds
+        spdlog::info("Finsihed test_eigen_assertions(1)  x = {}", x);
         break;
     }
     case 2: {
+        spdlog::info("Starting test_eigen_assertions(2)...");
         Eigen::VectorXd v(5);
-        if (!v.array().isNaN().any())
+        if (!v.array().isNaN().any()) {
+            spdlog::info("No NaN found");
             throw std::runtime_error("expected NaN initialization");
+        } else {
+            spdlog::info("NaN found");
+        }
+        spdlog::info("Finished test_eigen_assertions(2)  v[0] = {}", v[0]);
         break;
     }
     case 3: {
+        spdlog::info("Starting test_eigen_assertions(3)...");
         Eigen::VectorXd a(3), b(5);
         Eigen::VectorXd c = a + b; // size mismatch
+        spdlog::info("Finished test_eigen_assertions(3)  c[4] = {}", c[4]);
         break;
     }
     default:

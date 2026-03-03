@@ -755,7 +755,7 @@ np.ndarray
     SAFE response curve.)doc"
     );
 
-    m.def("_test_eigen_assertions", &Gropt::test_eigen_assertions,
+    m.def("test_eigen_assertions", &Gropt::test_eigen_assertions,
         "test_type"_a,
 R"doc(Test that assertions are running in Eigen. 
 

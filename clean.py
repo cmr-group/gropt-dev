@@ -20,6 +20,11 @@ glob_patterns_to_remove = [
     '*.pyd',  # Add this if you want to clean up stray .pyd files in the root
 ]
 
+# Glob patterns for directories searched recursively under the project root.
+recursive_glob_patterns_to_remove = [
+    'gropt/__pycache__',
+]
+
 
 # --- Main Execution ---
 def main():
@@ -45,6 +50,13 @@ def main():
             elif path.is_file():
                 print(f'Removing glob-matched file: {path.relative_to(project_root)}')
                 path.unlink()
+
+    # Remove specific recursive paths
+    for pattern in recursive_glob_patterns_to_remove:
+        path = project_root / pattern
+        if path.is_dir():
+            print(f'Removing directory: {path.relative_to(project_root)}')
+            shutil.rmtree(path)
 
     print('--- Cleanup finished successfully ---')
 

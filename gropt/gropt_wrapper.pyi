@@ -1,5 +1,3 @@
-"""GrOpt: Gradient Optimization for MRI"""
-
 from collections.abc import Callable
 import enum
 from typing import Annotated, overload
@@ -594,4 +592,17 @@ def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')
     -------
     np.ndarray
         SAFE response curve.
+    """
+
+def test_eigen_assertions(test_type: int) -> None:
+    """
+    Test that assertions are running in Eigen. 
+
+    Each test is a different assertion that should be triggered in Eigen.  All tests are
+    expected to pass in normal execution.
+
+    Parameters
+    ----------
+    test_type : int
+        The type of assertion test to run, (1, 2, or 3).
     """
