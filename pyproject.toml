@@ -33,7 +33,7 @@ environment-pass = ["SETUPTOOLS_SCM_PRETEND_VERSION"]
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
-environment = {MACOSX_DEPLOYMENT_TARGET = "10.13"}
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.13" }
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
