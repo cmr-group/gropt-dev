@@ -1,3 +1,5 @@
+"""GrOpt: Gradient Optimization for MRI"""
+
 from collections.abc import Callable
 import enum
 from typing import Annotated, overload
