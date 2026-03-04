@@ -18,16 +18,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set version from release tag
-        if: github.event_name == 'release'
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Setting version: $VERSION"
-          echo "SETUPTOOLS_SCM_PRETEND_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.3.1
@@ -43,8 +33,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -66,15 +54,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
       - name: Install build dependencies
-        run: pip install scikit-build-core nanobind setuptools-scm
+        run: pip install scikit-build-core nanobind
 
       - name: Install gropt with Eigen assertions enabled
         run: pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON
@@ -82,9 +68,26 @@ jobs:
       - name: Smoke test
         run: python -c "import gropt; gropt.demo()"
 
+  check_version:
+    name: Check version matches tag
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version matches tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "Tag: $TAG  |  pyproject.toml: $VERSION"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "ERROR: tag v$TAG does not match pyproject.toml version $VERSION — did you forget to bump the version?"
+            exit 1
+          fi
+
   publish:
     name: Publish to PyPI
-    needs: [build_wheels, build_sdist, test]
+    needs: [build_wheels, build_sdist, test, check_version]
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'created'
     environment:

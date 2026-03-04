@@ -1,6 +1,6 @@
 [project]
 name = "gropt"
-dynamic = ["version"]
+version = "2.0.0rc9"
 requires-python = ">=3.10"
 dependencies = ["numpy"]
 
@@ -16,20 +16,13 @@ docs = [
 ]
 
 [build-system]
-requires = ["scikit-build-core>=0.10", "nanobind>=2.0", "setuptools-scm>=8"]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.0"]
 build-backend = "scikit_build_core.build"
-
-[tool.scikit-build.metadata.version]
-provider = "scikit_build_core.metadata.setuptools_scm"
-
-[tool.setuptools_scm]
-local_scheme = "no-local-version"
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_* *-manylinux_i686 *-win32"
 test-command = "python -c \"import gropt; gropt.demo()\""
-environment-pass = ["SETUPTOOLS_SCM_PRETEND_VERSION"]
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
@@ -46,7 +39,6 @@ gropt = { path = ".", editable = true }
 cmake = ">=3.17"
 nanobind = ">=2.0"
 scikit-build-core = ">=0.10"
-setuptools-scm = ">=8"
 pip = "*"
 
 [tool.pixi.environments]
