@@ -23,6 +23,9 @@ void Operator::init() {
     x_temp.setZero(Ntot);
     x_temp_obj.setZero(Ntot);
     Ax_temp.setZero(Ax_size);
+
+    eq_rows.setOnes(Ax_size);
+    eq_cols.setOnes(Ntot);
 }
 
 void Operator::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {

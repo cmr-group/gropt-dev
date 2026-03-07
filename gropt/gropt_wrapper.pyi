@@ -6,6 +6,8 @@ import numpy
 from numpy.typing import NDArray
 
 
+__build_date__: str = 'Mar  4 2026 11:50:37'
+
 def set_log_level(level: int) -> None:
     """
     Set the log level for the C++ gropt library.
@@ -319,25 +321,42 @@ class GroptParams:
         operator in all_op and all_obj.
         """
 
-class SolverGroptSDMM:
-    """SDMM solver for GrOpt gradient optimization problems."""
+class Solver:
+    @property
+    def extra_debug(self) -> bool:
+        """
+        If True, populate debug_solver with per-iteration history after solve().
+        """
 
-    def __init__(self) -> None: ...
+    @extra_debug.setter
+    def extra_debug(self, arg: bool, /) -> None: ...
+
+    def get_debug(self) -> dict:
+        """
+        Return debug history as a dict of lists of numpy arrays.
+
+        Only populated when extra_debug=True before solve().
+
+        Returns
+        -------
+        dict with keys: hist_X, hist_Ax, hist_z, hist_y, hist_Aty
+            Each value is a list of 1-D numpy arrays, one per logged iteration.
+        """
 
     def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000) -> None:
         """
         Set general solver parameters.
 
-        Parameters 
+        Parameters
         ----------
         min_iter : int, optional
-            Minimum SDMM iterations.
+            Minimum iterations.
         max_iter : int, optional
-            Maximum SDMM iterations.
+            Maximum iterations.
         log_interval : int, optional
             Logging interval (only visible with verbose logging).
         gamma_x : float, optional
-            Relaxation parameter for SDMM updates.
+            Relaxation parameter for updates.
         max_feval : int, optional
             Maximum total function evaluations.
         """
@@ -351,7 +370,7 @@ class SolverGroptSDMM:
         ils_tol : float, optional
             Relative tolerance for the inner solver.
         ils_max_iter : int, optional
-            Maximum ILS iterations per SDMM iteration.
+            Maximum ILS iterations per outer iteration.
         ils_min_iter : int, optional
             Minimum ILS iterations.
         ils_sigma : float, optional
@@ -359,6 +378,11 @@ class SolverGroptSDMM:
         ils_tik_lam : float, optional
             Tikhonov regularization parameter.
         """
+
+class SolverGroptSDMM(Solver):
+    """SDMM solver for GrOpt gradient optimization problems."""
+
+    def __init__(self) -> None: ...
 
     def set_sdmm_params(self, rw_interval: int = 8, rw_e_corr: float = 0.4, rw_eps: float = 1e-36, rw_scalelim: float = 1.5, grw_min_infeasible: int = 20, grw_interval: int = 20, grw_mod: float = 2.0) -> None:
         """
@@ -397,46 +421,10 @@ class SolverGroptSDMM:
             The optimization result containing the waveform and convergence info.
         """
 
-class SolverOSQP:
+class SolverOSQP(Solver):
     """OSQP solver for GrOpt gradient optimization problems."""
 
     def __init__(self) -> None: ...
-
-    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000) -> None:
-        """
-        Set general solver parameters.
-
-        Parameters 
-        ----------
-        min_iter : int, optional
-            Minimum OSQP iterations.
-        max_iter : int, optional
-            Maximum OSQP iterations.
-        log_interval : int, optional
-            Logging interval (only visible with verbose logging).
-        gamma_x : float, optional
-            Relaxation parameter for OSQP updates.
-        max_feval : int, optional
-            Maximum total function evaluations.
-        """
-
-    def set_ils_params(self, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> None:
-        """
-        Set indirect linear solver parameters.
-
-        Parameters
-        ----------
-        ils_tol : float, optional
-            Relative tolerance for the inner solver.
-        ils_max_iter : int, optional
-            Maximum ILS iterations per OSQP iteration.
-        ils_min_iter : int, optional
-            Minimum ILS iterations.
-        ils_sigma : float, optional
-            ADMM penalty parameter.
-        ils_tik_lam : float, optional
-            Tikhonov regularization parameter.
-        """
 
     def solve(self, gparams: GroptParams) -> SolveResult:
         """

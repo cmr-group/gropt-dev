@@ -22,6 +22,7 @@ void equilibrate(GroptParams &gparams, int n_iter, int n_reps) {
         col_norms = col_norms.cwiseSqrt().cwiseInverse();
 
         // TODO: This should be all axis
+        // TODO: Also check how this affects convergence, there is something important about these points with slew rate
         col_norms[0] = col_norms[1];
         col_norms[col_norms.size() - 1] = col_norms[col_norms.size() - 2];
 
@@ -92,6 +93,8 @@ void estimate_row_col_norms(GroptParams &gparams, int n_reps, NormType norm_type
     row_norms.setZero(N_rows);
     col_norms.setZero(N_cols);
 
+    spdlog::trace("N_rows {}   N_cols {}", N_rows, N_cols);
+
     // Row norm reps
     for (int rep = 0; rep < n_reps; rep++) {
         Eigen::VectorXd z = Eigen::VectorXd::Random(N_cols).array().sign();
@@ -109,6 +112,8 @@ void estimate_row_col_norms(GroptParams &gparams, int n_reps, NormType norm_type
             row_start += op->Ax_size;
         }
     }
+
+    spdlog::trace("After row norms");
 
     // Col norm reps
     for (int rep = 0; rep < n_reps; rep++) {
@@ -128,6 +133,8 @@ void estimate_row_col_norms(GroptParams &gparams, int n_reps, NormType norm_type
             col_norms = col_norms.cwiseMax(Atw.cwiseAbs());
         }
     }
+
+    spdlog::trace("After col norms");
 
     if (norm_type == NormType::L2) {
         row_norms = (row_norms / n_reps).cwiseSqrt();

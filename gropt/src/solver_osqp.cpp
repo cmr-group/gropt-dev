@@ -23,12 +23,10 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
 
         // Set initial weight based on operator type
         osqp_ws[i].weight = 1.0;
-        if (!op->do_equil) {
-            // Slew, moment, bvalue, SAFE, TV operators start with higher weight
-            if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE" ||
-                op->name == "TotalVariation") {
-                osqp_ws[i].weight = 1e4;
-            }
+        // Slew, moment, bvalue, SAFE, TV operators start with higher weight
+        if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE" ||
+            op->name == "TotalVariation") {
+            osqp_ws[i].weight = 1e4;
         }
         osqp_ws[i].weight *= op->weight_mod;
 
@@ -69,6 +67,9 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
     }
     r_primal.setZero(total_Ax_size);
 
+    // ===============================================
+    //  OSQP iterations
+    // ===============================================
     int total_feval = 0;
     for (iiter = 0; iiter < max_iter; ++iiter) {
         spdlog::trace("Starting OSQP iteration {:d} SolverOSQP::solve", iiter);
@@ -90,10 +91,6 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
         X = gamma_x * Xhat + (1 - gamma_x) * X;
 
         get_residuals(X);
-
-        if (extra_debug) {
-            hist_X.push_back(X);
-        }
 
         if ((logger(X) > 0) && (iiter > min_iter)) {
             break;
@@ -143,6 +140,54 @@ void SolverOSQP::update(Eigen::VectorXd &X) {
 }
 
 void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
+
+    //  Get dimensions (shouldn't be needed every iteration)
+    int N_rows = 0;
+    for (int i = 0; i < gparams->all_op.size(); i++) {
+        N_rows += gparams->all_op[i]->Ax_size;
+    }
+
+    int N_cols = gparams->N * gparams->Naxis;
+
+    // Calculate relevant variables for residuals
+    Eigen::VectorXd Ax;
+    Ax.setZero(N_rows);
+
+    Eigen::VectorXd z;
+    z.setZero(N_rows);
+
+    Eigen::VectorXd y;
+    y.setZero(N_rows);
+
+    Eigen::VectorXd Aty;
+    Aty.setZero(N_cols);
+
+    int row_start = 0;
+    for (int i = 0; i < gparams->all_op.size(); i++) {
+        Operator *op = gparams->all_op[i].get();
+        WorkspaceOSQP &w = osqp_ws[i];
+
+        op->Ax_temp.setZero();
+        op->forward_op(X, op->Ax_temp);
+        Ax.segment(row_start, op->Ax_size) = op->Ax_temp;
+        z.segment(row_start, op->Ax_size) = w.z1;
+        y.segment(row_start, op->Ax_size) = w.y1;
+
+        op->x_temp.setZero();
+        op->transpose_op(w.y1, op->x_temp);
+        Aty.array() += op->x_temp.array();
+
+        row_start += op->Ax_size;
+    }
+
+    if (extra_debug) {
+        debug_solver.hist_Ax.push_back(Ax);
+        debug_solver.hist_z.push_back(z);
+        debug_solver.hist_y.push_back(y);
+        debug_solver.hist_Aty.push_back(Aty);
+        debug_solver.hist_X.push_back(X);
+    }
+
     // Update feasibility metrics
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
