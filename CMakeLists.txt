@@ -38,6 +38,7 @@ set(GROPT_SOURCES
 )
 
 add_library(gropt_core STATIC ${GROPT_SOURCES})
+set_target_properties(gropt_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(gropt_core PUBLIC
     ${GROPT_SRC_DIR}
     ${GROPT_SRC_DIR}/external
