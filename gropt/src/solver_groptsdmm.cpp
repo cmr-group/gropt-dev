@@ -100,7 +100,6 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             } else {
                 break;
             }
-            break;
         }
 
         total_feval += ils_solver->hist_n_iter.back();
