@@ -94,7 +94,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 
         if ((logger(X) > 0) && (iiter > min_iter)) {
             if (extra_iters > 0) {
-                spdlog::info("First dsolved at iiter {:d}, now {:d} extra iterations", iiter, extra_iters);
+                spdlog::info("First solved at iiter {:d}, now {:d} extra iterations", iiter, extra_iters);
                 min_iter = iiter + extra_iters;
                 extra_iters = 0;
             } else {
