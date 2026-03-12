@@ -6,11 +6,30 @@ on:
   pull_request:
     branches: [main]
   release:
-    types: [created]
+    types: [published]
 
 jobs:
+  check_version:
+    name: Check version matches tag
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify version matches tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          echo "Tag: $TAG  |  pyproject.toml: $VERSION"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "ERROR: tag v$TAG does not match pyproject.toml version $VERSION — did you forget to bump the version?"
+            exit 1
+          fi
+
   build_wheels:
     name: Build wheels on ${{ matrix.os }}
+    needs: [check_version]
+    if: always() && (needs.check_version.result == 'success' || needs.check_version.result == 'skipped')
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -29,6 +48,8 @@ jobs:
 
   build_sdist:
     name: Build source distribution
+    needs: [check_version]
+    if: always() && (needs.check_version.result == 'success' || needs.check_version.result == 'skipped')
     runs-on: ubuntu-latest
 
     steps:
@@ -51,6 +72,8 @@ jobs:
 
   test:
     name: Test with Eigen assertions
+    needs: [check_version]
+    if: always() && (needs.check_version.result == 'success' || needs.check_version.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,28 +91,11 @@ jobs:
       - name: Smoke test
         run: python -c "import gropt; gropt.demo()"
 
-  check_version:
-    name: Check version matches tag
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify version matches tag
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          echo "Tag: $TAG  |  pyproject.toml: $VERSION"
-          if [ "$TAG" != "$VERSION" ]; then
-            echo "ERROR: tag v$TAG does not match pyproject.toml version $VERSION — did you forget to bump the version?"
-            exit 1
-          fi
-
   publish:
     name: Publish to PyPI
-    needs: [build_wheels, build_sdist, test, check_version]
+    needs: [build_wheels, build_sdist, test]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && github.event.action == 'created'
+    if: github.event_name == 'release'
     environment:
       name: pypi
       url: https://pypi.org/p/gropt
