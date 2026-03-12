@@ -166,9 +166,39 @@ double estimate_spec_norm(GroptParams &gparams, int n_iters) {
         }
         lambda_max = v_next.norm();
         v = v_next / lambda_max;
-        spdlog::debug("estimate_spec_norm iteration {}: lambda_max = {}", iter, lambda_max);
+        spdlog::debug("estimate_spec_norm iteration {}: lambda_max = {:.2e}", iter, lambda_max);
     }
 
+    spdlog::debug("Final spec_norm2 {:.2e}: spec_norm = {:.2e}", lambda_max, sqrt(lambda_max));
     return sqrt(lambda_max);
 }
+
+double estimate_individual_spec_norm(GroptParams &gparams, int n_iters, int op_idx) {
+
+    int Ntot = gparams.N * gparams.Naxis;
+
+    // Make a VectorXd of size Ntot using a standard normal distribution, and normalize it to have norm 1
+    Eigen::VectorXd v = Eigen::VectorXd::Random(Ntot);
+    v.normalize();
+
+    double lambda_max;
+    for (int iter = 0; iter < n_iters; iter++) {
+        Eigen::VectorXd v_next = Eigen::VectorXd::Zero(Ntot);
+
+        Operator *op = gparams.all_op[op_idx].get();
+        op->Ax_temp.setZero();
+        op->x_temp.setZero();
+        op->forward_op(v, op->Ax_temp);
+        op->transpose_op(op->Ax_temp, op->x_temp);
+        v_next += op->x_temp;
+
+        lambda_max = v_next.norm();
+        v = v_next / lambda_max;
+        spdlog::debug("estimate_spec_norm iteration {}: lambda_max = {:.2e}", iter, lambda_max);
+    }
+
+    spdlog::debug("Final spec_norm2 {:.2e}: spec_norm = {:.2e}", lambda_max, sqrt(lambda_max));
+    return sqrt(lambda_max);
+}
+
 } // namespace Gropt

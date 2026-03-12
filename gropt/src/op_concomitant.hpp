@@ -18,11 +18,9 @@
 namespace Gropt {
 
 class Op_Concomitant : public Operator {
-  protected:
-    double gmax;
 
   public:
-    Op_Concomitant(const ProblemData &_pdata, double _gmax, bool _rot_variant, double _weight_mod);
+    Op_Concomitant(const ProblemData &_pdata, bool _rot_variant, double _weight_mod);
     virtual void init();
 
     virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

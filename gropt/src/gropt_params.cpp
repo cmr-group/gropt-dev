@@ -3,6 +3,7 @@
 #include "gropt_params.hpp"
 
 #include "op_bvalue.hpp"
+#include "op_concomitant.hpp"
 #include "op_gradient.hpp"
 #include "op_identity.hpp"
 #include "op_moment.hpp"
@@ -44,7 +45,9 @@ void GroptParams::vec_init_simple(int _N, int _Naxis, double first_val, double l
     vec_init_status = N;
 }
 
-void GroptParams::setvec_X0(int _N, int _Naxis, double *_X0, bool set_others) {
+void GroptParams::setvec_X0(const Eigen::VectorXd &_X0, int _Naxis, bool set_others) {
+    int _N = static_cast<int>(_X0.size()) / _Naxis;
+
     if (_N > 0) {
         N = _N;
     }
@@ -55,10 +58,7 @@ void GroptParams::setvec_X0(int _N, int _Naxis, double *_X0, bool set_others) {
 
     Ntot = N * Naxis;
 
-    pdata.X0.setOnes(N * Naxis);
-    for (int i = 0; i < N * Naxis; i++) {
-        pdata.X0(i) = _X0[i];
-    }
+    pdata.X0 = _X0;
 
     if (set_others) {
         pdata.inv_vec.setOnes(N * Naxis);
@@ -78,12 +78,6 @@ void GroptParams::setvec_X0(int _N, int _Naxis, double *_X0, bool set_others) {
     }
 
     vec_init_status = N;
-}
-
-void GroptParams::setvec_X0(const Eigen::VectorXd &_X0, int _Naxis, bool set_others) {
-    int _N = static_cast<int>(_X0.size()) / _Naxis;
-    // const_cast is safe here — the raw-pointer overload only reads from the data
-    setvec_X0(_N, _Naxis, const_cast<double *>(_X0.data()), set_others);
 }
 
 void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout) {
@@ -211,6 +205,10 @@ void GroptParams::add_smax(double smax, bool rot_variant, double weight_mod) {
     all_op.push_back(std::make_unique<Op_Slew>(pdata, smax, rot_variant, weight_mod));
 }
 
+void GroptParams::add_concomitant(bool rot_variant, double weight_mod) {
+    all_op.push_back(std::make_unique<Op_Concomitant>(pdata, rot_variant, weight_mod));
+}
+
 void GroptParams::add_moment(double order, double target, double tol0, std::string units, int moment_axis,
                              int start_idx0, int stop_idx0, int ref_idx0, double weight_mod) {
     all_op.push_back(std::make_unique<Op_Moment>(pdata, order, target, tol0, units, moment_axis, start_idx0, stop_idx0,
@@ -310,6 +308,15 @@ void GroptParams::reset_op_weights() {
         // op->weight_mod = 1.0;
         op->spec_norm = 1.0;
         op->spec_norm2 = 1.0;
+    }
+}
+
+void GroptParams::print_op_details() {
+    for (auto &op : all_op) {
+        op->print_details();
+    }
+    for (auto &op : all_obj) {
+        op->print_details();
     }
 }
 

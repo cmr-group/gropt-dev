@@ -1,22 +1,20 @@
 #include "spdlog/spdlog.h"
 
-#include "op_gradient.hpp"
+#include "op_concomitant.hpp"
 
 namespace Gropt {
 
-Op_Gradient::Op_Gradient(const ProblemData &_pdata, double _gmax, bool _rot_variant, double _weight_mod)
-    : Operator(_pdata) {
-    name = "Gradient";
-    gmax = _gmax;
+Op_Concomitant::Op_Concomitant(const ProblemData &_pdata, bool _rot_variant, double _weight_mod) : Operator(_pdata) {
+    name = "Concomitant";
     rot_variant = _rot_variant;
     weight_mod = _weight_mod;
 }
 
-void Op_Gradient::init() {
-    spdlog::trace("Op_Gradient::init  N = {}", pdata->N);
+void Op_Concomitant::init() {
+    spdlog::trace("Op_Concomitant::init  N = {}", pdata->N);
 
     target = 0;
-    tol0 = gmax;
+    tol0 = 1.0;
     tol = (1.0 - cushion) * tol0;
 
     spec_norm2 = 1.0;
@@ -32,49 +30,40 @@ void Op_Gradient::init() {
     Operator::init();
 }
 
-void Op_Gradient::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = X; }
+void Op_Concomitant::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = X; }
 
-void Op_Gradient::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = X; }
+void Op_Concomitant::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = X; }
 
-void Op_Gradient::prox(Eigen::VectorXd &X) {
-    spdlog::trace("Starting Op_Gradient::prox");
+void Op_Concomitant::prox(Eigen::VectorXd &X) {
+    spdlog::trace("Starting Op_Concomitant::prox");
 
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
 
-    if (rot_variant) {
-        for (int i = 0; i < X.size(); i++) {
-            double lower_bound = (target - tol);
-            double upper_bound = (target + tol);
-            X(i) = X(i) < lower_bound ? lower_bound : X(i);
-            X(i) = X(i) > upper_bound ? upper_bound : X(i);
+    double pos = 0.0;
+    double neg = 0.0;
 
-            // This is specific to the Op_Gradient operator
-            if (!isnan(pdata->set_vals(i))) {
-                X(i) = pdata->set_vals(i);
+    for (int i = 0; i < X.size(); i++) {
+        if (pdata->inv_vec(i) > 0) {
+            pos += X(i) * X(i);
+        } else if (pdata->inv_vec(i) < 0) {
+            neg += X(i) * X(i);
+        }
+    }
+
+    if (pos > neg) {
+        double scale = 1.0 / sqrt(pos / neg);
+        for (int i = 0; i < X.size(); i++) {
+            if (pdata->inv_vec(i) > 0) {
+                X(i) *= scale;
             }
         }
-    } else {
-        for (int i = 0; i < N; i++) {
-            double upper_bound = (target + tol);
-
-            double val = 0.0;
-            for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                val += X(i_ax * N + i) * X(i_ax * N + i);
-            }
-            val = sqrt(val);
-
-            if (val > upper_bound) {
-                for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                    X(i_ax * N + i) *= (upper_bound / val);
-                }
-            }
-        }
-
+    } else if (neg > pos) {
+        double scale = 1.0 / sqrt(neg / pos);
         for (int i = 0; i < X.size(); i++) {
-            if (!isnan(pdata->set_vals(i))) {
-                X(i) = pdata->set_vals(i);
+            if (pdata->inv_vec(i) < 0) {
+                X(i) *= scale;
             }
         }
     }
@@ -83,39 +72,29 @@ void Op_Gradient::prox(Eigen::VectorXd &X) {
         X.array() *= eq_rows.array();
     }
 
-    spdlog::trace("Finished Op_Gradient::prox");
+    spdlog::trace("Finished Op_Concomitant::prox");
 }
 
-void Op_Gradient::check(Eigen::VectorXd &X) {
+void Op_Concomitant::check(Eigen::VectorXd &X) {
     int is_feas = 1;
 
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
 
-    if (rot_variant) {
-        for (int i = 0; i < X.size(); i++) {
-            double lower_bound = (target - tol0);
-            double upper_bound = (target + tol0);
+    double pos = 0.0;
+    double neg = 0.0;
 
-            if ((X(i) < lower_bound) || (X(i) > upper_bound) && isnan(pdata->set_vals(i))) {
-                is_feas = 0;
-            }
+    for (int i = 0; i < X.size(); i++) {
+        if (pdata->inv_vec(i) > 0) {
+            pos += X(i) * X(i);
+        } else if (pdata->inv_vec(i) < 0) {
+            neg += X(i) * X(i);
         }
-    } else {
-        for (int i = 0; i < N; i++) {
-            double upper_bound = (target + tol0);
+    }
 
-            double val = 0.0;
-            for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                val += X(i_ax * N + i) * X(i_ax * N + i);
-            }
-            val = sqrt(val);
-
-            if ((val > upper_bound) && isnan(pdata->set_vals(i))) {
-                is_feas = 0;
-            }
-        }
+    if (abs(1.0 - (pos / neg)) > 0.1) {
+        is_feas = 0;
     }
 
     if (do_equil) {

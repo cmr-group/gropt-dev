@@ -55,6 +55,7 @@ void Op_Slew::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     if (rot_variant) {
         for (int i = 0; i < X.size(); i++) {
@@ -84,6 +85,7 @@ void Op_Slew::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     spdlog::trace("Finished Op_Slew::prox");
 }
@@ -94,6 +96,7 @@ void Op_Slew::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     if (rot_variant) {
         for (int i = 0; i < X.size(); i++) {
@@ -141,6 +144,7 @@ void Op_Slew::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 }
 
 } // namespace Gropt

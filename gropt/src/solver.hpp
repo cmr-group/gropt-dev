@@ -21,6 +21,9 @@ struct DebugSolver {
     std::vector<Eigen::VectorXd> hist_z;
     std::vector<Eigen::VectorXd> hist_y;
     std::vector<Eigen::VectorXd> hist_Aty;
+    std::vector<std::vector<double>> hist_weight;
+    std::vector<std::vector<double>> hist_gamma;
+    std::vector<double> hist_gamma_x;
 };
 
 class Solver {

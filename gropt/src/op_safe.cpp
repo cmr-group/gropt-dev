@@ -47,7 +47,7 @@ void Op_SAFE::init() {
         }
     }
 
-    spec_norm2 = 4.0 / pdata->dt / pdata->dt;
+    spec_norm2 = 4.0 / pdata->dt / pdata->dt * 1.69e-05;
     spec_norm = sqrt(spec_norm2);
 
     Ax_size = n_terms * pdata->Naxis * pdata->N;
@@ -244,6 +244,7 @@ void Op_SAFE::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     // This just sums the three terms [stim1, stim2, stim3], it is not the cross axis sum.
     x_temp.setZero();
@@ -293,6 +294,7 @@ void Op_SAFE::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     spdlog::trace("Finished Op_SAFE::prox");
 }
@@ -303,6 +305,7 @@ void Op_SAFE::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     x_temp.setZero();
     for (int j = 0; j < Naxis; j++) {
@@ -345,6 +348,7 @@ void Op_SAFE::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     hist_feas.push_back(is_feas);
 }

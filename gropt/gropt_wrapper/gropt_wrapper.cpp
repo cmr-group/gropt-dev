@@ -71,6 +71,7 @@ n_feval : int
         .def_rw("converged", &Gropt::SolveResult::converged)
         .def_rw("n_iter", &Gropt::SolveResult::n_iter)
         .def_rw("n_feval", &Gropt::SolveResult::n_feval)
+        .def_rw("dt", &Gropt::SolveResult::dt)
         .def("__repr__", [](const Gropt::SolveResult &r) {
             return "SolveResult(converged=" + std::string(r.converged ? "True" : "False") +
                    ", n_iter=" + std::to_string(r.n_iter) +
@@ -198,6 +199,20 @@ Parameters
 ----------
 gmax : float, optional
     Maximum allowed gradient magnitude [T/m].
+rot_variant : bool, optional
+    If True, use rotationally invariant formulation.
+weight_mod : float, optional
+    Weighting factor for this constraint.)doc"
+        )
+
+
+        // add_concomitant
+        .def("add_concomitant", &Gropt::GroptParams::add_concomitant,
+            "rot_variant"_a = true, "weight_mod"_a = 1.0,
+R"doc(Add a concomitant constraint.
+
+Parameters
+----------
 rot_variant : bool, optional
     If True, use rotationally invariant formulation.
 weight_mod : float, optional
@@ -399,6 +414,14 @@ Allocates vectors and sets up initial optimization variables.
 Automatically called by solve() if not already done.)doc"
         )
 
+        // print_op_details
+        .def("print_op_details", &Gropt::GroptParams::print_op_details,
+R"doc(Print details of all operators.
+
+This function prints information about each operator in the problem, including their types and parameters.)doc"
+        )
+
+        
         // reset_op_weights
         .def("reset_op_weights", &Gropt::GroptParams::reset_op_weights,
 R"doc(Reset all operator weights and spectral norms to 1.0.
@@ -422,6 +445,9 @@ operator in all_op and all_obj.)doc"
             d["hist_z"]   = self.debug_solver.hist_z;
             d["hist_y"]   = self.debug_solver.hist_y;
             d["hist_Aty"] = self.debug_solver.hist_Aty;
+            d["hist_weight"] = self.debug_solver.hist_weight;
+            d["hist_gamma"] = self.debug_solver.hist_gamma;
+            d["hist_gamma_x"] = self.debug_solver.hist_gamma_x;
             return d;
         },
 R"doc(Return debug history as a dict of lists of numpy arrays.
@@ -694,6 +720,30 @@ Returns
 float
     Estimated spectral norm.)doc"
     );
+
+        // estimate_spec_norm
+    m.def("estimate_individual_spec_norm", &Gropt::estimate_individual_spec_norm,
+        "gparams"_a, "n_iters"_a = 20, "op_idx"_a = 0,
+R"doc(Estimate the spectral norm of a single operator matrix via power iteration.
+
+Parameters
+----------
+gparams : GroptParams
+    The problem definition (must have operators prepared).
+n_iters : int, optional
+    Number of power iterations.
+op_idx : int, optional
+    Index of the operator for which to estimate the spectral norm.
+
+Returns
+-------
+float
+    Estimated spectral norm.)doc"
+    );
+
+
+
+    
 
     // get_SAFE
     m.def("get_SAFE", [](Eigen::VectorXd G, double dt, bool true_safe,

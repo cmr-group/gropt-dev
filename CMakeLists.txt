@@ -22,6 +22,7 @@ set(GROPT_SOURCES
     ${GROPT_SRC_DIR}/ils_bicgstabl.cpp
     ${GROPT_SRC_DIR}/op_main.cpp
     ${GROPT_SRC_DIR}/op_bvalue.cpp
+    ${GROPT_SRC_DIR}/op_concomitant.cpp
     ${GROPT_SRC_DIR}/op_gradient.cpp
     ${GROPT_SRC_DIR}/op_identity.cpp
     ${GROPT_SRC_DIR}/op_moment.cpp

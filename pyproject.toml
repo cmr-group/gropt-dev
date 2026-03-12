@@ -6,7 +6,7 @@ dependencies = ["numpy"]
 
 [project.optional-dependencies]
 gui = ["pyqt6", "matplotlib"]
-dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn"]
+dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn", "ipywidgets"]
 docs = [
     "mkdocs",
     "mkdocs-material",
@@ -35,12 +35,14 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "10.13" }
 channels = ["conda-forge"]
 platforms = ["win-64"]
 
-[tool.pixi.pypi-dependencies]
-gropt = { path = ".", editable = true }
+# This messes up the rebuild commands, dont let pixi handle gropt at all, we will do it manually with pip install -e . in the tasks section.
+# [tool.pixi.pypi-dependencies]
+# gropt = { path = ".", editable = true }
 
 [tool.pixi.feature.dev.dependencies]
 cmake = ">=3.17"
 nanobind = ">=2.0"
+numpy = "*"
 scikit-build-core = ">=0.10"
 pip = "*"
 
@@ -52,6 +54,15 @@ dev = { features = ["dev", "docs"], solve-group = "default" }
 clean = "python clean.py"
 clean-full = "python clean.py --full"
 touch-wrapper = "python -c \"from pathlib import Path; Path('gropt/gropt_wrapper/gropt_wrapper.cpp').touch()\""
-rebuild = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = ["clean", "touch-wrapper"] }
-rebuild-full = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = ["clean-full", "touch-wrapper"] }
-rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON", depends-on = ["clean-full", "touch-wrapper"] }
+rebuild = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
+    "clean",
+    "touch-wrapper",
+] }
+rebuild-full = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
+    "clean-full",
+    "touch-wrapper",
+] }
+rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON", depends-on = [
+    "clean-full",
+    "touch-wrapper",
+] }

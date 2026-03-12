@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Mar  4 2026 11:50:37'
+__build_date__: str = 'Mar 11 2026 17:16:30'
 
 def set_log_level(level: int) -> None:
     """
@@ -184,6 +184,18 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
+    def add_concomitant(self, rot_variant: bool = True, weight_mod: float = 1.0) -> None:
+        """
+        Add a concomitant constraint.
+
+        Parameters
+        ----------
+        rot_variant : bool, optional
+            If True, use rotationally invariant formulation.
+        weight_mod : float, optional
+            Weighting factor for this constraint.
+        """
+
     def add_smax(self, smax: float = 80.0, rot_variant: bool = True, weight_mod: float = 1.0) -> None:
         """
         Add a maximum gradient slew rate constraint.
@@ -311,6 +323,13 @@ class GroptParams:
 
         Allocates vectors and sets up initial optimization variables.
         Automatically called by solve() if not already done.
+        """
+
+    def print_op_details(self) -> None:
+        """
+        Print details of all operators.
+
+        This function prints information about each operator in the problem, including their types and parameters.
         """
 
     def reset_op_weights(self) -> None:
@@ -550,6 +569,25 @@ def estimate_spec_norm(gparams: GroptParams, n_iters: int = 20) -> float:
         The problem definition (must have operators prepared).
     n_iters : int, optional
         Number of power iterations.
+
+    Returns
+    -------
+    float
+        Estimated spectral norm.
+    """
+
+def estimate_individual_spec_norm(gparams: GroptParams, n_iters: int = 20, op_idx: int = 0) -> float:
+    """
+    Estimate the spectral norm of a single operator matrix via power iteration.
+
+    Parameters
+    ----------
+    gparams : GroptParams
+        The problem definition (must have operators prepared).
+    n_iters : int, optional
+        Number of power iterations.
+    op_idx : int, optional
+        Index of the operator for which to estimate the spectral norm.
 
     Returns
     -------

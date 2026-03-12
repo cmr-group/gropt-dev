@@ -74,8 +74,10 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             Xhat = X;
         }
 
-        if (Xhat.array().isNaN().any()) {
-            spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
+        // if (Xhat.array().isNaN().any()) {
+        if ((Xhat.array().abs() > 10).any()) {
+            // spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
+            spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         };
 
@@ -104,6 +106,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     SolveResult result;
     result.X = X;
     result.n_iter = iiter;
+    result.dt = gparams->dt;
     final_log(X, result);
 
     delete ils_solver;

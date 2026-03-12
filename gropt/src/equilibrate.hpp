@@ -22,6 +22,8 @@ void equilibrate(GroptParams &gparams, int n_iter, int n_reps);
 
 double estimate_spec_norm(GroptParams &gparams, int n_iters);
 
+double estimate_individual_spec_norm(GroptParams &gparams, int n_iters, int op_idx);
+
 } // namespace Gropt
 
 #endif

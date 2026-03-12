@@ -80,8 +80,10 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
             Xhat = X;
         }
 
-        if (Xhat.array().isNaN().any()) {
-            spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
+        // if (Xhat.array().isNaN().any()) {
+        if ((Xhat.array().abs() > 10).any()) {
+            // spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
+            spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         };
 
@@ -106,6 +108,7 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
     SolveResult result;
     result.X = X;
     result.n_iter = iiter;
+    result.dt = gparams->dt;
     final_log(X, result);
 
     delete ils_solver;
@@ -117,6 +120,11 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
 
 void SolverOSQP::update(Eigen::VectorXd &X) {
     spdlog::trace("Starting SolverOSQP::update");
+
+    double max_scale = 2.0;
+    Eigen::VectorXd all_weight_scale;
+    all_weight_scale.setZero(gparams->all_op.size());
+    bool needs_reweight = false;
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
@@ -134,6 +142,49 @@ void SolverOSQP::update(Eigen::VectorXd &X) {
 
         w.y0 = w.y1;
         w.z0 = w.z1;
+
+        if (iiter == 2) {
+            w.init_reweight();
+        } else if ((iiter > 5) && (iiter % 50 == 0)) {
+            w.reweight(iiter, max_scale, max_scale, 1.0e-8);
+            needs_reweight = true;
+        }
+        all_weight_scale(i) = w.weight_scale;
+    }
+
+    if (needs_reweight) {
+
+        std::ostringstream oss;
+        oss << "ReWeights: ";
+        for (int i = 0; i < gparams->all_op.size(); i++) {
+            oss << all_weight_scale(i) << " ";
+        }
+        // spdlog::info("{:d}  {}", iiter, oss.str());
+
+        if ((all_weight_scale.array() >= max_scale).all()) {
+            // spdlog::warn("All weight scales above max_scale., scaling to max");
+            // all_weight_scale = all_weight_scale / all_weight_scale.maxCoeff();
+            all_weight_scale.setOnes();
+
+            oss.str("");
+            oss << "Re-ReWeights: ";
+            for (int i = 0; i < gparams->all_op.size(); i++) {
+                oss << all_weight_scale(i) << " ";
+            }
+            // spdlog::info("{:d}  {}", iiter, oss.str());
+        }
+
+        for (int i = 0; i < gparams->all_op.size(); i++) {
+            Operator *op = gparams->all_op[i].get();
+            WorkspaceOSQP &w = osqp_ws[i];
+
+            if (all_weight_scale(i) > max_scale) {
+                all_weight_scale(i) = max_scale;
+            } else if (all_weight_scale(i) < 1.0 / max_scale) {
+                all_weight_scale(i) = 1.0 / max_scale;
+            }
+            w.weight *= all_weight_scale(i);
+        }
     }
 
     spdlog::trace("Finished SolverOSQP::update");
@@ -186,6 +237,19 @@ void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
         debug_solver.hist_y.push_back(y);
         debug_solver.hist_Aty.push_back(Aty);
         debug_solver.hist_X.push_back(X);
+
+        std::vector<double> weight_vec;
+        std::vector<double> gamma_vec;
+        for (int i = 0; i < gparams->all_op.size(); i++) {
+            Operator *op = gparams->all_op[i].get();
+            WorkspaceOSQP &w = osqp_ws[i];
+            weight_vec.push_back(w.weight);
+            gamma_vec.push_back(w.gamma);
+        }
+        debug_solver.hist_weight.push_back(weight_vec);
+        debug_solver.hist_gamma.push_back(gamma_vec);
+
+        debug_solver.hist_gamma_x.push_back(gamma_x);
     }
 
     // Update feasibility metrics

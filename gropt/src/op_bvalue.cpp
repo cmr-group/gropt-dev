@@ -48,7 +48,8 @@ void Op_BValue::init() {
     }
 
     int Nnorm = i_stop - i_start;
-    spec_norm2 = (Nnorm * Nnorm + Nnorm) / 2.0 * MAT_SCALE;
+    spec_norm2 = (Nnorm * Nnorm + Nnorm) / 2.0 * MAT_SCALE * 0.1175 * 4;
+    // spec_norm2 = spec_norm2 * spec_norm2;
     spec_norm = sqrt(spec_norm2);
 
     Ax_size = pdata->Naxis * pdata->N;
@@ -92,6 +93,7 @@ void Op_BValue::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     for (int j = 0; j < Naxis; j++) {
         double xnorm = X.segment(j * N, N).norm();
@@ -127,6 +129,7 @@ void Op_BValue::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     spdlog::trace("Finished Op_BValue::prox");
 }
@@ -137,6 +140,7 @@ void Op_BValue::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     for (int j = 0; j < Naxis; j++) {
         double bval_t = (X.segment(j * N, N)).squaredNorm();
@@ -158,6 +162,7 @@ void Op_BValue::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     hist_feas.push_back(is_feas);
 }
