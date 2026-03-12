@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Mar 11 2026 20:06:43'
+__build_date__: str = 'Mar 11 2026 21:02:43'
 
 def set_log_level(level: int) -> None:
     """
@@ -368,7 +368,7 @@ class Solver:
             Each value is a list of 1-D numpy arrays, one per logged iteration.
         """
 
-    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000) -> None:
+    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, extra_iters: int = 0) -> None:
         """
         Set general solver parameters.
 
@@ -384,6 +384,8 @@ class Solver:
             Relaxation parameter for updates.
         max_feval : int, optional
             Maximum total function evaluations.
+        extra_iters : int, optional
+            Number of extra iterations to run after solution is found.
         """
 
     def set_ils_params(self, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> None:
@@ -466,7 +468,7 @@ class SolverOSQP(Solver):
             The optimization result containing the waveform and convergence info.
         """
 
-def solve(params: GroptParams, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> SolveResult:
+def solve(params: GroptParams, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, extra_iters: int = 0, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> SolveResult:
     """
     Convenience function to solve a GrOpt problem.
 

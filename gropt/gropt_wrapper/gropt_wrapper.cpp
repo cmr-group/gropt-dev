@@ -461,7 +461,7 @@ dict with keys: hist_X, hist_Ax, hist_z, hist_y, hist_Aty
         )
         .def("set_general_params", &Gropt::Solver::set_general_params,
             "min_iter"_a = 1, "max_iter"_a = 2000, "log_interval"_a = 20,
-            "gamma_x"_a = 1.6, "max_feval"_a = 12000,
+            "gamma_x"_a = 1.6, "max_feval"_a = 12000, "extra_iters"_a = 0,
 R"doc(Set general solver parameters.
 
 Parameters
@@ -475,8 +475,11 @@ log_interval : int, optional
 gamma_x : float, optional
     Relaxation parameter for updates.
 max_feval : int, optional
-    Maximum total function evaluations.)doc"
+    Maximum total function evaluations.
+extra_iters : int, optional
+    Number of extra iterations to run after solution is found.)doc"
         )
+
         .def("set_ils_params", &Gropt::Solver::set_ils_params,
             "ils_tol"_a = 1e-3, "ils_max_iter"_a = 20, "ils_min_iter"_a = 2,
             "ils_sigma"_a = 1e-4, "ils_tik_lam"_a = 0.0,
@@ -583,15 +586,15 @@ SolveResult
 
     // solve() convenience function
     m.def("solve", [](Gropt::GroptParams &params,
-                      int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval,
+                      int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval, int extra_iters,
                       double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam) {
         Gropt::SolverGroptSDMM solver;
-        solver.set_general_params(min_iter, max_iter, log_interval, gamma_x, max_feval);
+        solver.set_general_params(min_iter, max_iter, log_interval, gamma_x, max_feval, extra_iters);
         solver.set_ils_params(ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam);
         return solver.solve(params);
     }, "params"_a,
        "min_iter"_a = 1, "max_iter"_a = 2000, "log_interval"_a = 20,
-       "gamma_x"_a = 1.6, "max_feval"_a = 12000,
+       "gamma_x"_a = 1.6, "max_feval"_a = 12000, "extra_iters"_a = 0,
        "ils_tol"_a = 1e-3, "ils_max_iter"_a = 20, "ils_min_iter"_a = 2,
        "ils_sigma"_a = 1e-4, "ils_tik_lam"_a = 0.0,
 R"doc(Convenience function to solve a GrOpt problem.

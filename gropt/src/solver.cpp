@@ -64,12 +64,14 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
     }
 }
 
-void Solver::set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval) {
+void Solver::set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval,
+                                int extra_iters) {
     this->min_iter = min_iter;
     this->max_iter = max_iter;
     this->log_interval = log_interval;
     this->gamma_x = gamma_x;
     this->max_feval = max_feval;
+    this->extra_iters = extra_iters;
 }
 
 void Solver::set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam) {

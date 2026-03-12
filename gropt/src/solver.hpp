@@ -39,6 +39,7 @@ class Solver {
     int log_interval = 20;
     int min_iter = 0;
     double gamma_x = 1.6;
+    int extra_iters = 0;
 
     double ils_tol = 1e-3;
     int ils_max_iter = 10;
@@ -60,7 +61,8 @@ class Solver {
     virtual SolveResult solve(GroptParams &_gparams);
     virtual int logger(Eigen::VectorXd &X);
     virtual void final_log(Eigen::VectorXd &X, SolveResult &result);
-    virtual void set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval);
+    virtual void set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval,
+                                    int extra_iters);
     virtual void set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma,
                                 double ils_tik_lam);
 };
