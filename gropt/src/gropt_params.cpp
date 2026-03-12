@@ -156,7 +156,7 @@ void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, doubl
     ind_180_end = ceil((TE / 2.0 + T_180 / 2.0) / dt);
 
     int live_time = N - ind_180_end;
-    ind_180_start = ind_90_end + live_time;
+    ind_180_start = ind_90_end + live_time - 1;
 
     pdata.set_vals.setOnes(N);
     pdata.set_vals.array() *= NAN;
