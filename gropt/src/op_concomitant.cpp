@@ -53,16 +53,20 @@ void Op_Concomitant::prox(Eigen::VectorXd &X) {
     }
 
     if (pos > neg) {
-        double scale = 1.0 / sqrt(pos / neg);
+        double scale = sqrt(sqrt(pos / neg));
         for (int i = 0; i < X.size(); i++) {
             if (pdata->inv_vec(i) > 0) {
+                X(i) /= scale;
+            } else {
                 X(i) *= scale;
             }
         }
     } else if (neg > pos) {
-        double scale = 1.0 / sqrt(neg / pos);
+        double scale = sqrt(sqrt(neg / pos));
         for (int i = 0; i < X.size(); i++) {
             if (pdata->inv_vec(i) < 0) {
+                X(i) /= scale;
+            } else {
                 X(i) *= scale;
             }
         }

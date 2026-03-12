@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Mar 11 2026 21:46:53'
+__build_date__: str = 'Mar 11 2026 23:37:02'
 
 def set_log_level(level: int) -> None:
     """
@@ -72,6 +72,12 @@ class SolveResult:
     @dt.setter
     def dt(self, arg: float, /) -> None: ...
 
+    @property
+    def bvalue(self) -> float: ...
+
+    @bvalue.setter
+    def bvalue(self, arg: float, /) -> None: ...
+
     def __repr__(self) -> str: ...
 
 class GroptParams:
@@ -124,6 +130,25 @@ class GroptParams:
     def diff_init(self, dt: float = 0.0004, TE: float = 0.08, T_90: float = 0.003, T_180: float = 0.005, T_readout: float = 0.016) -> None:
         """
         Initialize diffusion sequence parameters.
+
+        Parameters
+        ----------
+        dt : float, optional
+            Raster time in seconds.
+        TE : float, optional
+            Echo time in seconds.
+        T_90 : float, optional
+            Duration of excitation RF pulse in seconds (time from excitation,
+            so half of full RF pulse duration).
+        T_180 : float, optional
+            Duration of refocusing RF pulse in seconds.
+        T_readout : float, optional
+            Time to TE of the readout in seconds.
+        """
+
+    def diff_init_deadtime(self, dt: float = 0.0004, TE: float = 0.08, T_90: float = 0.003, T_180: float = 0.005, T_readout: float = 0.016) -> None:
+        """
+        Initialize diffusion sequence parameters, but with forced deadtime to make "convnetional" waveforms.
 
         Parameters
         ----------

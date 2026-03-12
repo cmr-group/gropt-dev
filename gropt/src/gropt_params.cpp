@@ -129,6 +129,7 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
             pdata.X0(i) = 1e-2; // Initial value for non-fixed points
         }
     }
+    pdata.X0.array() *= pdata.inv_vec.array();
 
     vec_init_status = N;
 }
@@ -156,7 +157,7 @@ void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, doubl
     ind_180_end = ceil((TE / 2.0 + T_180 / 2.0) / dt);
 
     int live_time = N - ind_180_end;
-    ind_180_start = ind_90_end + live_time;
+    ind_180_start = ind_90_end + live_time - 1;
 
     pdata.set_vals.setOnes(N);
     pdata.set_vals.array() *= NAN;
@@ -184,6 +185,8 @@ void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, doubl
             pdata.X0(i) = 1e-2; // Initial value for non-fixed points
         }
     }
+
+    pdata.X0.array() *= pdata.inv_vec.array();
 
     vec_init_status = N;
 }

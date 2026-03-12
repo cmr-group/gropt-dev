@@ -1,6 +1,7 @@
 #include "spdlog/spdlog.h"
 
 #include "solver.hpp"
+#include "op_bvalue.hpp"
 
 namespace Gropt {
 
@@ -60,6 +61,19 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
 
         if (op->hist_feas.back() == 0) {
             result.converged = false;
+        }
+    }
+
+    // Check if one of the constraints is b-value and if so, report the final b-value
+    for (int i = 0; i < gparams->all_op.size(); i++) {
+        Operator *op = gparams->all_op[i].get();
+        if (op->name == "b-value") {
+            Op_BValue *op_bvalue = dynamic_cast<Op_BValue *>(op);
+            if (op_bvalue != nullptr) {
+                result.bvalue = op_bvalue->get_bvalue(X);
+            } else {
+                spdlog::warn("Operator named 'b-value' is not an Op_BValue instance.");
+            }
         }
     }
 }
