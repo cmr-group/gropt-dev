@@ -114,7 +114,6 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
     delete ils_solver;
     spdlog::trace("Finished SolverOSQP::solve");
 
-    last_result = result;
     return result;
 }
 
@@ -259,11 +258,6 @@ void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
         op->get_feas(op->Ax_temp);
         op->check(op->Ax_temp);
     }
-}
-
-void SolverOSQP::get_result_X(double **out, int &out_size) {
-    out_size = last_result.X.size();
-    *out = last_result.X.data();
 }
 
 } // namespace Gropt

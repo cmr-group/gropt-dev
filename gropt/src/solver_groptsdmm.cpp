@@ -112,7 +112,6 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     delete ils_solver;
     spdlog::trace("Finished SolverGroptSDMM::solve");
 
-    last_result = result;
     return result;
 }
 
@@ -181,11 +180,6 @@ void SolverGroptSDMM::set_sdmm_params(int rw_interval, double rw_e_corr, double 
     this->grw_min_infeasible = grw_min_infeasible;
     this->grw_interval = grw_interval;
     this->grw_mod = grw_mod;
-}
-
-void SolverGroptSDMM::get_result_X(double **out, int &out_size) {
-    out_size = last_result.X.size();
-    *out = last_result.X.data();
 }
 
 } // namespace Gropt

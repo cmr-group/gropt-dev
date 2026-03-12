@@ -10,16 +10,12 @@ Op_SAFE::Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_
     weight_mod = _weight_mod;
 }
 
-Op_SAFE::Op_SAFE(const ProblemData &_pdata, int _N_vec, double *_stim_thresh_vec, double _weight_mod)
+Op_SAFE::Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_vec, double _weight_mod)
     : Operator(_pdata) {
     name = "SAFE";
     stim_thresh = 1.0;
     weight_mod = _weight_mod;
-
-    stim_thresh_vec.resize(_N_vec);
-    for (int i = 0; i < stim_thresh_vec.size(); i++) {
-        stim_thresh_vec(i) = _stim_thresh_vec[i];
-    }
+    stim_thresh_vec = _stim_thresh_vec;
 }
 
 void Op_SAFE::init() {
@@ -382,17 +378,18 @@ void SAFEParams::set_demo_params() {
     g_scale[2] = 0.25;
 }
 
-void SAFEParams::set_params(double *_tau1, double *_tau2, double *_tau3, double *_a1, double *_a2, double *_a3,
-                            double *_stim_limit, double *_g_scale) {
+void SAFEParams::set_params(const Eigen::VectorXd &_tau1, const Eigen::VectorXd &_tau2, const Eigen::VectorXd &_tau3,
+                            const Eigen::VectorXd &_a1, const Eigen::VectorXd &_a2, const Eigen::VectorXd &_a3,
+                            const Eigen::VectorXd &_stim_limit, const Eigen::VectorXd &_g_scale) {
     for (int i = 0; i < 3; i++) {
-        tau1[i] = _tau1[i];
-        tau2[i] = _tau2[i];
-        tau3[i] = _tau3[i];
-        a1[i] = _a1[i];
-        a2[i] = _a2[i];
-        a3[i] = _a3[i];
-        stim_limit[i] = _stim_limit[i];
-        g_scale[i] = _g_scale[i];
+        tau1[i] = _tau1(i);
+        tau2[i] = _tau2(i);
+        tau3[i] = _tau3(i);
+        a1[i] = _a1(i);
+        a2[i] = _a2(i);
+        a3[i] = _a3(i);
+        stim_limit[i] = _stim_limit(i);
+        g_scale[i] = _g_scale(i);
     }
 }
 

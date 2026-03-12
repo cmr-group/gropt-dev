@@ -28,12 +28,9 @@ namespace Gropt
         Eigen::VectorXd r_dual;
         Eigen::VectorXd r_primal;
 
-        SolveResult last_result;
-
         virtual SolveResult solve(GroptParams &_gparams);
         void update(Eigen::VectorXd &X);
         void get_residuals(Eigen::VectorXd &X);
-        void get_result_X(double **out, int &out_size);
     };
 
 } // namespace Gropt

@@ -8,31 +8,9 @@
 
 namespace Gropt {
 
-static Eigen::VectorXd get_SAFE_impl(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
-                                     bool demo_params, double *tau1, double *tau2, double *tau3, double *a1, double *a2,
-                                     double *a3, double *stim_limit, double *g_scale) {
+static Eigen::VectorXd get_SAFE_compute(const Eigen::VectorXd &G, int Naxis, double dt, Op_SAFE &opF) {
     int N = static_cast<int>(G.size()) / Naxis;
 
-    ProblemData pdata;
-    pdata.dt = dt;
-    pdata.N = N;
-    pdata.Naxis = Naxis;
-    pdata.inv_vec.setOnes(N * Naxis);
-    pdata.set_vals.setZero(N * Naxis);
-    pdata.set_vals.array() *= NAN;
-    pdata.set_vals(0) = 0.0;
-    pdata.set_vals(N - 1) = 0.0;
-    pdata.fixer.setOnes(N * Naxis);
-    pdata.fixer(0) = 0.0;
-    pdata.fixer(N - 1) = 0.0;
-
-    Op_SAFE opF(pdata, 1.0, 1.0);
-    if (demo_params) {
-        opF.safe_params.set_demo_params();
-    } else {
-        opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
-    }
-    opF.safe_params.swap_first_axes(new_first_axis);
     opF.init();
 
     Eigen::VectorXd temp;
@@ -56,20 +34,40 @@ static Eigen::VectorXd get_SAFE_impl(const Eigen::VectorXd &G, int Naxis, double
     return opF.x_temp;
 }
 
+static ProblemData make_safe_pdata(const Eigen::VectorXd &G, int Naxis, double dt) {
+    int N = static_cast<int>(G.size()) / Naxis;
+    ProblemData pdata;
+    pdata.dt = dt;
+    pdata.N = N;
+    pdata.Naxis = Naxis;
+    pdata.inv_vec.setOnes(N * Naxis);
+    pdata.set_vals.setZero(N * Naxis);
+    pdata.set_vals.array() *= NAN;
+    pdata.set_vals(0) = 0.0;
+    pdata.set_vals(N - 1) = 0.0;
+    pdata.fixer.setOnes(N * Naxis);
+    pdata.fixer(0) = 0.0;
+    pdata.fixer(N - 1) = 0.0;
+    return pdata;
+}
+
 Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis) {
-    return get_SAFE_impl(G, Naxis, dt, true_safe, new_first_axis, true, nullptr, nullptr, nullptr, nullptr, nullptr,
-                         nullptr, nullptr, nullptr);
+    ProblemData pdata = make_safe_pdata(G, Naxis, dt);
+    Op_SAFE opF(pdata, 1.0, 1.0);
+    opF.safe_params.set_demo_params();
+    opF.safe_params.swap_first_axes(new_first_axis);
+    return get_SAFE_compute(G, Naxis, dt, opF);
 }
 
 Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
                                const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3,
                                const Eigen::VectorXd &a1, const Eigen::VectorXd &a2, const Eigen::VectorXd &a3,
                                const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale) {
-    return get_SAFE_impl(G, Naxis, dt, true_safe, new_first_axis, false, const_cast<double *>(tau1.data()),
-                         const_cast<double *>(tau2.data()), const_cast<double *>(tau3.data()),
-                         const_cast<double *>(a1.data()), const_cast<double *>(a2.data()),
-                         const_cast<double *>(a3.data()), const_cast<double *>(stim_limit.data()),
-                         const_cast<double *>(g_scale.data()));
+    ProblemData pdata = make_safe_pdata(G, Naxis, dt);
+    Op_SAFE opF(pdata, 1.0, 1.0);
+    opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
+    opF.safe_params.swap_first_axes(new_first_axis);
+    return get_SAFE_compute(G, Naxis, dt, opF);
 }
 
 void test_eigen_assertions(int test_type) {

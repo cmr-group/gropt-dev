@@ -215,32 +215,6 @@ void GroptParams::add_moment(double order, double target, double tol0, std::stri
                                                  ref_idx0, weight_mod));
 }
 
-void GroptParams::add_SAFE(double stim_thresh, double *tau1, double *tau2, double *tau3, double *a1, double *a2,
-                           double *a3, double *stim_limit, double *g_scale, int new_first_axis, bool demo_params,
-                           double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
-    if (demo_params) {
-        op_F->safe_params.set_demo_params();
-    } else {
-        op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
-    }
-    op_F->safe_params.swap_first_axes(new_first_axis);
-    all_op.push_back(std::move(op_F));
-}
-
-void GroptParams::add_SAFE_vec(int N_vec, double *stim_thresh_vec, double *tau1, double *tau2, double *tau3, double *a1,
-                               double *a2, double *a3, double *stim_limit, double *g_scale, int new_first_axis,
-                               bool demo_params, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, N_vec, stim_thresh_vec, weight_mod);
-    if (demo_params) {
-        op_F->safe_params.set_demo_params();
-    } else {
-        op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
-    }
-    op_F->safe_params.swap_first_axes(new_first_axis);
-    all_op.push_back(std::move(op_F));
-}
-
 void GroptParams::add_SAFE(double stim_thresh, int new_first_axis, double weight_mod) {
     auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
     op_F->safe_params.set_demo_params();
@@ -253,17 +227,13 @@ void GroptParams::add_SAFE(double stim_thresh, const Eigen::VectorXd &tau1, cons
                            const Eigen::VectorXd &a3, const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
                            int new_first_axis, double weight_mod) {
     auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
-    op_F->safe_params.set_params(const_cast<double *>(tau1.data()), const_cast<double *>(tau2.data()),
-                                 const_cast<double *>(tau3.data()), const_cast<double *>(a1.data()),
-                                 const_cast<double *>(a2.data()), const_cast<double *>(a3.data()),
-                                 const_cast<double *>(stim_limit.data()), const_cast<double *>(g_scale.data()));
+    op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     all_op.push_back(std::move(op_F));
 }
 
 void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, static_cast<int>(stim_thresh_vec.size()),
-                                          const_cast<double *>(stim_thresh_vec.data()), weight_mod);
+    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
     all_op.push_back(std::move(op_F));
@@ -273,12 +243,8 @@ void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, const Eig
                                const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3, const Eigen::VectorXd &a1,
                                const Eigen::VectorXd &a2, const Eigen::VectorXd &a3, const Eigen::VectorXd &stim_limit,
                                const Eigen::VectorXd &g_scale, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, static_cast<int>(stim_thresh_vec.size()),
-                                          const_cast<double *>(stim_thresh_vec.data()), weight_mod);
-    op_F->safe_params.set_params(const_cast<double *>(tau1.data()), const_cast<double *>(tau2.data()),
-                                 const_cast<double *>(tau3.data()), const_cast<double *>(a1.data()),
-                                 const_cast<double *>(a2.data()), const_cast<double *>(a3.data()),
-                                 const_cast<double *>(stim_limit.data()), const_cast<double *>(g_scale.data()));
+    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
+    op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     all_op.push_back(std::move(op_F));
 }

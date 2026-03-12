@@ -33,8 +33,9 @@ class SAFEParams {
 
     SAFEParams() = default;
     void set_demo_params();
-    void set_params(double *_tau1, double *_tau2, double *_tau3, double *_a1, double *_a2, double *_a3,
-                    double *_stim_limit, double *_g_scale);
+    void set_params(const Eigen::VectorXd &_tau1, const Eigen::VectorXd &_tau2, const Eigen::VectorXd &_tau3,
+                    const Eigen::VectorXd &_a1, const Eigen::VectorXd &_a2, const Eigen::VectorXd &_a3,
+                    const Eigen::VectorXd &_stim_limit, const Eigen::VectorXd &_g_scale);
     void calc_alphas(double dt);
     void swap_first_axes(int new_first_axis);
 };
@@ -57,7 +58,7 @@ class Op_SAFE : public Operator {
     int n_terms = 3;
 
     Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod);
-    Op_SAFE(const ProblemData &_pdata, int _N_vec, double *_stim_thresh_vec, double _weight_mod);
+    Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_vec, double _weight_mod);
     virtual void init();
 
     virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);
