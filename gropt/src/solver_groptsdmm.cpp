@@ -1,15 +1,14 @@
 #include "spdlog/spdlog.h"
 
 #include "ils.hpp"
+#include "ils_bicgstabl.hpp"
 #include "ils_cg.hpp"
 #include "ils_nlcg.hpp"
-#include "ils_bicgstabl.hpp"
 #include "solver_groptsdmm.hpp"
 
 namespace Gropt {
 
-SolveResult SolverGroptSDMM::solve(GroptParams &_gparams)
-{
+SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     spdlog::trace("Starting SolverGroptSDMM::solve");
     gparams = &_gparams;
     if (gparams->op_prep_status != gparams->N) {
@@ -25,8 +24,8 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams)
         // Set initial weight based on operator type
         sdmm_ws[i].weight = 1.0;
         // Slew, moment, bvalue, SAFE, TV operators start with higher weight
-        if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" ||
-            op->name == "SAFE" || op->name == "TotalVariation") {
+        if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE" ||
+            op->name == "TotalVariation") {
             sdmm_ws[i].weight = 1e4;
         }
         sdmm_ws[i].weight *= op->weight_mod;
@@ -75,8 +74,10 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams)
             Xhat = X;
         }
 
-        if (Xhat.array().isNaN().any()) {
-            spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
+        // if (Xhat.array().isNaN().any()) {
+        if ((Xhat.array().abs() > 10).any()) {
+            // spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
+            spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         };
 
@@ -87,32 +88,40 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams)
 
         get_residuals(X);
 
-        if (extra_debug) {hist_X.push_back(X);}
+        if (extra_debug) {
+            debug_solver.hist_X.push_back(X);
+        }
 
-        if ((logger(X) > 0) && (iiter > min_iter)) {break;}
+        if ((logger(X) > 0) && (iiter > min_iter)) {
+            if (extra_iters > 0) {
+                spdlog::info("First solved at iiter {:d}, now {:d} extra iterations", iiter, extra_iters);
+                min_iter = iiter + extra_iters;
+                extra_iters = 0;
+            } else {
+                break;
+            }
+        }
 
         total_feval += ils_solver->hist_n_iter.back();
         if (total_feval > max_feval) {
             spdlog::info("Maximum function evaluations reached");
             break;
         }
-
     }
 
     SolveResult result;
     result.X = X;
     result.n_iter = iiter;
+    result.dt = gparams->dt;
     final_log(X, result);
 
     delete ils_solver;
     spdlog::trace("Finished SolverGroptSDMM::solve");
 
-    last_result = result;
     return result;
 }
 
-void SolverGroptSDMM::update(Eigen::VectorXd &X)
-{
+void SolverGroptSDMM::update(Eigen::VectorXd &X) {
     spdlog::trace("Starting SolverGroptSDMM::update");
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
@@ -129,7 +138,7 @@ void SolverGroptSDMM::update(Eigen::VectorXd &X)
         // y = y0 + p*(as + (1-a)z0 - z1)
         w.y1 = w.y0 + w.weight * (w.gamma * w.s1 + (1 - w.gamma) * w.z0 - w.z1);
 
-        if ((w.do_rw) && (iiter > rw_interval) && (iiter%rw_interval == 0)) {
+        if ((w.do_rw) && (iiter > rw_interval) && (iiter % rw_interval == 0)) {
             w.reweight(rw_eps, rw_e_corr, rw_scalelim);
         }
 
@@ -140,8 +149,7 @@ void SolverGroptSDMM::update(Eigen::VectorXd &X)
     spdlog::trace("Finished SolverGroptSDMM::update");
 }
 
-void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
-{
+void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X) {
     // Update feasibility metrics
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
@@ -150,12 +158,12 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
         op->check(op->Ax_temp);
     }
 
-
-    if (iiter > 2*grw_min_infeasible && iiter % grw_interval == 0) {
+    if (iiter > 2 * grw_min_infeasible && iiter % grw_interval == 0) {
         double max_feas = 0.0;
         int max_index = -1;
         for (int i = 0; i < gparams->all_op.size(); i++) {
-            if (std::accumulate(gparams->all_op[i]->hist_feas.end()-grw_min_infeasible, gparams->all_op[i]->hist_feas.end(), 0) == 0) {
+            if (std::accumulate(gparams->all_op[i]->hist_feas.end() - grw_min_infeasible,
+                                gparams->all_op[i]->hist_feas.end(), 0) == 0) {
                 if (gparams->all_op[i]->hist_r_feas.back() > max_feas) {
                     max_feas = gparams->all_op[i]->hist_r_feas.back();
                     max_index = i;
@@ -166,13 +174,10 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X)
             sdmm_ws[max_index].weight *= grw_mod;
         }
     }
-
-
 }
 
 void SolverGroptSDMM::set_sdmm_params(int rw_interval, double rw_e_corr, double rw_eps, double rw_scalelim,
-                             int grw_min_infeasible, int grw_interval, double grw_mod)
-{
+                                      int grw_min_infeasible, int grw_interval, double grw_mod) {
     this->rw_interval = rw_interval;
     this->rw_e_corr = rw_e_corr;
     this->rw_eps = rw_eps;
@@ -181,12 +186,6 @@ void SolverGroptSDMM::set_sdmm_params(int rw_interval, double rw_e_corr, double 
     this->grw_min_infeasible = grw_min_infeasible;
     this->grw_interval = grw_interval;
     this->grw_mod = grw_mod;
-}
-
-void SolverGroptSDMM::get_result_X(double **out, int &out_size)
-{
-    out_size = last_result.X.size();
-    *out = last_result.X.data();
 }
 
 } // namespace Gropt

@@ -1,5 +1,5 @@
-#include <cstdlib>
 #include "spdlog/spdlog.h"
+#include <cstdlib>
 
 #include "gropt_utils.hpp"
 
@@ -8,104 +8,9 @@
 
 namespace Gropt {
 
-void get_SAFE(int N, int Naxis, double dt, double *G_in,
-              bool true_safe, int new_first_axis, bool demo_params,
-              double *tau1, double *tau2, double *tau3,
-              double *a1, double *a2, double *a3,
-              double *stim_limit, double *g_scale,
-              double **out, int &out_size)
-{
-    spdlog::trace("get_SAFE(): start");
-
-    Eigen::VectorXd G;
-    G.setZero(N);
-    for (int i=0; i<N; i++) {
-        G(i) = G_in[i];
-    }
-
-    spdlog::trace("get_SAFE(): copied G");
-
-    ProblemData pdata;
-    pdata.dt = dt;
-    pdata.N = N;
-    pdata.Naxis = Naxis;
-    pdata.inv_vec.setOnes(N * Naxis);
-    pdata.set_vals.setZero(N * Naxis);
-    pdata.set_vals.array() *= NAN;
-    pdata.set_vals(0) = 0.0;
-    pdata.set_vals(N-1) = 0.0;
-    pdata.fixer.setOnes(N * Naxis);
-    pdata.fixer(0) = 0.0;
-    pdata.fixer(N-1) = 0.0;
-
-    spdlog::trace("get_SAFE(): finished pdata");
-
-    Op_SAFE opF(pdata, 1.0, 1.0);
-    if (demo_params) {
-        opF.safe_params.set_demo_params();
-    } else {
-        opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
-    }
-    opF.safe_params.swap_first_axes(new_first_axis);
-    opF.init();
-
-    spdlog::trace("get_SAFE(): finished Op_SAFE");
-
-    Eigen::VectorXd temp;
-    temp.setZero(opF.Ax_size);
-    opF.forward(G, temp);
-
-    opF.check(temp);
-
-    spdlog::trace("get_SAFE(): finished forward");
-
-    opF.x_temp.setZero();
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            opF.x_temp(j*N+i) = temp(j*3*N+i) + temp(j*3*N+i+N) + temp(j*3*N+i+2*N);
-        }
-    }
-
-    spdlog::trace("get_SAFE(): finished combine");
-
-    out_size = opF.x_temp.size();
-    *out = (double*)std::malloc(out_size * sizeof(double));
-    for (int i = 0; i < out_size; i++) {
-        (*out)[i] = opF.x_temp(i);
-    }
-
-    spdlog::trace("get_SAFE(): finished copying out");
-
-}
-
-static Eigen::VectorXd get_SAFE_impl(const Eigen::VectorXd &G, int Naxis, double dt,
-                                     bool true_safe, int new_first_axis, bool demo_params,
-                                     double *tau1, double *tau2, double *tau3,
-                                     double *a1, double *a2, double *a3,
-                                     double *stim_limit, double *g_scale)
-{
+static Eigen::VectorXd get_SAFE_compute(const Eigen::VectorXd &G, int Naxis, double dt, Op_SAFE &opF) {
     int N = static_cast<int>(G.size()) / Naxis;
 
-    ProblemData pdata;
-    pdata.dt = dt;
-    pdata.N = N;
-    pdata.Naxis = Naxis;
-    pdata.inv_vec.setOnes(N * Naxis);
-    pdata.set_vals.setZero(N * Naxis);
-    pdata.set_vals.array() *= NAN;
-    pdata.set_vals(0) = 0.0;
-    pdata.set_vals(N-1) = 0.0;
-    pdata.fixer.setOnes(N * Naxis);
-    pdata.fixer(0) = 0.0;
-    pdata.fixer(N-1) = 0.0;
-
-    Op_SAFE opF(pdata, 1.0, 1.0);
-    if (demo_params) {
-        opF.safe_params.set_demo_params();
-    } else {
-        opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
-    }
-    opF.safe_params.swap_first_axes(new_first_axis);
     opF.init();
 
     Eigen::VectorXd temp;
@@ -117,30 +22,85 @@ static Eigen::VectorXd get_SAFE_impl(const Eigen::VectorXd &G, int Naxis, double
     opF.x_temp.setZero();
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            opF.x_temp(j*N+i) = temp(j*3*N+i) + temp(j*3*N+i+N) + temp(j*3*N+i+2*N);
+            if (opF.n_terms == 3) {
+                opF.x_temp(j * N + i) = temp(j * opF.n_terms * N + i) + temp(j * opF.n_terms * N + i + N) +
+                                        temp(j * opF.n_terms * N + i + 2 * N);
+            } else if (opF.n_terms == 2) {
+                opF.x_temp(j * N + i) = temp(j * opF.n_terms * N + i) + temp(j * opF.n_terms * N + i + N);
+            }
         }
     }
 
     return opF.x_temp;
 }
 
-Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt,
-                               bool true_safe, int new_first_axis)
-{
-    return get_SAFE_impl(G, Naxis, dt, true_safe, new_first_axis, true,
-                         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+static ProblemData make_safe_pdata(const Eigen::VectorXd &G, int Naxis, double dt) {
+    int N = static_cast<int>(G.size()) / Naxis;
+    ProblemData pdata;
+    pdata.dt = dt;
+    pdata.N = N;
+    pdata.Naxis = Naxis;
+    pdata.inv_vec.setOnes(N * Naxis);
+    pdata.set_vals.setZero(N * Naxis);
+    pdata.set_vals.array() *= NAN;
+    pdata.set_vals(0) = 0.0;
+    pdata.set_vals(N - 1) = 0.0;
+    pdata.fixer.setOnes(N * Naxis);
+    pdata.fixer(0) = 0.0;
+    pdata.fixer(N - 1) = 0.0;
+    return pdata;
 }
 
-Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt,
-                               bool true_safe, int new_first_axis,
+Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis) {
+    ProblemData pdata = make_safe_pdata(G, Naxis, dt);
+    Op_SAFE opF(pdata, 1.0, 1.0);
+    opF.safe_params.set_demo_params();
+    opF.safe_params.swap_first_axes(new_first_axis);
+    return get_SAFE_compute(G, Naxis, dt, opF);
+}
+
+Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
                                const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3,
                                const Eigen::VectorXd &a1, const Eigen::VectorXd &a2, const Eigen::VectorXd &a3,
-                               const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale)
-{
-    return get_SAFE_impl(G, Naxis, dt, true_safe, new_first_axis, false,
-                         const_cast<double*>(tau1.data()), const_cast<double*>(tau2.data()), const_cast<double*>(tau3.data()),
-                         const_cast<double*>(a1.data()), const_cast<double*>(a2.data()), const_cast<double*>(a3.data()),
-                         const_cast<double*>(stim_limit.data()), const_cast<double*>(g_scale.data()));
+                               const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale) {
+    ProblemData pdata = make_safe_pdata(G, Naxis, dt);
+    Op_SAFE opF(pdata, 1.0, 1.0);
+    opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
+    opF.safe_params.swap_first_axes(new_first_axis);
+    return get_SAFE_compute(G, Naxis, dt, opF);
+}
+
+void test_eigen_assertions(int test_type) {
+    switch (test_type) {
+    case 1: {
+        spdlog::info("Starting test_eigen_assertions(1)...");
+        Eigen::VectorXd v(3);
+        double x = v(10); // out of bounds
+        spdlog::info("Finsihed test_eigen_assertions(1)  x = {}", x);
+        break;
+    }
+    case 2: {
+        spdlog::info("Starting test_eigen_assertions(2)...");
+        Eigen::VectorXd v(5);
+        if (!v.array().isNaN().any()) {
+            spdlog::info("No NaN found");
+            throw std::runtime_error("expected NaN initialization");
+        } else {
+            spdlog::info("NaN found");
+        }
+        spdlog::info("Finished test_eigen_assertions(2)  v[0] = {}", v[0]);
+        break;
+    }
+    case 3: {
+        spdlog::info("Starting test_eigen_assertions(3)...");
+        Eigen::VectorXd a(3), b(5);
+        Eigen::VectorXd c = a + b; // size mismatch
+        spdlog::info("Finished test_eigen_assertions(3)  c[4] = {}", c[4]);
+        break;
+    }
+    default:
+        throw std::invalid_argument("unknown test type");
+    }
 }
 
 } // namespace Gropt

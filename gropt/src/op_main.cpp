@@ -23,6 +23,9 @@ void Operator::init() {
     x_temp.setZero(Ntot);
     x_temp_obj.setZero(Ntot);
     Ax_temp.setZero(Ax_size);
+
+    eq_rows.setOnes(Ax_size);
+    eq_cols.setOnes(Ntot);
 }
 
 void Operator::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
@@ -43,6 +46,7 @@ void Operator::forward_op(Eigen::VectorXd &X, Eigen::VectorXd &out) {
 
     forward(x_temp, out);
 
+    out.array() /= spec_norm;
     if (do_equil) {
         out.array() *= eq_rows.array();
     }
@@ -60,7 +64,7 @@ void Operator::transpose_op(Eigen::VectorXd &X, Eigen::VectorXd &out, bool apply
     if (apply_fixer) {
         out.array() *= pdata->fixer.array();
     }
-    out.array() /= spec_norm2;
+    out.array() /= spec_norm;
 
     if (do_equil) {
         out.array() *= eq_cols.array();
@@ -130,6 +134,17 @@ void Operator::get_feas(Eigen::VectorXd &s) {
     r_feas = feas_temp.cwiseAbs().maxCoeff() / (s.cwiseAbs().maxCoeff() + 1.0e-32);
 
     hist_r_feas.push_back(r_feas);
+}
+
+void Operator::print_details() {
+    spdlog::info("========== Operator name: {:^16} ==========", name);
+    spdlog::info("N: {}, Naxis: {}, Ntot: {}, dt: {}", N, Naxis, Ntot, dt);
+    spdlog::info("target: {:.2e}, tol0: {:.2e}, tol: {:.2e}, cushion: {:.2e}", target, tol0, tol, cushion);
+    spdlog::info("Ax_size: {}", Ax_size);
+    spdlog::info("spec_norm: {:.2e}, spec_norm2: {:.2e}", spec_norm, spec_norm2);
+    spdlog::info("obj_weight: {:.2e}, weight_mod: {:.2e}", obj_weight, weight_mod);
+    spdlog::info("do_equil: {}, rot_variant: {}, do_init_weights: {}", do_equil, rot_variant, do_init_weights);
+    spdlog::default_logger()->flush();
 }
 
 } // namespace Gropt

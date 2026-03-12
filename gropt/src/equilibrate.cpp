@@ -22,6 +22,7 @@ void equilibrate(GroptParams &gparams, int n_iter, int n_reps) {
         col_norms = col_norms.cwiseSqrt().cwiseInverse();
 
         // TODO: This should be all axis
+        // TODO: Also check how this affects convergence, there is something important about these points with slew rate
         col_norms[0] = col_norms[1];
         col_norms[col_norms.size() - 1] = col_norms[col_norms.size() - 2];
 
@@ -92,6 +93,8 @@ void estimate_row_col_norms(GroptParams &gparams, int n_reps, NormType norm_type
     row_norms.setZero(N_rows);
     col_norms.setZero(N_cols);
 
+    spdlog::trace("N_rows {}   N_cols {}", N_rows, N_cols);
+
     // Row norm reps
     for (int rep = 0; rep < n_reps; rep++) {
         Eigen::VectorXd z = Eigen::VectorXd::Random(N_cols).array().sign();
@@ -109,6 +112,8 @@ void estimate_row_col_norms(GroptParams &gparams, int n_reps, NormType norm_type
             row_start += op->Ax_size;
         }
     }
+
+    spdlog::trace("After row norms");
 
     // Col norm reps
     for (int rep = 0; rep < n_reps; rep++) {
@@ -128,6 +133,8 @@ void estimate_row_col_norms(GroptParams &gparams, int n_reps, NormType norm_type
             col_norms = col_norms.cwiseMax(Atw.cwiseAbs());
         }
     }
+
+    spdlog::trace("After col norms");
 
     if (norm_type == NormType::L2) {
         row_norms = (row_norms / n_reps).cwiseSqrt();
@@ -159,9 +166,39 @@ double estimate_spec_norm(GroptParams &gparams, int n_iters) {
         }
         lambda_max = v_next.norm();
         v = v_next / lambda_max;
-        spdlog::debug("estimate_spec_norm iteration {}: lambda_max = {}", iter, lambda_max);
+        spdlog::debug("estimate_spec_norm iteration {}: lambda_max = {:.2e}", iter, lambda_max);
     }
 
+    spdlog::debug("Final spec_norm2 {:.2e}: spec_norm = {:.2e}", lambda_max, sqrt(lambda_max));
     return sqrt(lambda_max);
 }
+
+double estimate_individual_spec_norm(GroptParams &gparams, int n_iters, int op_idx) {
+
+    int Ntot = gparams.N * gparams.Naxis;
+
+    // Make a VectorXd of size Ntot using a standard normal distribution, and normalize it to have norm 1
+    Eigen::VectorXd v = Eigen::VectorXd::Random(Ntot);
+    v.normalize();
+
+    double lambda_max;
+    for (int iter = 0; iter < n_iters; iter++) {
+        Eigen::VectorXd v_next = Eigen::VectorXd::Zero(Ntot);
+
+        Operator *op = gparams.all_op[op_idx].get();
+        op->Ax_temp.setZero();
+        op->x_temp.setZero();
+        op->forward_op(v, op->Ax_temp);
+        op->transpose_op(op->Ax_temp, op->x_temp);
+        v_next += op->x_temp;
+
+        lambda_max = v_next.norm();
+        v = v_next / lambda_max;
+        spdlog::debug("estimate_spec_norm iteration {}: lambda_max = {:.2e}", iter, lambda_max);
+    }
+
+    spdlog::debug("Final spec_norm2 {:.2e}: spec_norm = {:.2e}", lambda_max, sqrt(lambda_max));
+    return sqrt(lambda_max);
+}
+
 } // namespace Gropt

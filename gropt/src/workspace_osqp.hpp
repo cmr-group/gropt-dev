@@ -5,10 +5,17 @@
 
 namespace Gropt {
 
-// WorkspaceOSQP uses the same per-operator state as the base WorkspaceSolver.
-// It can be extended here if OSQP-specific state is needed in the future.
-using WorkspaceOSQP = WorkspaceSolver;
+struct WorkspaceOSQP : WorkspaceSolver {
+    Eigen::VectorXd y00, z00;
+    double weight_scale = 1.0;
 
-}  // namespace Gropt
+    void init(int Ax_size);
+    void reinit(int Ax_size);
+    void prep(Operator &op, const Eigen::VectorXd &X);
+    void init_reweight();
+    void reweight(int iiter, double scale_up, double scale_down, double eps);
+};
+
+} // namespace Gropt
 
 #endif

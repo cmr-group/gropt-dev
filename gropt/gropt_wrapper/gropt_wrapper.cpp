@@ -1,6 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
+#include <nanobind/stl/vector.h>
 #include <nanobind/eigen/dense.h>
 
 #include "spdlog/spdlog.h"
@@ -17,6 +18,7 @@ using namespace nb::literals;
 
 NB_MODULE(gropt_wrapper, m) {
     m.doc() = "GrOpt: Gradient Optimization for MRI";
+    m.attr("__build_date__") = __DATE__ " " __TIME__;
 
 
     // These allow you to get spdlogs into jupyter notebooks
@@ -69,6 +71,7 @@ n_feval : int
         .def_rw("converged", &Gropt::SolveResult::converged)
         .def_rw("n_iter", &Gropt::SolveResult::n_iter)
         .def_rw("n_feval", &Gropt::SolveResult::n_feval)
+        .def_rw("dt", &Gropt::SolveResult::dt)
         .def("__repr__", [](const Gropt::SolveResult &r) {
             return "SolveResult(converged=" + std::string(r.converged ? "True" : "False") +
                    ", n_iter=" + std::to_string(r.n_iter) +
@@ -124,6 +127,26 @@ last_val : float, optional
         .def("diff_init", &Gropt::GroptParams::diff_init,
             "dt"_a = 400e-6, "TE"_a = 80e-3, "T_90"_a = 3e-3, "T_180"_a = 5e-3, "T_readout"_a = 16e-3,
 R"doc(Initialize diffusion sequence parameters.
+
+Parameters
+----------
+dt : float, optional
+    Raster time in seconds.
+TE : float, optional
+    Echo time in seconds.
+T_90 : float, optional
+    Duration of excitation RF pulse in seconds (time from excitation,
+    so half of full RF pulse duration).
+T_180 : float, optional
+    Duration of refocusing RF pulse in seconds.
+T_readout : float, optional
+    Time to TE of the readout in seconds.)doc"
+        )
+
+        // diff_init
+        .def("diff_init_deadtime", &Gropt::GroptParams::diff_init_deadtime,
+            "dt"_a = 400e-6, "TE"_a = 80e-3, "T_90"_a = 3e-3, "T_180"_a = 5e-3, "T_readout"_a = 16e-3,
+R"doc(Initialize diffusion sequence parameters, but with forced deadtime to make "convnetional" waveforms.
 
 Parameters
 ----------
@@ -196,6 +219,20 @@ Parameters
 ----------
 gmax : float, optional
     Maximum allowed gradient magnitude [T/m].
+rot_variant : bool, optional
+    If True, use rotationally invariant formulation.
+weight_mod : float, optional
+    Weighting factor for this constraint.)doc"
+        )
+
+
+        // add_concomitant
+        .def("add_concomitant", &Gropt::GroptParams::add_concomitant,
+            "rot_variant"_a = true, "weight_mod"_a = 1.0,
+R"doc(Add a concomitant constraint.
+
+Parameters
+----------
 rot_variant : bool, optional
     If True, use rotationally invariant formulation.
 weight_mod : float, optional
@@ -397,6 +434,14 @@ Allocates vectors and sets up initial optimization variables.
 Automatically called by solve() if not already done.)doc"
         )
 
+        // print_op_details
+        .def("print_op_details", &Gropt::GroptParams::print_op_details,
+R"doc(Print details of all operators.
+
+This function prints information about each operator in the problem, including their types and parameters.)doc"
+        )
+
+        
         // reset_op_weights
         .def("reset_op_weights", &Gropt::GroptParams::reset_op_weights,
 R"doc(Reset all operator weights and spectral norms to 1.0.
@@ -408,32 +453,54 @@ operator in all_op and all_obj.)doc"
     
     //////////////////////////////////////////////////////////
     // -------------------------------------------------------
-    // SolverGroptSDMM
+    // Solver (base class)
     // -------------------------------------------------------
-    nb::class_<Gropt::SolverGroptSDMM>(m, "SolverGroptSDMM",
-        "SDMM solver for GrOpt gradient optimization problems.")
-        .def(nb::init<>())
+    nb::class_<Gropt::Solver>(m, "Solver")
+        .def_rw("extra_debug", &Gropt::Solver::extra_debug,
+            "If True, populate debug_solver with per-iteration history after solve().")
+        .def("get_debug", [](Gropt::Solver &self) {
+            nb::dict d;
+            d["hist_X"]   = self.debug_solver.hist_X;
+            d["hist_Ax"]  = self.debug_solver.hist_Ax;
+            d["hist_z"]   = self.debug_solver.hist_z;
+            d["hist_y"]   = self.debug_solver.hist_y;
+            d["hist_Aty"] = self.debug_solver.hist_Aty;
+            d["hist_weight"] = self.debug_solver.hist_weight;
+            d["hist_gamma"] = self.debug_solver.hist_gamma;
+            d["hist_gamma_x"] = self.debug_solver.hist_gamma_x;
+            return d;
+        },
+R"doc(Return debug history as a dict of lists of numpy arrays.
 
-        .def("set_general_params", &Gropt::SolverGroptSDMM::set_general_params,
+Only populated when extra_debug=True before solve().
+
+Returns
+-------
+dict with keys: hist_X, hist_Ax, hist_z, hist_y, hist_Aty
+    Each value is a list of 1-D numpy arrays, one per logged iteration.)doc"
+        )
+        .def("set_general_params", &Gropt::Solver::set_general_params,
             "min_iter"_a = 1, "max_iter"_a = 2000, "log_interval"_a = 20,
-            "gamma_x"_a = 1.6, "max_feval"_a = 12000,
+            "gamma_x"_a = 1.6, "max_feval"_a = 12000, "extra_iters"_a = 0,
 R"doc(Set general solver parameters.
 
-Parameters 
+Parameters
 ----------
 min_iter : int, optional
-    Minimum SDMM iterations.
+    Minimum iterations.
 max_iter : int, optional
-    Maximum SDMM iterations.
+    Maximum iterations.
 log_interval : int, optional
     Logging interval (only visible with verbose logging).
 gamma_x : float, optional
-    Relaxation parameter for SDMM updates.
+    Relaxation parameter for updates.
 max_feval : int, optional
-    Maximum total function evaluations.)doc"
+    Maximum total function evaluations.
+extra_iters : int, optional
+    Number of extra iterations to run after solution is found.)doc"
         )
 
-        .def("set_ils_params", &Gropt::SolverGroptSDMM::set_ils_params,
+        .def("set_ils_params", &Gropt::Solver::set_ils_params,
             "ils_tol"_a = 1e-3, "ils_max_iter"_a = 20, "ils_min_iter"_a = 2,
             "ils_sigma"_a = 1e-4, "ils_tik_lam"_a = 0.0,
 R"doc(Set indirect linear solver parameters.
@@ -443,14 +510,23 @@ Parameters
 ils_tol : float, optional
     Relative tolerance for the inner solver.
 ils_max_iter : int, optional
-    Maximum ILS iterations per SDMM iteration.
+    Maximum ILS iterations per outer iteration.
 ils_min_iter : int, optional
     Minimum ILS iterations.
 ils_sigma : float, optional
     ADMM penalty parameter.
 ils_tik_lam : float, optional
     Tikhonov regularization parameter.)doc"
-        )
+        );
+
+
+    //////////////////////////////////////////////////////////
+    // -------------------------------------------------------
+    // SolverGroptSDMM
+    // -------------------------------------------------------
+    nb::class_<Gropt::SolverGroptSDMM, Gropt::Solver>(m, "SolverGroptSDMM",
+        "SDMM solver for GrOpt gradient optimization problems.")
+        .def(nb::init<>())
 
         .def("set_sdmm_params", &Gropt::SolverGroptSDMM::set_sdmm_params,
             "rw_interval"_a = 8, "rw_e_corr"_a = 0.4, "rw_eps"_a = 1e-36,
@@ -500,47 +576,9 @@ SolveResult
     // -------------------------------------------------------
     // SolverOSQP
     // -------------------------------------------------------
-    nb::class_<Gropt::SolverOSQP>(m, "SolverOSQP",
+    nb::class_<Gropt::SolverOSQP, Gropt::Solver>(m, "SolverOSQP",
         "OSQP solver for GrOpt gradient optimization problems.")
         .def(nb::init<>())
-
-        .def("set_general_params", &Gropt::SolverOSQP::set_general_params,
-            "min_iter"_a = 1, "max_iter"_a = 2000, "log_interval"_a = 20,
-            "gamma_x"_a = 1.6, "max_feval"_a = 12000,
-R"doc(Set general solver parameters.
-
-Parameters 
-----------
-min_iter : int, optional
-    Minimum OSQP iterations.
-max_iter : int, optional
-    Maximum OSQP iterations.
-log_interval : int, optional
-    Logging interval (only visible with verbose logging).
-gamma_x : float, optional
-    Relaxation parameter for OSQP updates.
-max_feval : int, optional
-    Maximum total function evaluations.)doc"
-        )
-
-        .def("set_ils_params", &Gropt::SolverOSQP::set_ils_params,
-            "ils_tol"_a = 1e-3, "ils_max_iter"_a = 20, "ils_min_iter"_a = 2,
-            "ils_sigma"_a = 1e-4, "ils_tik_lam"_a = 0.0,
-R"doc(Set indirect linear solver parameters.
-
-Parameters
-----------
-ils_tol : float, optional
-    Relative tolerance for the inner solver.
-ils_max_iter : int, optional
-    Maximum ILS iterations per OSQP iteration.
-ils_min_iter : int, optional
-    Minimum ILS iterations.
-ils_sigma : float, optional
-    ADMM penalty parameter.
-ils_tik_lam : float, optional
-    Tikhonov regularization parameter.)doc"
-        )
 
         .def("solve", [](Gropt::SolverOSQP &self, Gropt::GroptParams &gparams) {
             Gropt::SolveResult result = self.solve(gparams);
@@ -568,15 +606,15 @@ SolveResult
 
     // solve() convenience function
     m.def("solve", [](Gropt::GroptParams &params,
-                      int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval,
+                      int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval, int extra_iters,
                       double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam) {
         Gropt::SolverGroptSDMM solver;
-        solver.set_general_params(min_iter, max_iter, log_interval, gamma_x, max_feval);
+        solver.set_general_params(min_iter, max_iter, log_interval, gamma_x, max_feval, extra_iters);
         solver.set_ils_params(ils_tol, ils_max_iter, ils_min_iter, ils_sigma, ils_tik_lam);
         return solver.solve(params);
     }, "params"_a,
        "min_iter"_a = 1, "max_iter"_a = 2000, "log_interval"_a = 20,
-       "gamma_x"_a = 1.6, "max_feval"_a = 12000,
+       "gamma_x"_a = 1.6, "max_feval"_a = 12000, "extra_iters"_a = 0,
        "ils_tol"_a = 1e-3, "ils_max_iter"_a = 20, "ils_min_iter"_a = 2,
        "ils_sigma"_a = 1e-4, "ils_tik_lam"_a = 0.0,
 R"doc(Convenience function to solve a GrOpt problem.
@@ -706,6 +744,30 @@ float
     Estimated spectral norm.)doc"
     );
 
+        // estimate_spec_norm
+    m.def("estimate_individual_spec_norm", &Gropt::estimate_individual_spec_norm,
+        "gparams"_a, "n_iters"_a = 20, "op_idx"_a = 0,
+R"doc(Estimate the spectral norm of a single operator matrix via power iteration.
+
+Parameters
+----------
+gparams : GroptParams
+    The problem definition (must have operators prepared).
+n_iters : int, optional
+    Number of power iterations.
+op_idx : int, optional
+    Index of the operator for which to estimate the spectral norm.
+
+Returns
+-------
+float
+    Estimated spectral norm.)doc"
+    );
+
+
+
+    
+
     // get_SAFE
     m.def("get_SAFE", [](Eigen::VectorXd G, double dt, bool true_safe,
                          int new_first_axis, bool demo_params,
@@ -754,4 +816,19 @@ Returns
 np.ndarray
     SAFE response curve.)doc"
     );
+
+    m.def("test_eigen_assertions", &Gropt::test_eigen_assertions,
+        "test_type"_a,
+R"doc(Test that assertions are running in Eigen. 
+
+Each test is a different assertion that should be triggered in Eigen.  All tests are
+expected to pass in normal execution.
+
+Parameters
+----------
+test_type : int
+    The type of assertion test to run, (1, 2, or 3).)doc"
+    );
+
+    
 }

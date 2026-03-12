@@ -37,14 +37,11 @@ namespace Gropt
         Eigen::VectorXd r_dual;
         Eigen::VectorXd r_primal;
 
-        SolveResult last_result;
-
         virtual SolveResult solve(GroptParams &_gparams);
         void update(Eigen::VectorXd &X);
         void get_residuals(Eigen::VectorXd &X);
         void set_sdmm_params(int rw_interval, double rw_e_corr, double rw_eps, double rw_scalelim,
                              int grw_min_infeasible, int grw_interval, double grw_mod);
-        void get_result_X(double **out, int &out_size);
     };
 
 } // namespace Gropt

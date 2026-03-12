@@ -1,12 +1,12 @@
 [project]
 name = "gropt"
-dynamic = ["version"]
+version = "2.0.0rc9"
 requires-python = ">=3.10"
 dependencies = ["numpy"]
 
 [project.optional-dependencies]
 gui = ["pyqt6", "matplotlib"]
-dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn"]
+dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn", "ipywidgets"]
 docs = [
     "mkdocs",
     "mkdocs-material",
@@ -16,37 +16,34 @@ docs = [
 ]
 
 [build-system]
-requires = ["scikit-build-core>=0.10", "nanobind>=2.0", "setuptools-scm>=8"]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.0"]
 build-backend = "scikit_build_core.build"
 
-[tool.scikit-build.metadata.version]
-provider = "scikit_build_core.metadata.setuptools_scm"
-
-[tool.setuptools_scm]
-local_scheme = "no-local-version"
+[tool.scikit-build]
+build-dir = ".scikit-build"
 
 [tool.cibuildwheel]
 build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 skip = "*-musllinux_* *-manylinux_i686 *-win32"
 test-command = "python -c \"import gropt; gropt.demo()\""
-environment-pass = ["SETUPTOOLS_SCM_PRETEND_VERSION"]
 
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
-environment = {MACOSX_DEPLOYMENT_TARGET = "10.13"}
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.13" }
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
 platforms = ["win-64"]
 
-[tool.pixi.pypi-dependencies]
-gropt = { path = ".", editable = true }
+# This messes up the rebuild commands, dont let pixi handle gropt at all, we will do it manually with pip install -e . in the tasks section.
+# [tool.pixi.pypi-dependencies]
+# gropt = { path = ".", editable = true }
 
 [tool.pixi.feature.dev.dependencies]
 cmake = ">=3.17"
 nanobind = ">=2.0"
+numpy = "*"
 scikit-build-core = ">=0.10"
-setuptools-scm = ">=8"
 pip = "*"
 
 [tool.pixi.environments]
@@ -55,9 +52,17 @@ dev = { features = ["dev", "docs"], solve-group = "default" }
 
 [tool.pixi.tasks]
 clean = "python clean.py"
+clean-full = "python clean.py --full"
+touch-wrapper = "python -c \"from pathlib import Path; Path('gropt/gropt_wrapper/gropt_wrapper.cpp').touch()\""
 rebuild = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
     "clean",
+    "touch-wrapper",
+] }
+rebuild-full = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
+    "clean-full",
+    "touch-wrapper",
 ] }
 rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON", depends-on = [
-    "clean",
+    "clean-full",
+    "touch-wrapper",
 ] }

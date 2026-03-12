@@ -70,8 +70,6 @@ void Op_Moment::init() {
         A(0, j) = val * pdata->inv_vec(j);
         spec_norm2 += val * val;
     }
-    // TODO: I think this sqrt is wrong, only the second one is needed, do some tests to confirm
-    spec_norm2 = sqrt(spec_norm2);
     spec_norm = sqrt(spec_norm2);
 
     target = moment_target;
@@ -101,6 +99,7 @@ void Op_Moment::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     for (int i = 0; i < X.size(); i++) {
         double lower_bound = (target - tol);
@@ -112,6 +111,7 @@ void Op_Moment::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     spdlog::trace("Finished Op_Moment::prox");
 }
@@ -122,6 +122,7 @@ void Op_Moment::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     for (int i = 0; i < X.size(); i++) {
         double lower_bound = (target - tol0);
@@ -135,6 +136,7 @@ void Op_Moment::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     hist_feas.push_back(is_feas);
 }

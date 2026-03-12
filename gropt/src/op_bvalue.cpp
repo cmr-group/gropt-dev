@@ -4,10 +4,9 @@
 
 namespace Gropt {
 
-Op_BValue::Op_BValue(const ProblemData &_pdata, double _bval_target, double _bval_tol0,
-                     int _start_idx0, int _stop_idx0, double _weight_mod, BVALUE_MODE _mode, double _max_scale)
-    : Operator(_pdata)
-{
+Op_BValue::Op_BValue(const ProblemData &_pdata, double _bval_target, double _bval_tol0, int _start_idx0, int _stop_idx0,
+                     double _weight_mod, BVALUE_MODE _mode, double _max_scale)
+    : Operator(_pdata) {
     name = "b-value";
 
     bval_target = _bval_target;
@@ -25,16 +24,15 @@ Op_BValue::Op_BValue(const ProblemData &_pdata, double _bval_target, double _bva
     max_scale = _max_scale;
 }
 
-void Op_BValue::init()
-{
+void Op_BValue::init() {
     spdlog::trace("Op_BValue::init  N = {}", pdata->N);
 
     target = bval_target;
     tol0 = bval_tol0;
-    tol = (1.0-cushion) * tol0;
+    tol = (1.0 - cushion) * tol0;
 
-    GAMMA = 267.5221900e6;  // rad/S/T
-    MAT_SCALE = pow((GAMMA / 1000.0 * pdata->dt), 2.0) * pdata->dt;  // 1/1000 is for m->mm in b-value
+    GAMMA = 267.5221900e6;                                          // rad/S/T
+    MAT_SCALE = pow((GAMMA / 1000.0 * pdata->dt), 2.0) * pdata->dt; // 1/1000 is for m->mm in b-value
 
     // If start and stop indices are not set, constraint covers the whole axis
     if (start_idx <= 0) {
@@ -50,7 +48,8 @@ void Op_BValue::init()
     }
 
     int Nnorm = i_stop - i_start;
-    spec_norm2 = (Nnorm*Nnorm + Nnorm)/2.0 * MAT_SCALE;
+    spec_norm2 = (Nnorm * Nnorm + Nnorm) / 2.0 * MAT_SCALE * 0.1175 * 4;
+    // spec_norm2 = spec_norm2 * spec_norm2;
     spec_norm = sqrt(spec_norm2);
 
     Ax_size = pdata->Naxis * pdata->N;
@@ -63,11 +62,10 @@ void Op_BValue::init()
     Operator::init();
 }
 
-void Op_BValue::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
-{
+void Op_BValue::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     out.setZero();
     for (int j = 0; j < Naxis; j++) {
-        int jN = j*N;
+        int jN = j * N;
         double gt = 0;
         for (int i = i_start; i < i_stop; i++) {
             gt += X(jN + i) * pdata->inv_vec(jN + i);
@@ -76,13 +74,12 @@ void Op_BValue::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
     }
 }
 
-void Op_BValue::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
-{
+void Op_BValue::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     out.setZero();
     for (int j = 0; j < Naxis; j++) {
-        int jN = j*N;
+        int jN = j * N;
         double gt = 0;
-        for (int i = i_stop-1; i >= i_start; i--) {
+        for (int i = i_stop - 1; i >= i_start; i--) {
             gt += X(jN + i) * sqrt(MAT_SCALE);
             out(jN + i) = gt * pdata->inv_vec(jN + i);
         }
@@ -90,53 +87,63 @@ void Op_BValue::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 }
 
 // TODO: This seems all wrong for three axis case, need to fix
-void Op_BValue::prox(Eigen::VectorXd &X)
-{
+void Op_BValue::prox(Eigen::VectorXd &X) {
     spdlog::trace("Starting Op_BValue::prox");
 
-    for (int j = 0; j < Naxis; j++) {
-        double xnorm = X.segment(j*N, N).norm();
+    if (do_equil) {
+        X.array() /= eq_rows.array();
+    }
+    X.array() *= spec_norm;
 
+    for (int j = 0; j < Naxis; j++) {
+        double xnorm = X.segment(j * N, N).norm();
 
         if (mode == BVALUE_MODE_MINVAL) {
             double min_val = sqrt(target);
 
             if (xnorm < min_val) {
-                X.segment(j*N, N) *= (min_val/xnorm);
+                X.segment(j * N, N) *= (min_val / xnorm);
             }
         } else if (mode == BVALUE_MODE_MINVALMAX) {
             double min_val = sqrt(target);
 
             if (xnorm < min_val) {
-                X.segment(j*N, N) *= (max_scale*min_val/xnorm);
+                X.segment(j * N, N) *= (max_scale * min_val / xnorm);
             } else {
-                X.segment(j*N, N) *= max_scale;
+                X.segment(j * N, N) *= max_scale;
             }
         } else if (mode == BVALUE_MODE_SETVAL) {
             double min_val = sqrt(target - tol);
             double max_val = sqrt(target + tol);
 
             if (xnorm < min_val) {
-                X.segment(j*N, N) *= (min_val/xnorm);
+                X.segment(j * N, N) *= (min_val / xnorm);
             } else if (xnorm > max_val) {
-                X.segment(j*N, N) *= (max_val/xnorm);
+                X.segment(j * N, N) *= (max_val / xnorm);
             }
         } else {
             spdlog::error("Unknown BVALUE_MODE in Op_BValue::prox");
         }
-
     }
+
+    if (do_equil) {
+        X.array() *= eq_rows.array();
+    }
+    X.array() /= spec_norm;
 
     spdlog::trace("Finished Op_BValue::prox");
 }
 
-
-void Op_BValue::check(Eigen::VectorXd &X)
-{
+void Op_BValue::check(Eigen::VectorXd &X) {
     int is_feas = 1;
 
+    if (do_equil) {
+        X.array() /= eq_rows.array();
+    }
+    X.array() *= spec_norm;
+
     for (int j = 0; j < Naxis; j++) {
-        double bval_t = (X.segment(j*N, N)).squaredNorm();
+        double bval_t = (X.segment(j * N, N)).squaredNorm();
 
         if (mode == BVALUE_MODE_MINVAL || mode == BVALUE_MODE_MINVALMAX) {
             if (bval_t < target) {
@@ -150,18 +157,21 @@ void Op_BValue::check(Eigen::VectorXd &X)
         } else {
             spdlog::error("Unknown BVALUE_MODE in Op_BValue::check");
         }
-
     }
+
+    if (do_equil) {
+        X.array() *= eq_rows.array();
+    }
+    X.array() /= spec_norm;
 
     hist_feas.push_back(is_feas);
 }
 
-double Op_BValue::get_bvalue(Eigen::VectorXd &X)
-{
+double Op_BValue::get_bvalue(Eigen::VectorXd &X) {
     Ax_temp.setZero();
     forward_op(X, Ax_temp);
 
     return Ax_temp.squaredNorm();
 }
 
-}  // close "namespace Gropt"
+} // namespace Gropt

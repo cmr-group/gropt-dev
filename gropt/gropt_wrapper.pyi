@@ -6,6 +6,8 @@ import numpy
 from numpy.typing import NDArray
 
 
+__build_date__: str = 'Mar 11 2026 21:46:53'
+
 def set_log_level(level: int) -> None:
     """
     Set the log level for the C++ gropt library.
@@ -63,6 +65,12 @@ class SolveResult:
 
     @n_feval.setter
     def n_feval(self, arg: int, /) -> None: ...
+
+    @property
+    def dt(self) -> float: ...
+
+    @dt.setter
+    def dt(self, arg: float, /) -> None: ...
 
     def __repr__(self) -> str: ...
 
@@ -176,6 +184,18 @@ class GroptParams:
         ----------
         gmax : float, optional
             Maximum allowed gradient magnitude [T/m].
+        rot_variant : bool, optional
+            If True, use rotationally invariant formulation.
+        weight_mod : float, optional
+            Weighting factor for this constraint.
+        """
+
+    def add_concomitant(self, rot_variant: bool = True, weight_mod: float = 1.0) -> None:
+        """
+        Add a concomitant constraint.
+
+        Parameters
+        ----------
         rot_variant : bool, optional
             If True, use rotationally invariant formulation.
         weight_mod : float, optional
@@ -311,6 +331,13 @@ class GroptParams:
         Automatically called by solve() if not already done.
         """
 
+    def print_op_details(self) -> None:
+        """
+        Print details of all operators.
+
+        This function prints information about each operator in the problem, including their types and parameters.
+        """
+
     def reset_op_weights(self) -> None:
         """
         Reset all operator weights and spectral norms to 1.0.
@@ -319,27 +346,46 @@ class GroptParams:
         operator in all_op and all_obj.
         """
 
-class SolverGroptSDMM:
-    """SDMM solver for GrOpt gradient optimization problems."""
+class Solver:
+    @property
+    def extra_debug(self) -> bool:
+        """
+        If True, populate debug_solver with per-iteration history after solve().
+        """
 
-    def __init__(self) -> None: ...
+    @extra_debug.setter
+    def extra_debug(self, arg: bool, /) -> None: ...
 
-    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000) -> None:
+    def get_debug(self) -> dict:
+        """
+        Return debug history as a dict of lists of numpy arrays.
+
+        Only populated when extra_debug=True before solve().
+
+        Returns
+        -------
+        dict with keys: hist_X, hist_Ax, hist_z, hist_y, hist_Aty
+            Each value is a list of 1-D numpy arrays, one per logged iteration.
+        """
+
+    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, extra_iters: int = 0) -> None:
         """
         Set general solver parameters.
 
-        Parameters 
+        Parameters
         ----------
         min_iter : int, optional
-            Minimum SDMM iterations.
+            Minimum iterations.
         max_iter : int, optional
-            Maximum SDMM iterations.
+            Maximum iterations.
         log_interval : int, optional
             Logging interval (only visible with verbose logging).
         gamma_x : float, optional
-            Relaxation parameter for SDMM updates.
+            Relaxation parameter for updates.
         max_feval : int, optional
             Maximum total function evaluations.
+        extra_iters : int, optional
+            Number of extra iterations to run after solution is found.
         """
 
     def set_ils_params(self, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> None:
@@ -351,7 +397,7 @@ class SolverGroptSDMM:
         ils_tol : float, optional
             Relative tolerance for the inner solver.
         ils_max_iter : int, optional
-            Maximum ILS iterations per SDMM iteration.
+            Maximum ILS iterations per outer iteration.
         ils_min_iter : int, optional
             Minimum ILS iterations.
         ils_sigma : float, optional
@@ -359,6 +405,11 @@ class SolverGroptSDMM:
         ils_tik_lam : float, optional
             Tikhonov regularization parameter.
         """
+
+class SolverGroptSDMM(Solver):
+    """SDMM solver for GrOpt gradient optimization problems."""
+
+    def __init__(self) -> None: ...
 
     def set_sdmm_params(self, rw_interval: int = 8, rw_e_corr: float = 0.4, rw_eps: float = 1e-36, rw_scalelim: float = 1.5, grw_min_infeasible: int = 20, grw_interval: int = 20, grw_mod: float = 2.0) -> None:
         """
@@ -397,46 +448,10 @@ class SolverGroptSDMM:
             The optimization result containing the waveform and convergence info.
         """
 
-class SolverOSQP:
+class SolverOSQP(Solver):
     """OSQP solver for GrOpt gradient optimization problems."""
 
     def __init__(self) -> None: ...
-
-    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000) -> None:
-        """
-        Set general solver parameters.
-
-        Parameters 
-        ----------
-        min_iter : int, optional
-            Minimum OSQP iterations.
-        max_iter : int, optional
-            Maximum OSQP iterations.
-        log_interval : int, optional
-            Logging interval (only visible with verbose logging).
-        gamma_x : float, optional
-            Relaxation parameter for OSQP updates.
-        max_feval : int, optional
-            Maximum total function evaluations.
-        """
-
-    def set_ils_params(self, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> None:
-        """
-        Set indirect linear solver parameters.
-
-        Parameters
-        ----------
-        ils_tol : float, optional
-            Relative tolerance for the inner solver.
-        ils_max_iter : int, optional
-            Maximum ILS iterations per OSQP iteration.
-        ils_min_iter : int, optional
-            Minimum ILS iterations.
-        ils_sigma : float, optional
-            ADMM penalty parameter.
-        ils_tik_lam : float, optional
-            Tikhonov regularization parameter.
-        """
 
     def solve(self, gparams: GroptParams) -> SolveResult:
         """
@@ -453,7 +468,7 @@ class SolverOSQP:
             The optimization result containing the waveform and convergence info.
         """
 
-def solve(params: GroptParams, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> SolveResult:
+def solve(params: GroptParams, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, extra_iters: int = 0, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> SolveResult:
     """
     Convenience function to solve a GrOpt problem.
 
@@ -569,6 +584,25 @@ def estimate_spec_norm(gparams: GroptParams, n_iters: int = 20) -> float:
         Estimated spectral norm.
     """
 
+def estimate_individual_spec_norm(gparams: GroptParams, n_iters: int = 20, op_idx: int = 0) -> float:
+    """
+    Estimate the spectral norm of a single operator matrix via power iteration.
+
+    Parameters
+    ----------
+    gparams : GroptParams
+        The problem definition (must have operators prepared).
+    n_iters : int, optional
+        Number of power iterations.
+    op_idx : int, optional
+        Index of the operator for which to estimate the spectral norm.
+
+    Returns
+    -------
+    float
+        Estimated spectral norm.
+    """
+
 def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, true_safe: bool = True, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
     """
     Compute the SAFE (PNS) response for a gradient waveform.
@@ -592,4 +626,17 @@ def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')
     -------
     np.ndarray
         SAFE response curve.
+    """
+
+def test_eigen_assertions(test_type: int) -> None:
+    """
+    Test that assertions are running in Eigen. 
+
+    Each test is a different assertion that should be triggered in Eigen.  All tests are
+    expected to pass in normal execution.
+
+    Parameters
+    ----------
+    test_type : int
+        The type of assertion test to run, (1, 2, or 3).
     """

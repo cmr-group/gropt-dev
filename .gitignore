@@ -2,6 +2,7 @@ private*
 build-release/
 build-debug/
 stubs/
+.scikit-build/
 
 # We might eventualyl need these for tests
 *.h5
