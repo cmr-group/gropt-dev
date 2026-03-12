@@ -170,6 +170,7 @@ void Op_BValue::check(Eigen::VectorXd &X) {
 double Op_BValue::get_bvalue(Eigen::VectorXd &X) {
     Ax_temp.setZero();
     forward_op(X, Ax_temp);
+    Ax_temp.array() *= spec_norm;
 
     return Ax_temp.squaredNorm();
 }

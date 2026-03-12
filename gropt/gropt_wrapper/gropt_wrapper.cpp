@@ -72,6 +72,7 @@ n_feval : int
         .def_rw("n_iter", &Gropt::SolveResult::n_iter)
         .def_rw("n_feval", &Gropt::SolveResult::n_feval)
         .def_rw("dt", &Gropt::SolveResult::dt)
+        .def_rw("bvalue", &Gropt::SolveResult::bvalue)
         .def("__repr__", [](const Gropt::SolveResult &r) {
             return "SolveResult(converged=" + std::string(r.converged ? "True" : "False") +
                    ", n_iter=" + std::to_string(r.n_iter) +

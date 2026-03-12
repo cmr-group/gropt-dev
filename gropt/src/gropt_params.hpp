@@ -26,6 +26,7 @@ struct SolveResult {
     int n_iter = 0;
     int n_feval = 0;
     double dt = 0.0;
+    double bvalue = 0.0;
 };
 
 class GroptParams {

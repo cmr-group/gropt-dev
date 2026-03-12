@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Mar 11 2026 22:45:32'
+__build_date__: str = 'Mar 11 2026 23:37:02'
 
 def set_log_level(level: int) -> None:
     """
@@ -71,6 +71,12 @@ class SolveResult:
 
     @dt.setter
     def dt(self, arg: float, /) -> None: ...
+
+    @property
+    def bvalue(self) -> float: ...
+
+    @bvalue.setter
+    def bvalue(self, arg: float, /) -> None: ...
 
     def __repr__(self) -> str: ...
 
