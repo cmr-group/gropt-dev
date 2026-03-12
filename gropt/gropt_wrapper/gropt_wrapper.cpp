@@ -143,6 +143,26 @@ T_readout : float, optional
     Time to TE of the readout in seconds.)doc"
         )
 
+        // diff_init
+        .def("diff_init_deadtime", &Gropt::GroptParams::diff_init_deadtime,
+            "dt"_a = 400e-6, "TE"_a = 80e-3, "T_90"_a = 3e-3, "T_180"_a = 5e-3, "T_readout"_a = 16e-3,
+R"doc(Initialize diffusion sequence parameters, but with forced deadtime to make "convnetional" waveforms.
+
+Parameters
+----------
+dt : float, optional
+    Raster time in seconds.
+TE : float, optional
+    Echo time in seconds.
+T_90 : float, optional
+    Duration of excitation RF pulse in seconds (time from excitation,
+    so half of full RF pulse duration).
+T_180 : float, optional
+    Duration of refocusing RF pulse in seconds.
+T_readout : float, optional
+    Time to TE of the readout in seconds.)doc"
+        )
+
         // setvec_X0 — accepts numpy array, infers N/Naxis from shape
         .def("setvec_X0", [](Gropt::GroptParams &self, nb::ndarray<double, nb::ndim<1>> X0, bool set_others) {
             Eigen::Map<const Eigen::VectorXd> x(X0.data(), X0.shape(0));

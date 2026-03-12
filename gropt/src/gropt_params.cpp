@@ -133,6 +133,61 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
     vec_init_status = N;
 }
 
+void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, double _T_180, double _T_readout) {
+    dt = _dt;
+    Naxis = 1;
+
+    double T_90 = _T_90;
+    double T_180 = _T_180;
+    double T_readout = _T_readout;
+    double TE = _TE;
+
+    N = (int)((TE - T_readout) / dt) + 1;
+    Ntot = N * Naxis;
+
+    int ind_inv = (int)(TE / 2.0 / dt);
+    pdata.inv_vec.setOnes(N);
+    for (int i = ind_inv; i < N; i++) {
+        pdata.inv_vec(i) = -1.0;
+    }
+
+    int ind_90_end, ind_180_start, ind_180_end;
+    ind_90_end = ceil(T_90 / dt);
+    ind_180_end = ceil((TE / 2.0 + T_180 / 2.0) / dt);
+
+    int live_time = N - ind_180_end;
+    ind_180_start = ind_90_end + live_time;
+
+    pdata.set_vals.setOnes(N);
+    pdata.set_vals.array() *= NAN;
+    for (int i = 0; i <= ind_90_end; i++) {
+        pdata.set_vals(i) = 0.0;
+    }
+    for (int i = ind_180_start; i <= ind_180_end; i++) {
+        pdata.set_vals(i) = 0.0;
+    }
+    pdata.set_vals(0) = 0.0;
+    pdata.set_vals(N - 1) = 0.0;
+
+    pdata.fixer.setOnes(N);
+    for (int i = 0; i < pdata.set_vals.size(); i++) {
+        if (!isnan(pdata.set_vals(i))) {
+            pdata.fixer(i) = 0.0;
+        }
+    }
+
+    pdata.X0.setOnes(N);
+    for (int i = 0; i < pdata.set_vals.size(); i++) {
+        if (!isnan(pdata.set_vals(i))) {
+            pdata.X0(i) = pdata.set_vals(i);
+        } else {
+            pdata.X0(i) = 1e-2; // Initial value for non-fixed points
+        }
+    }
+
+    vec_init_status = N;
+}
+
 void GroptParams::set_ils_solver(std::string _ils_method) {
     spdlog::info("set_ils_solver: {}", _ils_method);
     if (_ils_method == "CG") {

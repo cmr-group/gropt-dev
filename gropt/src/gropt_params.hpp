@@ -59,6 +59,7 @@ class GroptParams {
 
     void vec_init_simple(int _N, int _Naxis, double first_val, double last_val);
     void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
+    void diff_init_deadtime(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
     void setvec_X0(const Eigen::VectorXd &_X0, int _Naxis, bool set_others);
 
     void vec_reduce_simple(int N_reduce);
