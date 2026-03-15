@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Mar 11 2026 23:37:02'
+__build_date__: str = 'Mar 14 2026 16:30:18'
 
 def set_log_level(level: int) -> None:
     """
@@ -165,6 +165,32 @@ class GroptParams:
             Time to TE of the readout in seconds.
         """
 
+    def diff_init_preencode(self, dt: float = 0.0004, TE: float = 0.08, T_90: float = 0.003, T_180: float = 0.005, T_readout: float = 0.016, T_pre: float = 0.0) -> int:
+        """
+        Initialize diffusion sequence parameters with a pre-encoding period.
+
+        Parameters
+        ----------
+        dt : float, optional
+            Raster time in seconds.
+        TE : float, optional
+            Echo time in seconds.
+        T_90 : float, optional
+            Duration of excitation RF pulse in seconds (time from excitation,
+            so half of full RF pulse duration).
+        T_180 : float, optional
+            Duration of refocusing RF pulse in seconds.
+        T_readout : float, optional
+            Time to TE of the readout in seconds.
+        T_pre : float, optional
+            Duration of the pre-encoding period in seconds.
+
+        Returns
+        -------
+        int
+            Number of pre-encoding time points (N_pre).
+        """
+
     @overload
     def setvec_X0(self, X0: Annotated[NDArray[numpy.float64], dict(shape=(None,))], set_others: bool = True) -> None:
         """
@@ -215,12 +241,14 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_concomitant(self, rot_variant: bool = True, weight_mod: float = 1.0) -> None:
+    def add_concomitant(self, start_idx: int = 0, rot_variant: bool = True, weight_mod: float = 1.0) -> None:
         """
         Add a concomitant constraint.
 
         Parameters
         ----------
+        start_idx : int, optional
+            Starting index for the constraint (-1 = beginning).
         rot_variant : bool, optional
             If True, use rotationally invariant formulation.
         weight_mod : float, optional
@@ -299,6 +327,21 @@ class GroptParams:
             Whether to use demo parameters.
         safe_params : dict, optional
             Dictionary of SAFE parameters (see gropt.readasc).
+        weight_mod : float, optional
+            Weighting factor for this constraint.
+        """
+
+    def add_eddy(self, lam: object, tol: float = 0.0001, weight_mod: float = 1.0) -> None:
+        """
+        Add an eddy current constraint.
+
+        Parameters
+        ----------
+        lam : float or np.ndarray
+            Time constant(s) for eddy currents [seconds]. A single float is treated
+            as a one-element array.
+        tol : float, optional
+            Tolerance for the constraint.
         weight_mod : float, optional
             Weighting factor for this constraint.
         """

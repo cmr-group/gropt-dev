@@ -1,6 +1,7 @@
 site_name: GrOpt
+site_url: https://cmr-group.github.io/gropt-dev/
+repo_url: https://github.com/cmr-group/gropt-dev
 
-site_url: https://temp.org
 theme:
   name: material
   palette:

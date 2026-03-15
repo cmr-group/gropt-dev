@@ -1,7 +1,7 @@
 #include "spdlog/spdlog.h"
 
-#include "solver.hpp"
 #include "op_bvalue.hpp"
+#include "solver.hpp"
 
 namespace Gropt {
 
@@ -69,10 +69,14 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
         Operator *op = gparams->all_op[i].get();
         if (op->name == "b-value") {
             Op_BValue *op_bvalue = dynamic_cast<Op_BValue *>(op);
-            if (op_bvalue != nullptr) {
-                result.bvalue = op_bvalue->get_bvalue(X);
+            if (X.array().isNaN().any()) {
+                result.bvalue = 0;
             } else {
-                spdlog::warn("Operator named 'b-value' is not an Op_BValue instance.");
+                if (op_bvalue != nullptr) {
+                    result.bvalue = op_bvalue->get_bvalue(X);
+                } else {
+                    spdlog::warn("Operator named 'b-value' is not an Op_BValue instance.");
+                }
             }
         }
     }

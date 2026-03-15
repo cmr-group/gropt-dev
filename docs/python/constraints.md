@@ -36,7 +36,7 @@
 
 ## PNS (SAFE-model)
 
-PNS parameters can be loaded from an .asc file using the `gropt.readasc.asc_to_safe` function, which will create a python dictionary that can be used as input to the SAFE constraints.  Alternatively, no parameters can be entered to use some default demonstration values.  Finally, to get a SAFE predcition, the `gropt.get_SAFE` function can be used.
+PNS parameters can be loaded from an .asc file using the `gropt.readasc.asc_to_safe` function, which will create a python dictionary that can be used as input to the SAFE constraints.  Alternatively, no parameters can be entered to use some default demonstration values.  Finally, to get a SAFE prediction, the `gropt.get_SAFE` function can be used.
 
 ::: gropt.readasc.asc_to_safe
     options:
@@ -54,3 +54,38 @@ PNS parameters can be loaded from an .asc file using the `gropt.readasc.asc_to_s
     options:
         heading_level: 3
 
+## Eddy Currents
+
+::: gropt.GroptParams
+    options:
+        members:
+            - add_eddy
+        heading_level: 3
+        show_root_heading: false
+
+## Concomitant Fields
+
+::: gropt.GroptParams
+    options:
+        members:
+            - add_concomitant
+        heading_level: 3
+        show_root_heading: false
+
+## Total Variation
+
+::: gropt.GroptParams
+    options:
+        members:
+            - add_TV
+        heading_level: 3
+        show_root_heading: false
+
+## Objectives
+
+::: gropt.GroptParams
+    options:
+        members:
+            - add_obj_identity
+        heading_level: 3
+        show_root_heading: false
