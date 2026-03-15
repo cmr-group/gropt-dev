@@ -1,51 +1,63 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://temp.org/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/cpp/cpp_info/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/cpp/cpp_info/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/examples/simple_example/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/examples/simple_example/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/examples/diffusion/diffusion_constraint/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/examples/diffusion/diffusion_constraint/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/examples/moments/flow_encoding/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/examples/moments/flow_encoding/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/examples/moments/nonzero_ends/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/examples/moments/nonzero_ends/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/examples/objective_functions/regularizations/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/examples/objective_functions/regularizations/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/python/constraints/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/math/comparing/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/python/gropt_py/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/math/osqp/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/python/problem/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/math/parsdmm/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/python/solvers/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/python/constraints/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
     <url>
-         <loc>https://temp.org/solvers/osqp_solver/</loc>
-         <lastmod>2026-02-13</lastmod>
+         <loc>https://cmr-group.github.io/gropt-dev/python/gropt_py/</loc>
+         <lastmod>2026-03-15</lastmod>
+    </url>
+    <url>
+         <loc>https://cmr-group.github.io/gropt-dev/python/problem/</loc>
+         <lastmod>2026-03-15</lastmod>
+    </url>
+    <url>
+         <loc>https://cmr-group.github.io/gropt-dev/python/solvers/</loc>
+         <lastmod>2026-03-15</lastmod>
+    </url>
+    <url>
+         <loc>https://cmr-group.github.io/gropt-dev/solvers/osqp_solver/</loc>
+         <lastmod>2026-03-15</lastmod>
     </url>
 </urlset>

@@ -8,8 +8,10 @@
       
       
       
-        <link rel="canonical" href="https://cmr-group.github.io/gropt-dev/cpp/cpp_info/">
+        <link rel="canonical" href="https://cmr-group.github.io/gropt-dev/math/parsdmm/">
       
+      
+        <link rel="prev" href="../osqp/">
       
       
       
@@ -18,7 +20,7 @@
     
     
       
-        <title>Cpp info - GrOpt</title>
+        <title>Parsdmm - GrOpt</title>
       
     
     
@@ -71,6 +73,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#algorithm" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -101,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Cpp info
+              Parsdmm
             
           </span>
         </div>
@@ -253,6 +260,8 @@
   
   
   
+    
+  
   
     
     
@@ -260,11 +269,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../math/comparing/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../comparing/" class="md-tabs__link">
           
   
   
@@ -849,24 +860,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
             
   
   
@@ -879,7 +895,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             Math
@@ -890,6 +906,8 @@
                 
   
   
+    
+  
   
   
     
@@ -900,11 +918,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" checked>
         
           
           <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
@@ -920,7 +938,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_1">
             <span class="md-nav__icon md-icon"></span>
             Math
@@ -934,7 +952,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../math/comparing/" class="md-nav__link">
+      <a href="../comparing/" class="md-nav__link">
         
   
   
@@ -957,7 +975,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../math/osqp/" class="md-nav__link">
+      <a href="../osqp/" class="md-nav__link">
         
   
   
@@ -977,10 +995,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../math/parsdmm/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Parsdmm
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -991,6 +1029,33 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Algorithm
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1029,6 +1094,23 @@
   
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Algorithm
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1046,9 +1128,45 @@
   
 
 
-  <h1>Cpp info</h1>
+  <h1>Parsdmm</h1>
 
-
+<p>All copied from here: <a href="https://arxiv.org/abs/1902.09699">Arxiv Link</a></p>
+<h2 id="algorithm">Algorithm</h2>
+<p><strong>Algorithm: PARSDMM</strong><br />
+<em>(Projection Adaptive Relaxed Simultaneous Direction Method of Multipliers to compute the projection onto an intersection, including automatic selection of the penalty parameters and relaxation.)</em>  </p>
+<hr />
+<p><strong>Inputs:</strong><br />
+<em>   <span class="arithmatex">\(m\)</span> // point to project<br />
+</em>   <span class="arithmatex">\(A_1, A_2, \dots, A_{p}, A_{p+1}=I_N\)</span>   &nbsp;&nbsp;// linear operators<br />
+<em>   <span class="arithmatex">\(\operatorname{prox}_{f_i,\rho_i}(w) = \mathcal{P}_{\mathcal{C}_i}(w)\)</span> for <span class="arithmatex">\(i=1, 2, \dots, p\)</span>   &nbsp;&nbsp;// norm/bound/cardinality/... projectors<br />
+</em>   <span class="arithmatex">\(\operatorname{prox}_{f_{p+1},\rho_{p+1}}(w) = (m+\rho_{p+1} w)/(1+\rho_{p+1})\)</span>   &nbsp;&nbsp;// prox for the squared distance from <span class="arithmatex">\(m\)</span><br />
+<em>   select <span class="arithmatex">\(\rho_i^0\)</span>, <span class="arithmatex">\(\gamma_i^0\)</span>, <span class="arithmatex">\(\text{update-frequency}\)</span> for <span class="arithmatex">\(\gamma\)</span> and <span class="arithmatex">\(\rho\)</span><br />
+</em>   optional: initial guess for <span class="arithmatex">\(x\)</span>, <span class="arithmatex">\(y_i\)</span> and <span class="arithmatex">\(v_i\)</span>  </p>
+<p><strong>Initialize:</strong><br />
+<em>   <span class="arithmatex">\(B_i = A_i^\top A_i\)</span> for all <span class="arithmatex">\(i\)</span>   &nbsp;&nbsp;// pre-compute<br />
+</em>   <span class="arithmatex">\(C = \sum_{i=1}^{p+1} (\rho_i B_i )\)</span>   &nbsp;&nbsp;// pre-compute<br />
+*   <span class="arithmatex">\(k=1\)</span>  </p>
+<p><strong>Loop:</strong></p>
+<p><strong>WHILE</strong> not converged:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(x^{k+1} = C^{-1} \sum_{i=1}^{p+1} \Big[A_i^\top(\rho_i^k y_i^{k} + v_i^k) \Big]\)</span> // CG, stop when condition holds   </p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>FOR</strong> <span class="arithmatex">\(i=1, 2, \dots, p+1\)</span>   &nbsp;&nbsp;// compute in parallel<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(s_i^{k+1} = A_i x^{k+1}\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(\bar{x}_i^{k+1} = \gamma_i^k s_i^{k+1} + ( 1-\gamma_i^k ) y_i^{k}\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(y_i^{k+1} = \operatorname{prox}_{f_i,\rho_i}(\bar{x}_i^{k+1} - \frac{v_i^k}{\rho_i^k} )\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(v_i^{k+1} = v_i^k + \rho_i^k (y_i^{k+1} - \bar{x}_i^{k+1})\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;stop if stopping conditions hold  </p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>IF</strong> <span class="arithmatex">\(\text{mod}(k,\text{update-frequency}) = 1\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(\{\rho_i^{k+1},\gamma_i^{k+1}\}=\text{adapt-rho-gamma}(v_i^k,v_i^{k+1},y_i^{k+1},s_i^{k+1},\rho_i^k)\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>END IF</strong><br />
+&nbsp;&nbsp;&nbsp;&nbsp;<strong>END FOR</strong>  </p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>FOR</strong> <span class="arithmatex">\(i=1, 2, \dots, p+1\)</span>   &nbsp;&nbsp;// update C if necessary<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>IF</strong> <span class="arithmatex">\(\rho_i^{k+1} \neq \rho_i^{k}\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(C \leftarrow C + B_i (\rho_i^{k+1} - \rho_i^{k})\)</span><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>END IF</strong><br />
+&nbsp;&nbsp;&nbsp;&nbsp;<strong>END FOR</strong>  </p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<span class="arithmatex">\(k \leftarrow k+1\)</span><br />
+<strong>END WHILE</strong>  </p>
+<p><strong>Output:</strong> <span class="arithmatex">\(x\)</span>  </p>
 
 
 

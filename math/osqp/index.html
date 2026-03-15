@@ -8,9 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://cmr-group.github.io/gropt-dev/cpp/cpp_info/">
+        <link rel="canonical" href="https://cmr-group.github.io/gropt-dev/math/osqp/">
       
       
+        <link rel="prev" href="../comparing/">
+      
+      
+        <link rel="next" href="../parsdmm/">
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
@@ -18,7 +22,7 @@
     
     
       
-        <title>Cpp info - GrOpt</title>
+        <title>Osqp - GrOpt</title>
       
     
     
@@ -71,6 +75,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#problem" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -101,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Cpp info
+              Osqp
             
           </span>
         </div>
@@ -253,6 +262,8 @@
   
   
   
+    
+  
   
     
     
@@ -260,11 +271,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../math/comparing/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../comparing/" class="md-tabs__link">
           
   
   
@@ -849,24 +862,29 @@
       
   
   
+    
   
   
+  
     
     
     
     
-      
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
             
   
   
@@ -879,7 +897,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             Math
@@ -890,6 +908,8 @@
                 
   
   
+    
+  
   
   
     
@@ -900,11 +920,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_1" checked>
         
           
           <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
@@ -920,7 +940,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_1">
             <span class="md-nav__icon md-icon"></span>
             Math
@@ -934,7 +954,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../math/comparing/" class="md-nav__link">
+      <a href="../comparing/" class="md-nav__link">
         
   
   
@@ -954,10 +974,30 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../math/osqp/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Osqp
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -968,6 +1008,66 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      Problem
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#primal-dual-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Primal dual solution
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Algorithm
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Algorithm">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indirect-linear-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indirect Linear Solver
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -980,7 +1080,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../math/parsdmm/" class="md-nav__link">
+      <a href="../parsdmm/" class="md-nav__link">
         
   
   
@@ -1029,6 +1129,56 @@
   
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      Problem
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#primal-dual-solution" class="md-nav__link">
+    <span class="md-ellipsis">
+      Primal dual solution
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#algorithm" class="md-nav__link">
+    <span class="md-ellipsis">
+      Algorithm
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Algorithm">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#indirect-linear-solver" class="md-nav__link">
+    <span class="md-ellipsis">
+      Indirect Linear Solver
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1046,9 +1196,63 @@
   
 
 
-  <h1>Cpp info</h1>
+  <h1>Osqp</h1>
 
-
+<p>All copied from here: <a href="https://arxiv.org/abs/1711.08013">Arxiv Link</a></p>
+<h2 id="problem">Problem</h2>
+<p>Consider the following optimization problem</p>
+<div class="arithmatex">\[\begin{equation}\label{pb:main}
+\begin{array}{ll}
+    \mbox{minimize}   &amp; (1/2) x^\tpose P x + q^\tpose x \\
+    \mbox{subject to} &amp; A x \in \mathcal{C},
+\end{array}
+\end{equation}\]</div>
+<p>where <span class="arithmatex">\(x\in \reals^{n}\)</span> is the decision variable.</p>
+<p>The objective function is defined by a positive semidefinite matrix <span class="arithmatex">\(P \in \symm_{+}^{n}\)</span> and a vector <span class="arithmatex">\(q \in \reals^{n}\)</span>, and the constraints by a matrix <span class="arithmatex">\(A\in \reals^{m \times n}\)</span> and a nonempty, closed and convex set <span class="arithmatex">\(\mathcal{C} \subseteq \reals^m\)</span>.</p>
+<h2 id="primal-dual-solution">Primal dual solution</h2>
+<p>We will find it convenient to rewrite problem~\eqref{pb:main} by introducing an additional decision variable <span class="arithmatex">\(z\in\reals^m\)</span>, to obtain the equivalent problem</p>
+<div class="arithmatex">\[\begin{equation}\label{pb:equivalent}
+\begin{array}{ll}
+    \mbox{minimize}   &amp; (1/2) x^\tpose P x + q^\tpose x \\
+    \mbox{subject to} &amp; A x = z \\
+    &amp; z \in \mathcal{C}.
+\end{array}
+\end{equation}\]</div>
+<p>We can write the optimality conditions of problem <span class="arithmatex">\(\eqref{pb:equivalent}\)</span> as</p>
+<div class="arithmatex">\[\begin{align}
+    &amp; Ax = z, \label{eq:prim_feas} \\
+    &amp; Px + q + A^\tpose y = 0, \label{eq:dual_feas}\\
+    &amp; z \in \mathcal{C}, \quad y\in N_{\mathcal{C}}(z),\label{eq:separating_hyperplane}
+\end{align}\]</div>
+<p>where <span class="arithmatex">\(y\in \reals^{m}\)</span> is the Lagrange multiplier associated with the constraint <span class="arithmatex">\(Ax=z\)</span> and <span class="arithmatex">\(N_{\mathcal{C}}(z)\)</span> denotes the normal cone of <span class="arithmatex">\(\mathcal{C}\)</span> at <span class="arithmatex">\(z\)</span>.</p>
+<p>If there exist <span class="arithmatex">\(x \in \reals^n\)</span>, <span class="arithmatex">\(z \in \reals^{m}\)</span> and <span class="arithmatex">\(y \in \reals^{m}\)</span> that satisfy the conditions above, then we say that <span class="arithmatex">\((x,z)\)</span> is a <em>primal</em> and <span class="arithmatex">\(y\)</span> is a <em>dual</em> solution to problem <span class="arithmatex">\(\eqref{pb:equivalent}\)</span>.</p>
+<p>We define the primal and dual residuals of problem <span class="arithmatex">\(\eqref{pb:main}\)</span> as</p>
+<div class="arithmatex">\[\begin{align}
+    r_{\rm prim} &amp;\eqdef Ax - z, \label{eq:res_prim}\\
+    r_{\rm dual} &amp;\eqdef Px + q + A^\tpose y. \label{eq:res_dual}
+\end{align}\]</div>
+<h2 id="algorithm">Algorithm</h2>
+<ol>
+<li><strong>given</strong> initial values <span class="arithmatex">\(x^0\)</span>, <span class="arithmatex">\(z^0\)</span>, <span class="arithmatex">\(y^0\)</span> and parameters <span class="arithmatex">\(\rho&gt;0\)</span>, <span class="arithmatex">\(\sigma&gt;0\)</span>, <span class="arithmatex">\(\alpha \in (0,2)\)</span></li>
+<li><strong>Repeat</strong></li>
+<li>&nbsp;&nbsp;&nbsp;&nbsp; <span class="arithmatex">\((\tilde{x}^{k+1}, \nu^{k+1}) \gets\)</span> solve linear system <span class="arithmatex">\(\begin{bmatrix} P + \sigma I &amp; A^\tpose \\ A &amp; -\rho^{-1}I \end{bmatrix} \begin{bmatrix} \tilde{x}^{k+1} \\ \nu^{k+1} \end{bmatrix}= \begin{bmatrix}\sigma x^{k} - q \\ z^{k} - \rho^{-1} y^k \end{bmatrix}\)</span></li>
+<li>&nbsp;&nbsp;&nbsp;&nbsp; <span class="arithmatex">\(\tilde{z}^{k+1} \gets z^k + \rho^{-1}(\nu^{k+1} - y^{k})\)</span> OR with Indirect Solver: <span class="arithmatex">\(\tilde{z}^{k+1} = A\tilde{x}^{k+1}\)</span></li>
+<li>&nbsp;&nbsp;&nbsp;&nbsp; <span class="arithmatex">\(x^{k+1} \gets \alpha \tilde{x}^{k+1} + (1-\alpha)x^{k}\)</span></li>
+<li>&nbsp;&nbsp;&nbsp;&nbsp; <span class="arithmatex">\(z^{k+1} \gets \Pi\left(\alpha \tilde{z}^{k+1} + (1-\alpha)z^{k} + \rho^{-1} y^{k} \right)\)</span></li>
+<li>&nbsp;&nbsp;&nbsp;&nbsp; <span class="arithmatex">\(y^{k+1} \gets y^{k} + \rho \left( \alpha \tilde{z}^{k+1} + (1-\alpha)z^{k} - z^{k+1} \right)\)</span></li>
+<li><strong>Until</strong> termination criterion is satisfied</li>
+</ol>
+<p>where <span class="arithmatex">\(\sigma&gt;0\)</span> and <span class="arithmatex">\(\rho&gt;0\)</span> are the <em>step-size parameters</em>, <span class="arithmatex">\(\alpha \in (0,2)\)</span> is the <em>relaxation parameter</em>, and <span class="arithmatex">\(\Pi\)</span> denotes the Euclidean projection onto <span class="arithmatex">\(\mathcal{C}\)</span>.</p>
+<h3 id="indirect-linear-solver">Indirect Linear Solver</h3>
+<p>With regards to step 3 of the algorithm, in our applications we solve indirectly:</p>
+<p>With large-scale QP, factoring linear system in step 3 might be prohibitive. In these cases it might be more convenient to use an indirect method by solving instead the linear system</p>
+<div class="arithmatex">\[\begin{equation*}
+    \left(P + \sigma I + \rho A^\tpose A \right)\tilde{x}^{k+1} = \sigma x^{k} - q + A^\tpose (\rho z^{k} - y^{k})
+\end{equation*}\]</div>
+<p>obtained by eliminating <span class="arithmatex">\(\nu^{k+1}\)</span> from (step 3). We then compute <span class="arithmatex">\(\tilde{z}^{k+1}\)</span> as <span class="arithmatex">\(\tilde{z}^{k+1} = A\tilde{x}^{k+1}\)</span>.</p>
+<p>Note that the coefficient matrix in the above linear system is always positive definite.</p>
+<p>The linear system can therefore be solved with an iterative scheme such as the conjugate gradient method.</p>
+<p>When the linear system is solved up to some predefined accuracy, we terminate the method.</p>
 
 
 
