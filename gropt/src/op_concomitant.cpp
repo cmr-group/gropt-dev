@@ -4,8 +4,11 @@
 
 namespace Gropt {
 
-Op_Concomitant::Op_Concomitant(const ProblemData &_pdata, bool _rot_variant, double _weight_mod) : Operator(_pdata) {
+Op_Concomitant::Op_Concomitant(const ProblemData &_pdata, int _start_idx, bool _rot_variant, double _weight_mod)
+    : Operator(_pdata) {
     name = "Concomitant";
+
+    start_idx = _start_idx;
     rot_variant = _rot_variant;
     weight_mod = _weight_mod;
 }
@@ -40,11 +43,12 @@ void Op_Concomitant::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     double pos = 0.0;
     double neg = 0.0;
 
-    for (int i = 0; i < X.size(); i++) {
+    for (int i = start_idx; i < X.size(); i++) {
         if (pdata->inv_vec(i) > 0) {
             pos += X(i) * X(i);
         } else if (pdata->inv_vec(i) < 0) {
@@ -54,7 +58,7 @@ void Op_Concomitant::prox(Eigen::VectorXd &X) {
 
     if (pos > neg) {
         double scale = sqrt(sqrt(pos / neg));
-        for (int i = 0; i < X.size(); i++) {
+        for (int i = start_idx; i < X.size(); i++) {
             if (pdata->inv_vec(i) > 0) {
                 X(i) /= scale;
             } else {
@@ -63,7 +67,7 @@ void Op_Concomitant::prox(Eigen::VectorXd &X) {
         }
     } else if (neg > pos) {
         double scale = sqrt(sqrt(neg / pos));
-        for (int i = 0; i < X.size(); i++) {
+        for (int i = start_idx; i < X.size(); i++) {
             if (pdata->inv_vec(i) < 0) {
                 X(i) /= scale;
             } else {
@@ -75,6 +79,7 @@ void Op_Concomitant::prox(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     spdlog::trace("Finished Op_Concomitant::prox");
 }
@@ -85,11 +90,12 @@ void Op_Concomitant::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
+    X.array() *= spec_norm;
 
     double pos = 0.0;
     double neg = 0.0;
 
-    for (int i = 0; i < X.size(); i++) {
+    for (int i = start_idx; i < X.size(); i++) {
         if (pdata->inv_vec(i) > 0) {
             pos += X(i) * X(i);
         } else if (pdata->inv_vec(i) < 0) {
@@ -104,6 +110,7 @@ void Op_Concomitant::check(Eigen::VectorXd &X) {
     if (do_equil) {
         X.array() *= eq_rows.array();
     }
+    X.array() /= spec_norm;
 
     hist_feas.push_back(is_feas);
 }

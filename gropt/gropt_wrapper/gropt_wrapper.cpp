@@ -164,6 +164,33 @@ T_readout : float, optional
     Time to TE of the readout in seconds.)doc"
         )
 
+        // diff_init_preencode
+        .def("diff_init_preencode", &Gropt::GroptParams::diff_init_preencode,
+            "dt"_a = 400e-6, "TE"_a = 80e-3, "T_90"_a = 3e-3, "T_180"_a = 5e-3, "T_readout"_a = 16e-3, "T_pre"_a = 0.0,
+R"doc(Initialize diffusion sequence parameters with a pre-encoding period.
+
+Parameters
+----------
+dt : float, optional
+    Raster time in seconds.
+TE : float, optional
+    Echo time in seconds.
+T_90 : float, optional
+    Duration of excitation RF pulse in seconds (time from excitation,
+    so half of full RF pulse duration).
+T_180 : float, optional
+    Duration of refocusing RF pulse in seconds.
+T_readout : float, optional
+    Time to TE of the readout in seconds.
+T_pre : float, optional
+    Duration of the pre-encoding period in seconds.
+
+Returns
+-------
+int
+    Number of pre-encoding time points (N_pre).)doc"
+        )
+
         // setvec_X0 — accepts numpy array, infers N/Naxis from shape
         .def("setvec_X0", [](Gropt::GroptParams &self, nb::ndarray<double, nb::ndim<1>> X0, bool set_others) {
             Eigen::Map<const Eigen::VectorXd> x(X0.data(), X0.shape(0));
@@ -229,11 +256,13 @@ weight_mod : float, optional
 
         // add_concomitant
         .def("add_concomitant", &Gropt::GroptParams::add_concomitant,
-            "rot_variant"_a = true, "weight_mod"_a = 1.0,
+            "start_idx"_a = 0, "rot_variant"_a = true, "weight_mod"_a = 1.0,
 R"doc(Add a concomitant constraint.
 
 Parameters
 ----------
+start_idx : int, optional
+    Starting index for the constraint (-1 = beginning).
 rot_variant : bool, optional
     If True, use rotationally invariant formulation.
 weight_mod : float, optional
@@ -359,6 +388,30 @@ demo_params : bool, optional
     Whether to use demo parameters.
 safe_params : dict, optional
     Dictionary of SAFE parameters (see gropt.readasc).
+weight_mod : float, optional
+    Weighting factor for this constraint.)doc"
+        )
+
+        // add_eddy
+        .def("add_eddy", [](Gropt::GroptParams &self, nb::object lam_obj, double tol, double weight_mod) {
+            Eigen::VectorXd lam;
+            if (nb::isinstance<nb::float_>(lam_obj) || nb::isinstance<nb::int_>(lam_obj)) {
+                lam.resize(1);
+                lam(0) = nb::cast<double>(lam_obj);
+            } else {
+                lam = nb::cast<Eigen::VectorXd>(lam_obj);
+            }
+            self.add_eddy(lam, tol, weight_mod);
+        }, "lam"_a, "tol"_a = .0001, "weight_mod"_a = 1.0,
+R"doc(Add an eddy current constraint.
+
+Parameters
+----------
+lam : float or np.ndarray
+    Time constant(s) for eddy currents [seconds]. A single float is treated
+    as a one-element array.
+tol : float, optional
+    Tolerance for the constraint.
 weight_mod : float, optional
     Weighting factor for this constraint.)doc"
         )

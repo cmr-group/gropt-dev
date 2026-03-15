@@ -4,6 +4,7 @@
 
 #include "op_bvalue.hpp"
 #include "op_concomitant.hpp"
+#include "op_eddy.hpp"
 #include "op_gradient.hpp"
 #include "op_identity.hpp"
 #include "op_moment.hpp"
@@ -92,16 +93,22 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
     N = (int)((TE - T_readout) / dt) + 1;
     Ntot = N * Naxis;
 
+    spdlog::trace("diff_init N: {}", N);
+
     int ind_inv = (int)(TE / 2.0 / dt);
     pdata.inv_vec.setOnes(N);
     for (int i = ind_inv; i < N; i++) {
         pdata.inv_vec(i) = -1.0;
     }
 
+    spdlog::trace("diff_init ind_inv: {}", ind_inv);
+
     int ind_90_end, ind_180_start, ind_180_end;
     ind_90_end = ceil(T_90 / dt);
     ind_180_start = floor((TE / 2.0 - T_180 / 2.0) / dt);
     ind_180_end = ceil((TE / 2.0 + T_180 / 2.0) / dt);
+
+    spdlog::trace("diff_init inds: {}   {}   {}", ind_90_end, ind_180_start, ind_180_end);
 
     pdata.set_vals.setOnes(N);
     pdata.set_vals.array() *= NAN;
@@ -132,6 +139,66 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
     pdata.X0.array() *= pdata.inv_vec.array();
 
     vec_init_status = N;
+}
+
+int GroptParams::diff_init_preencode(double _dt, double _TE, double _T_90, double _T_180, double _T_readout,
+                                     double _T_pre) {
+    dt = _dt;
+    Naxis = 1;
+
+    double T_90 = _T_90;
+    double T_180 = _T_180;
+    double T_readout = _T_readout;
+    double TE = _TE;
+
+    int N_pre = floor(_T_pre / dt);
+
+    N = N_pre + (int)((TE - T_readout) / dt) + 1;
+    Ntot = N * Naxis;
+
+    int ind_inv = N_pre + (int)(TE / 2.0 / dt);
+    pdata.inv_vec.setOnes(N);
+    for (int i = ind_inv; i < N; i++) {
+        pdata.inv_vec(i) = -1.0;
+    }
+
+    int ind_90_end, ind_180_start, ind_180_end;
+    ind_90_end = N_pre + ceil(T_90 / dt);
+    ind_180_start = N_pre + floor((TE / 2.0 - T_180 / 2.0) / dt);
+    ind_180_end = N_pre + ceil((TE / 2.0 + T_180 / 2.0) / dt);
+
+    pdata.set_vals.setOnes(N);
+    pdata.set_vals.array() *= NAN;
+    for (int i = N_pre; i <= ind_90_end; i++) {
+        pdata.set_vals(i) = 0.0;
+    }
+    for (int i = ind_180_start; i <= ind_180_end; i++) {
+        pdata.set_vals(i) = 0.0;
+    }
+    pdata.set_vals(0) = 0.0;
+    pdata.set_vals(N - 1) = 0.0;
+
+    pdata.fixer.setOnes(N);
+    for (int i = 0; i < pdata.set_vals.size(); i++) {
+        if (!isnan(pdata.set_vals(i))) {
+            pdata.fixer(i) = 0.0;
+        }
+    }
+
+    pdata.X0.setOnes(N);
+    for (int i = 0; i < pdata.set_vals.size(); i++) {
+        if (!isnan(pdata.set_vals(i))) {
+            pdata.X0(i) = pdata.set_vals(i);
+        } else {
+            pdata.X0(i) = 1e-2; // Initial value for non-fixed points
+        }
+    }
+
+    pdata.X0.array() *= pdata.inv_vec.array();
+
+    vec_init_status = N;
+
+    return N_pre;
 }
 
 void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, double _T_180, double _T_readout) {
@@ -263,8 +330,8 @@ void GroptParams::add_smax(double smax, bool rot_variant, double weight_mod) {
     all_op.push_back(std::make_unique<Op_Slew>(pdata, smax, rot_variant, weight_mod));
 }
 
-void GroptParams::add_concomitant(bool rot_variant, double weight_mod) {
-    all_op.push_back(std::make_unique<Op_Concomitant>(pdata, rot_variant, weight_mod));
+void GroptParams::add_concomitant(int start_idx, bool rot_variant, double weight_mod) {
+    all_op.push_back(std::make_unique<Op_Concomitant>(pdata, start_idx, rot_variant, weight_mod));
 }
 
 void GroptParams::add_moment(double order, double target, double tol0, std::string units, int moment_axis,
@@ -312,6 +379,10 @@ void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop
 
     all_op.push_back(std::make_unique<Op_BValue>(pdata, target, tol, start_idx0, stop_idx0, weight_mod,
                                                  static_cast<BVALUE_MODE>(mode), max_scale));
+}
+
+void GroptParams::add_eddy(const Eigen::VectorXd &lam, double tol, double weight_mod) {
+    all_op.push_back(std::make_unique<Op_Eddy>(pdata, lam, tol, weight_mod));
 }
 
 void GroptParams::add_TV(double tv_lam, double weight_mod) {

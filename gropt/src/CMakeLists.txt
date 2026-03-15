@@ -25,6 +25,7 @@ set(SRC_FILES
     op_moment.cpp
     op_slew.cpp
     op_safe.cpp
+    op_eddy.cpp
     op_tv.cpp
     solver.cpp
     solver_groptsdmm.cpp

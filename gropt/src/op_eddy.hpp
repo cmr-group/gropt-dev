@@ -1,5 +1,5 @@
-#ifndef OP_CONCOMITANT_H
-#define OP_CONCOMITANT_H
+#ifndef OP_EDDY_H
+#define OP_EDDY_H
 
 /**
  * Constraint on gradient amplitude.  Supports the 'rot_variant' variable
@@ -17,13 +17,17 @@
 
 namespace Gropt {
 
-class Op_Concomitant : public Operator {
+class Op_Eddy : public Operator {
 
   protected:
-    int start_idx = 0;
+    Eigen::MatrixXd A;
+    Eigen::VectorXd lambdas;
+    int Nlam;
+    int Nrows;
 
   public:
-    Op_Concomitant(const ProblemData &_pdata, int _start_idx, bool _rot_variant, double _weight_mod);
+    Op_Eddy(const ProblemData &_pdata, const Eigen::VectorXd &_lam, double _tol, double _weight_mod);
+
     virtual void init();
 
     virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

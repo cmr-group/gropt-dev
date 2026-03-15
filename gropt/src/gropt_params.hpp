@@ -60,6 +60,7 @@ class GroptParams {
 
     void vec_init_simple(int _N, int _Naxis, double first_val, double last_val);
     void diff_init(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
+    int diff_init_preencode(double _dt, double _TE, double _T_90, double _T_180, double _T_readout, double _T_pre);
     void diff_init_deadtime(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
     void setvec_X0(const Eigen::VectorXd &_X0, int _Naxis, bool set_others);
 
@@ -71,7 +72,7 @@ class GroptParams {
 
     void add_gmax(double gmax, bool rot_variant, double weight_mod);
     void add_smax(double smax, bool rot_variant, double weight_mod);
-    void add_concomitant(bool rot_variant, double weight_mod);
+    void add_concomitant(int start_idx, bool rot_variant, double weight_mod);
     void add_moment(double order, double target, double tol0, std::string units, int moment_axis, int start_idx0,
                     int stop_idx0, int ref_idx0, double weight_mod);
 
@@ -86,6 +87,8 @@ class GroptParams {
                       const Eigen::VectorXd &tau3, const Eigen::VectorXd &a1, const Eigen::VectorXd &a2,
                       const Eigen::VectorXd &a3, const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
                       int new_first_axis, double weight_mod);
+
+    void add_eddy(const Eigen::VectorXd &lam, double tol, double weight_mod);
 
     void add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod, int mode,
                     double max_scale);

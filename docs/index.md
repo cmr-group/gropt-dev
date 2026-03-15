@@ -34,8 +34,8 @@ gparams.add_moment(0,14.0)
 gparams.add_moment(1,0.0)
 
 # Solve
-gparams.solve()
-out = gparams.get_out()
+result = gropt.solve(gparams)
+out = result.X
 ```
 
 Which produces the waveform:
