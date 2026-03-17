@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import gropt
 
 
 def get_moments(g, dt, inv_vec=None, start_idx=0, scale_to_one=True):
@@ -78,14 +79,15 @@ def plot_waves(
     start_idx=0,
     eddy_lam=0.0,
     plot_eddy=False,
-    safe_params=None,
-    MMT=4,
-    stim=None,
+    plot_pns=False,
+    plot_cns=False,
     stim_vec=None,
-    stim_lim=0,
+    pns_lim=0,
+    cns_lim=0,
     N_cols=2,
     mode='regular',
     params={},
+    highlight_rf=True,
 ):
 
     if start_idx == 0:
@@ -94,8 +96,27 @@ def plot_waves(
         eddy_lam = params.get('eddy_lam', 0.0)
     if stim_vec is None:
         stim_vec = params.get('stim_vec', None)
-    if stim_lim == 0:
-        stim_lim = params.get('stim_lim', 0.0)
+    if pns_lim == 0:
+        pns_lim = params.get('pns_lim', 0.0)
+    if cns_lim == 0:
+        cns_lim = params.get('cns_lim', 0.0)
+
+    _pns_params, _cns_params = gropt.get_random_safe_params()
+    pns_params = params.get('pns_params', _pns_params)
+    cns_params = params.get('cns_params', _cns_params)
+
+    all_stim = []
+    if plot_pns or pns_lim > 0:
+        if pns_lim == 0:
+            pns_lim = 1.0
+        pns = gropt.get_SAFE(g, dt, safe_params=pns_params)
+        all_stim.append([pns, 'PNS'])
+
+    if plot_cns or cns_lim > 0:
+        if cns_lim == 0:
+            cns_lim = 1.0
+        cns = gropt.get_SAFE(g, dt, safe_params=cns_params)
+        all_stim.append([cns, 'CNS'])
 
     if inv_vec is None:
         inv_vec = np.ones(g.size)
@@ -105,7 +126,7 @@ def plot_waves(
     tt_ms = np.arange(g.size) * dt * 1e3
 
     to_plot = ['gradient', 'slew', 'moments']
-    if stim is not None:
+    if len(all_stim) > 0:
         to_plot.append('stim')
     if plot_eddy or eddy_lam > 0:
         to_plot.append('eddy')
@@ -130,6 +151,21 @@ def plot_waves(
 
         f.suptitle(label)
 
+        # Get the span locations for plotting 0's
+        if TE > 0 and 'T_180' in params:
+            if 'T_pre' in params:
+                t_start = params['T_pre']
+            else:
+                t_start = 0.0
+
+            t_inv = t_start + TE / 2.0
+            t_180_start = t_inv - params['T_180'] / 2.0
+            t_180_end = t_inv + params['T_180'] / 2.0
+
+            if 'T_90' in params:
+                t_90_start = t_start
+                t_90_end = t_start + params['T_90']
+
     for i_ax, ax in enumerate(axarr.flatten()):
         plot_type = to_plot[i_ax] if i_ax < N_plots else None
         if plot_type is None:
@@ -139,8 +175,13 @@ def plot_waves(
             if gmax == 0:
                 gmax = params.get('gmax', 0)
             if gmax > 0:
-                ax.axhline(1000 * gmax, linestyle=':', color='r', alpha=0.5)
-                ax.axhline(-1000 * gmax, linestyle=':', color='r', alpha=0.5)
+                ax.axhline(1000 * gmax, linestyle=':', color='r', alpha=0.7)
+                ax.axhline(-1000 * gmax, linestyle=':', color='r', alpha=0.7)
+
+            if highlight_rf and t_90_end > 0:
+                ax.axvspan(t_90_start * 1e3, t_90_end * 1e3, color='coral', alpha=0.3)
+            if highlight_rf and t_180_end > 0:
+                ax.axvspan(t_180_start * 1e3, t_180_end * 1e3, color='coral', alpha=0.3)
             ax.plot(tt_ms, g * 1000)
             ax.set_title('Gradient')
             ax.set_xlabel('t [ms]')
@@ -150,8 +191,8 @@ def plot_waves(
             if smax == 0:
                 smax = params.get('smax', 0)
             if smax > 0:
-                ax.axhline(smax, linestyle=':', color='r', alpha=0.5)
-                ax.axhline(-smax, linestyle=':', color='r', alpha=0.5)
+                ax.axhline(smax, linestyle=':', color='r', alpha=0.7)
+                ax.axhline(-smax, linestyle=':', color='r', alpha=0.7)
             ax.plot(tt_ms[:-1], np.diff(g) / dt)
             ax.set_title('Slew')
             ax.set_xlabel('t [ms]')
@@ -167,15 +208,20 @@ def plot_waves(
             ax.set_xlabel('t [ms]')
             ax.set_ylabel('Moment [a.u.]')
         elif plot_type == 'stim':
-            ax.plot(tt_ms, stim)
+            for stim, label in all_stim:
+                ax.plot(tt_ms, stim, label=label)
             if stim_vec is not None:
-                ax.plot(tt_ms, stim_vec, linestyle=':', color='r', alpha=0.5)
-            if stim_lim > 0:
-                ax.axhline(stim_lim, linestyle=':', color='r', alpha=0.5)
+                ax.plot(tt_ms, stim_vec, linestyle=':', color='r', alpha=0.7)
+            if pns_lim > 0:
+                ax.axhline(pns_lim, linestyle=':', color='r', alpha=0.7)
+            if cns_lim > 0 and cns_lim != pns_lim:
+                ax.axhline(cns_lim, linestyle=':', color='m', alpha=0.7)
+
             ax.axhline(linestyle='--', color='0.7')
 
-            ax.set_title('SAFE PNS')
+            ax.set_title('SAFE')
             ax.set_xlabel('t [ms]')
+            ax.legend(loc='lower left')
         elif plot_type == 'eddy':
             all_lam = np.linspace(0.1, 120, 1000)
             all_e = []
