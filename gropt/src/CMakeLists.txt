@@ -27,6 +27,7 @@ set(SRC_FILES
     op_safe.cpp
     op_eddy.cpp
     op_tv.cpp
+    op_acoustic.cpp
     solver.cpp
     solver_groptsdmm.cpp
     solver_osqp.cpp

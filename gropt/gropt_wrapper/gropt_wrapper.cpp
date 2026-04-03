@@ -34,7 +34,7 @@ Level mapping: 0=Trace, 1=Debug, 2=Info, 3=Warning, 4=Error, 5=Critical, 6=Off.
 Parameters
 ----------
 level : int
-    Log level (0–6).)doc");
+    Log level (0-6).)doc");
 
     m.def("set_log_callback", [](nb::callable cb) {
         auto sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
@@ -191,7 +191,7 @@ int
     Number of pre-encoding time points (N_pre).)doc"
         )
 
-        // setvec_X0 — accepts numpy array, infers N/Naxis from shape
+        // setvec_X0 - accepts numpy array, infers N/Naxis from shape
         .def("setvec_X0", [](Gropt::GroptParams &self, nb::ndarray<double, nb::ndim<1>> X0, bool set_others) {
             Eigen::Map<const Eigen::VectorXd> x(X0.data(), X0.shape(0));
             self.setvec_X0(Eigen::VectorXd(x), 1, set_others);
@@ -412,6 +412,24 @@ lam : float or np.ndarray
     as a one-element array.
 tol : float, optional
     Tolerance for the constraint.
+weight_mod : float, optional
+    Weighting factor for this constraint.)doc"
+        )
+
+        // add_acoustic
+        .def("add_acoustic", [](Gropt::GroptParams &self, std::vector<double> freqs, std::vector<double> bws, double bw_scale, double weight_mod) {
+            self.add_acoustic(freqs, bws, bw_scale, weight_mod);
+        }, "freqs"_a, "bws"_a, "bw_scale"_a = 1.0, "weight_mod"_a = 1.0,
+R"doc(Add an acoustic resonance constraint.
+
+Parameters
+----------
+freqs : list of float
+    Center frequencies of acoustic resonances.
+bws : list of float
+    Bandwidths of acoustic resonances.
+bw_scale : float, optional
+    Scaling factor for bandwidths.
 weight_mod : float, optional
     Weighting factor for this constraint.)doc"
         )

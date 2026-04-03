@@ -49,28 +49,34 @@ def diff_min_TE(params, target_bval=0, TE0=10e-3, TE1=120e-3, stop_dt=0.1e-3, **
 
     print('Done!', flush=True)
 
+    best_TE = None
     if result0.converged and result0.bvalue > target_bval:
-        return TE0, result0
-    if _result.converged and _result.bvalue > target_bval:
-        return _TE, _result
-    if result1.converged and result1.bvalue > target_bval:
-        return TE1, result1
+        best_TE = TE0
+    elif _result.converged and _result.bvalue > target_bval:
+        best_TE = _TE
+    elif result1.converged and result1.bvalue > target_bval:
+        best_TE = TE1
+
+    if best_TE is not None:
+        print(f'Refining at Best TE: {best_TE * 1000:.2f} ms with exact target B-value...', flush=True)
+        final_result = diff_solve_TE(best_TE, params, bval_min=target_bval, bvalue_mode='setval', refine=False, **kwargs)
+        return best_TE, final_result
 
     return None, None
 
 
-def diff_solve_TE(TE, params, bval_min=100.0, refine=False, **kwargs):
-    result = _diff_solve_TE(TE, params, bval_min=bval_min, **kwargs)
+def diff_solve_TE(TE, params, bval_min=100.0, refine=False, bvalue_mode='minval_max', **kwargs):
+    result = _diff_solve_TE(TE, params, bval_min=bval_min, bvalue_mode=bvalue_mode, **kwargs)
 
     if refine:
         if not result.converged:
-            result2 = _diff_solve_TE(TE, params, bval_min=bval_min / 2, **kwargs)
+            result2 = _diff_solve_TE(TE, params, bval_min=bval_min / 2, bvalue_mode=bvalue_mode, **kwargs)
         else:
             bval0 = result.bvalue
             if bval0 < bval_min:
-                result2 = _diff_solve_TE(TE, params, bval_min=0.8 * bval0, **kwargs)
+                result2 = _diff_solve_TE(TE, params, bval_min=0.8 * bval0, bvalue_mode=bvalue_mode, **kwargs)
             else:
-                result2 = _diff_solve_TE(TE, params, bval_min=0.8 * bval0, **kwargs)
+                result2 = _diff_solve_TE(TE, params, bval_min=0.8 * bval0, bvalue_mode=bvalue_mode, **kwargs)
 
         if (result2.converged and not result.converged) or (
             result2.converged and result2.bvalue > result.bvalue
@@ -89,6 +95,7 @@ def _diff_solve_TE(
     ils_max_iter=24,
     moment_tol=1e-5,
     bval_scale=1.02,
+    bvalue_mode='minval_max',
     **kwargs,
 ):
 
@@ -161,19 +168,19 @@ def _diff_solve_TE(
     if 'eddy_lam' in params:
         gparams.add_eddy(params['eddy_lam'])
 
-    if 'tv_lam' in params:
-        gparams.add_TV(params['tv_lam'], weight_mod=params['tv_weight'] if 'tv_weight' in params else 5)
-
-    if 'identity_lam' in params:
-        gparams.add_obj_identity(params['identity_lam'])
-    
     if 'acoustic' in params:
         freqs = params['acoustic']['freqs']
         bws = params['acoustic'].get('bws', np.zeros_like(freqs))
         if len(freqs) > 0:
-            gparams.add_acoustic(freqs, bws, weight_mod=0.5, bw_scale=0.6)
+            gparams.add_acoustic(freqs, bws, weight_mod=0.8, bw_scale=0.6)
 
-    gparams.add_bvalue(bval_min, mode='minval_max', start_idx0=start_idx, max_scale=bval_scale)
+    if 'tv_lam' in params:
+        gparams.add_TV(params['tv_lam'], 5)
+
+    if 'identity_lam' in params:
+        gparams.add_obj_identity(params['identity_lam'])
+
+    gparams.add_bvalue(bval_min, mode=bvalue_mode, start_idx0=start_idx, max_scale=bval_scale)
 
     gparams.prepare()
 

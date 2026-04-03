@@ -90,6 +90,8 @@ class GroptParams {
 
     void add_eddy(const Eigen::VectorXd &lam, double tol, double weight_mod);
 
+    void add_acoustic(std::vector<double> freqs, std::vector<double> bws, double bw_scale, double weight_mod);
+
     void add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod, int mode,
                     double max_scale);
     void add_TV(double tv_lam, double weight_mod);
