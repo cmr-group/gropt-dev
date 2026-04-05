@@ -32,9 +32,9 @@ def diff_min_TE(params, target_bval=0, TE0=10e-3, TE1=120e-3, stop_dt=0.1e-3, **
         _result = diff_solve_TE(_TE, params, bval_min=target_bval / 2, **kwargs)
 
         if not _result.converged:
-            print(f'!{_TE * 1000:.2f}', end=' ', flush=True)
+            print(f'\n![TE: {_TE * 1000:.2f}, b: {_result.bvalue}]', end=' ', flush=True)
         else:
-            print(f'{_TE * 1000:.2f}', end=' ', flush=True)
+            print(f'\n[TE: {_TE * 1000:.2f}, b: {_result.bvalue}]', end=' ', flush=True)
 
         if _result.converged:
             if _result.bvalue > target_bval:
@@ -172,16 +172,19 @@ def _diff_solve_TE(
         freqs = params['acoustic']['freqs']
         bws = params['acoustic'].get('bws', np.zeros_like(freqs))
         if len(freqs) > 0:
-            gparams.add_acoustic(freqs, bws, weight_mod=0.8, bw_scale=0.6)
+            gparams.add_acoustic(freqs, bws, weight_mod=1, bw_scale=0.6)
 
     if 'tv_lam' in params:
-        gparams.add_TV(params['tv_lam'], 5)
+        gparams.add_TV(params['tv_lam'], weight_mod=params['tv_weight'] if 'tv_weight' in params else 5)
 
     if 'identity_lam' in params:
         gparams.add_obj_identity(params['identity_lam'])
 
     gparams.add_bvalue(bval_min, mode=bvalue_mode, start_idx0=start_idx, max_scale=bval_scale)
 
+    gparams.set_ils_solver('CG')
+    # gparams.set_ils_solver('NLCG')
+    # gparams.set_ils_solver('BiCGstabl')
     gparams.prepare()
 
     result = diff_solve(gparams, extra_iters=extra_iters, ils_max_iter=ils_max_iter)
@@ -189,10 +192,12 @@ def _diff_solve_TE(
     return result
 
 
-def diff_solve(gparams, extra_iters=2000, ils_max_iter=30):
+def diff_solve(gparams, extra_iters=2000, ils_max_iter=300):
     solver = gropt.SolverGroptSDMM()
+    # solver.set_general_params(max_feval=200000, max_iter=20000, gamma_x=1.6, extra_iters=extra_iters)
     solver.set_general_params(max_feval=200000, max_iter=20000, gamma_x=1.6, extra_iters=extra_iters)
     solver.set_ils_params(ils_max_iter=ils_max_iter, ils_tol=1e-12, ils_sigma=0.0001, ils_tik_lam=0.0001)
-    solver.set_sdmm_params(rw_interval=16, grw_interval=41)
+    # solver.set_ils_params(ils_max_iter=ils_max_iter, ils_tol=1e-12, ils_sigma=1e-1, ils_tik_lam=1e-4)
+    solver.set_sdmm_params(rw_interval=4, grw_interval=20, rw_eps=1e-6, grw_mod=1.5)
     result = solver.solve(gparams)
     return result

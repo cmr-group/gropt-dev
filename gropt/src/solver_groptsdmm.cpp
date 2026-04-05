@@ -24,9 +24,10 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         // Set initial weight based on operator type
         sdmm_ws[i].weight = 1.0;
         // Slew, moment, bvalue, SAFE, TV operators start with higher weight
-        if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE" ||
-            op->name == "TotalVariation") {
-            sdmm_ws[i].weight = 1e4;
+        // if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE" ||
+        //     op->name == "TotalVariation") {
+        if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE") {
+            sdmm_ws[i].weight = 1e5;
         }
         sdmm_ws[i].weight *= op->weight_mod;
 
@@ -74,8 +75,12 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             Xhat = X;
         }
 
+        if (Xhat.array().isNaN().any()) {
+            spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
+            break;
+        }
         // if (Xhat.array().isNaN().any()) {
-        if (((Xhat.array().abs() > 10).any()) || (Xhat.array().isNaN().any())) {
+        if ((Xhat.array().abs() > 10).any()) {
             // spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
