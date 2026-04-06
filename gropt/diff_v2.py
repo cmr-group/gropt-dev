@@ -148,19 +148,19 @@ def _diff_solve_TE(
 
     if 'pns_lim' in params:
         if 'pns_params' in params:
-            gparams.add_SAFE(params['pns_lim'], safe_params=params['pns_params'])
+            gparams.add_SAFE(params['pns_lim'], safe_params=params['pns_params'], new_first_axis=params['pns_axis'] if 'pns_axis' in params else 1)
         else:
             pns_params, cns_params = gropt.get_random_safe_params()
             params['pns_params'] = pns_params
-            gparams.add_SAFE(params['pns_lim'], safe_params=pns_params)
+            gparams.add_SAFE(params['pns_lim'], safe_params=pns_params, new_first_axis=params['pns_axis'] if 'pns_axis' in params else 1)
 
     if 'cns_lim' in params:
         if 'cns_params' in params:
-            gparams.add_SAFE(params['cns_lim'], safe_params=params['cns_params'])
+            gparams.add_SAFE(params['cns_lim'], safe_params=params['cns_params'], new_first_axis=params['cns_axis'] if 'cns_axis' in params else 1)
         else:
             pns_params, cns_params = gropt.get_random_safe_params()
             params['cns_params'] = cns_params
-            gparams.add_SAFE(params['cns_lim'], safe_params=cns_params)
+            gparams.add_SAFE(params['cns_lim'], safe_params=cns_params, new_first_axis=params['cns_axis'] if 'cns_axis' in params else 1)
 
     if 'concomitant' in params:
         gparams.add_concomitant(start_idx=start_idx, weight_mod=1e4)
@@ -172,7 +172,7 @@ def _diff_solve_TE(
         freqs = params['acoustic']['freqs']
         bws = params['acoustic'].get('bws', np.zeros_like(freqs))
         if len(freqs) > 0:
-            gparams.add_acoustic(freqs, bws, weight_mod=1, bw_scale=0.6)
+            gparams.add_acoustic(freqs, bws, weight_mod=1, bw_scale=0.8)
 
     if 'tv1_lam' in params:
         gparams.add_TV(params['tv1_lam'], 1, weight_mod=params['tv1_weight'] if 'tv1_weight' in params else 5)
