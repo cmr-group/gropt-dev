@@ -32,9 +32,9 @@ def diff_min_TE(params, target_bval=0, TE0=10e-3, TE1=120e-3, stop_dt=0.1e-3, **
         _result = diff_solve_TE(_TE, params, bval_min=target_bval / 2, **kwargs)
 
         if not _result.converged:
-            print(f'\n![TE: {_TE * 1000:.2f}, b: {_result.bvalue}]', end=' ', flush=True)
+            print(f'\n![TE: {_TE * 1000:.2f}, b: {_result.bvalue:.2f}]', end=' ', flush=True)
         else:
-            print(f'\n[TE: {_TE * 1000:.2f}, b: {_result.bvalue}]', end=' ', flush=True)
+            print(f'\n[TE: {_TE * 1000:.2f}, b: {_result.bvalue:.2f}]', end=' ', flush=True)
 
         if _result.converged:
             if _result.bvalue > target_bval:
@@ -174,8 +174,11 @@ def _diff_solve_TE(
         if len(freqs) > 0:
             gparams.add_acoustic(freqs, bws, weight_mod=1, bw_scale=0.6)
 
-    if 'tv_lam' in params:
-        gparams.add_TV(params['tv_lam'], weight_mod=params['tv_weight'] if 'tv_weight' in params else 5)
+    if 'tv1_lam' in params:
+        gparams.add_TV(params['tv1_lam'], 1, weight_mod=params['tv1_weight'] if 'tv1_weight' in params else 5)
+
+    if 'tv2_lam' in params:
+        gparams.add_TV(params['tv2_lam'], 2, weight_mod=params['tv2_weight'] if 'tv2_weight' in params else 5)
 
     if 'identity_lam' in params:
         gparams.add_obj_identity(params['identity_lam'])
@@ -198,6 +201,6 @@ def diff_solve(gparams, extra_iters=2000, ils_max_iter=300):
     solver.set_general_params(max_feval=200000, max_iter=20000, gamma_x=1.6, extra_iters=extra_iters)
     solver.set_ils_params(ils_max_iter=ils_max_iter, ils_tol=1e-12, ils_sigma=0.0001, ils_tik_lam=0.0001)
     # solver.set_ils_params(ils_max_iter=ils_max_iter, ils_tol=1e-12, ils_sigma=1e-1, ils_tik_lam=1e-4)
-    solver.set_sdmm_params(rw_interval=4, grw_interval=20, rw_eps=1e-6, grw_mod=1.5)
+    solver.set_sdmm_params(rw_interval=4, grw_interval=20, rw_eps=1e-6, grw_mod=1.8)
     result = solver.solve(gparams)
     return result

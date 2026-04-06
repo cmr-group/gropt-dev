@@ -390,8 +390,8 @@ void GroptParams::add_acoustic(std::vector<double> freqs, std::vector<double> bw
     all_op.push_back(std::make_unique<Op_Acoustic>(pdata, freqs, bws, weight_mod, bw_scale));
 }
 
-void GroptParams::add_TV(double tv_lam, double weight_mod) {
-    all_op.push_back(std::make_unique<Op_TV>(pdata, tv_lam, weight_mod));
+void GroptParams::add_TV(double tv_lam, int order, double weight_mod) {
+    all_op.push_back(std::make_unique<Op_TV>(pdata, tv_lam, order, weight_mod));
 }
 
 void GroptParams::add_obj_identity(double weight_mod) {

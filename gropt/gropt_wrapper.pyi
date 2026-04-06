@@ -8,7 +8,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Apr  5 2026 03:38:19'
+__build_date__: str = 'Apr  5 2026 15:57:00'
 
 def set_log_level(level: int) -> None:
     """
@@ -387,7 +387,7 @@ class GroptParams:
             Scale factor when mode=3.
         """
 
-    def add_TV(self, tv_lam: float = 0.0, weight_mod: float = 1.0) -> None:
+    def add_TV(self, tv_lam: float = 0.0, order: int = 1, weight_mod: float = 1.0) -> None:
         """
         Add total variation regularization.
 
@@ -395,6 +395,8 @@ class GroptParams:
         ----------
         tv_lam : float, optional
             Regularization strength (must be > 0 to have effect).
+        order : int, optional
+            Finite difference order (default: 1, e.g. 1=Gradient TV, 2=Slew TV).
         weight_mod : float, optional
             Weighting factor.
         """

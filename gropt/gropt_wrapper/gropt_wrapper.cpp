@@ -476,13 +476,15 @@ max_scale : float, optional
 
         // add_TV
         .def("add_TV", &Gropt::GroptParams::add_TV,
-            "tv_lam"_a = 0.0, "weight_mod"_a = 1.0,
+            "tv_lam"_a = 0.0, "order"_a = 1, "weight_mod"_a = 1.0,
 R"doc(Add total variation regularization.
 
 Parameters
 ----------
 tv_lam : float, optional
     Regularization strength (must be > 0 to have effect).
+order : int, optional
+    Finite difference order (default: 1, e.g. 1=Gradient TV, 2=Slew TV).
 weight_mod : float, optional
     Weighting factor.)doc"
         )
