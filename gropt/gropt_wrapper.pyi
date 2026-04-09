@@ -1,11 +1,14 @@
+"""GrOpt: Gradient Optimization for MRI"""
+
+from collections.abc import Callable, Sequence
 import enum
-from collections.abc import Callable
 from typing import Annotated, overload
 
 import numpy
 from numpy.typing import NDArray
 
-__build_date__: str = 'Mar 14 2026 16:30:18'
+
+__build_date__: str = 'Apr  5 2026 22:33:45'
 
 def set_log_level(level: int) -> None:
     """
@@ -18,7 +21,7 @@ def set_log_level(level: int) -> None:
     Parameters
     ----------
     level : int
-        Log level (0–6).
+        Log level (0-6).
     """
 
 def set_log_callback(arg: Callable, /) -> None: ...
@@ -40,30 +43,43 @@ class SolveResult:
     """
 
     def __init__(self) -> None: ...
+
     @property
     def X(self) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]: ...
+
     @X.setter
     def X(self, arg: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], /) -> None: ...
+
     @property
     def converged(self) -> bool: ...
+
     @converged.setter
     def converged(self, arg: bool, /) -> None: ...
+
     @property
     def n_iter(self) -> int: ...
+
     @n_iter.setter
     def n_iter(self, arg: int, /) -> None: ...
+
     @property
     def n_feval(self) -> int: ...
+
     @n_feval.setter
     def n_feval(self, arg: int, /) -> None: ...
+
     @property
     def dt(self) -> float: ...
+
     @dt.setter
     def dt(self, arg: float, /) -> None: ...
+
     @property
     def bvalue(self) -> float: ...
+
     @bvalue.setter
     def bvalue(self, arg: float, /) -> None: ...
+
     def __repr__(self) -> str: ...
 
 class GroptParams:
@@ -75,27 +91,29 @@ class GroptParams:
     """
 
     def __init__(self) -> None: ...
+
     @property
     def N(self) -> int:
         """Number of time points per axis."""
 
     @N.setter
     def N(self, arg: int, /) -> None: ...
+
     @property
     def Naxis(self) -> int:
         """Number of gradient axes."""
 
     @Naxis.setter
     def Naxis(self, arg: int, /) -> None: ...
+
     @property
     def dt(self) -> float:
         """Raster time in seconds."""
 
     @dt.setter
     def dt(self, arg: float, /) -> None: ...
-    def vec_init_simple(
-        self, N: int = -1, Naxis: int = -1, first_val: float = 0.0, last_val: float = 0.0
-    ) -> None:
+
+    def vec_init_simple(self, N: int = -1, Naxis: int = -1, first_val: float = 0.0, last_val: float = 0.0) -> None:
         """
         Initialize the set_vec and inv_vec settings.
 
@@ -111,14 +129,7 @@ class GroptParams:
             Fixed value for the last point [mT/m].
         """
 
-    def diff_init(
-        self,
-        dt: float = 0.0004,
-        TE: float = 0.08,
-        T_90: float = 0.003,
-        T_180: float = 0.005,
-        T_readout: float = 0.016,
-    ) -> None:
+    def diff_init(self, dt: float = 0.0004, TE: float = 0.08, T_90: float = 0.003, T_180: float = 0.005, T_readout: float = 0.016) -> None:
         """
         Initialize diffusion sequence parameters.
 
@@ -137,14 +148,7 @@ class GroptParams:
             Time to TE of the readout in seconds.
         """
 
-    def diff_init_deadtime(
-        self,
-        dt: float = 0.0004,
-        TE: float = 0.08,
-        T_90: float = 0.003,
-        T_180: float = 0.005,
-        T_readout: float = 0.016,
-    ) -> None:
+    def diff_init_deadtime(self, dt: float = 0.0004, TE: float = 0.08, T_90: float = 0.003, T_180: float = 0.005, T_readout: float = 0.016) -> None:
         """
         Initialize diffusion sequence parameters, but with forced deadtime to make "convnetional" waveforms.
 
@@ -163,15 +167,7 @@ class GroptParams:
             Time to TE of the readout in seconds.
         """
 
-    def diff_init_preencode(
-        self,
-        dt: float = 0.0004,
-        TE: float = 0.08,
-        T_90: float = 0.003,
-        T_180: float = 0.005,
-        T_readout: float = 0.016,
-        T_pre: float = 0.0,
-    ) -> int:
+    def diff_init_preencode(self, dt: float = 0.0004, TE: float = 0.08, T_90: float = 0.003, T_180: float = 0.005, T_readout: float = 0.016, T_pre: float = 0.0) -> int:
         """
         Initialize diffusion sequence parameters with a pre-encoding period.
 
@@ -198,9 +194,7 @@ class GroptParams:
         """
 
     @overload
-    def setvec_X0(
-        self, X0: Annotated[NDArray[numpy.float64], dict(shape=(None,))], set_others: bool = True
-    ) -> None:
+    def setvec_X0(self, X0: Annotated[NDArray[numpy.float64], dict(shape=(None,))], set_others: bool = True) -> None:
         """
         Set the initial waveform guess (1D).
 
@@ -213,9 +207,7 @@ class GroptParams:
         """
 
     @overload
-    def setvec_X0(
-        self, X0: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], set_others: bool = True
-    ) -> None:
+    def setvec_X0(self, X0: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], set_others: bool = True) -> None:
         """
         Set the initial waveform guess (2D: Naxis x N).
 
@@ -279,18 +271,7 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_moment(
-        self,
-        order: float = 0,
-        target: float = 0.0,
-        tol: float = 1e-06,
-        units: str = 'mT*ms/m',
-        axis: int = 0,
-        start_idx: int = -1,
-        stop_idx: int = -1,
-        ref_idx: int = 0,
-        weight_mod: float = 1.0,
-    ) -> None:
+    def add_moment(self, order: float = 0, target: float = 0.0, tol: float = 1e-06, units: str = 'mT*ms/m', axis: int = 0, start_idx: int = -1, stop_idx: int = -1, ref_idx: int = 0, weight_mod: float = 1.0) -> None:
         """
         Add a moment constraint.
 
@@ -316,14 +297,7 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_SAFE(
-        self,
-        stim_thresh: float = 1.0,
-        new_first_axis: int = 0,
-        demo_params: bool = True,
-        safe_params: object | None = None,
-        weight_mod: float = 1.0,
-    ) -> None:
+    def add_SAFE(self, stim_thresh: float = 1.0, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None, weight_mod: float = 1.0) -> None:
         """
         Add a SAFE (PNS) constraint.
 
@@ -341,14 +315,7 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_SAFE_vec(
-        self,
-        stim_thresh_vec: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')],
-        new_first_axis: int = 0,
-        demo_params: bool = True,
-        safe_params: object | None = None,
-        weight_mod: float = 1.0,
-    ) -> None:
+    def add_SAFE_vec(self, stim_thresh_vec: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None, weight_mod: float = 1.0) -> None:
         """
         Add a SAFE constraint with a vector stimulation limit.
 
@@ -381,16 +348,23 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_bvalue(
-        self,
-        target: float = 100.0,
-        tol: float = 1.0,
-        start_idx0: int = -1,
-        stop_idx0: int = -1,
-        weight_mod: float = 1.0,
-        mode: object = 2,
-        max_scale: float = 1.01,
-    ) -> None:
+    def add_acoustic(self, freqs: Sequence[float], bws: Sequence[float], bw_scale: float = 1.0, weight_mod: float = 1.0) -> None:
+        """
+        Add an acoustic resonance constraint.
+
+        Parameters
+        ----------
+        freqs : list of float
+            Center frequencies of acoustic resonances.
+        bws : list of float
+            Bandwidths of acoustic resonances.
+        bw_scale : float, optional
+            Scaling factor for bandwidths.
+        weight_mod : float, optional
+            Weighting factor for this constraint.
+        """
+
+    def add_bvalue(self, target: float = 100.0, tol: float = 1.0, start_idx0: int = -1, stop_idx0: int = -1, weight_mod: float = 1.0, mode: object = 2, max_scale: float = 1.01) -> None:
         """
         Add a b-value constraint.
 
@@ -413,7 +387,7 @@ class GroptParams:
             Scale factor when mode=3.
         """
 
-    def add_TV(self, tv_lam: float = 0.0, weight_mod: float = 1.0) -> None:
+    def add_TV(self, tv_lam: float = 0.0, order: int = 1, weight_mod: float = 1.0) -> None:
         """
         Add total variation regularization.
 
@@ -421,6 +395,8 @@ class GroptParams:
         ----------
         tv_lam : float, optional
             Regularization strength (must be > 0 to have effect).
+        order : int, optional
+            Finite difference order (default: 1, e.g. 1=Gradient TV, 2=Slew TV).
         weight_mod : float, optional
             Weighting factor.
         """
@@ -467,6 +443,7 @@ class Solver:
 
     @extra_debug.setter
     def extra_debug(self, arg: bool, /) -> None: ...
+
     def get_debug(self) -> dict:
         """
         Return debug history as a dict of lists of numpy arrays.
@@ -479,15 +456,7 @@ class Solver:
             Each value is a list of 1-D numpy arrays, one per logged iteration.
         """
 
-    def set_general_params(
-        self,
-        min_iter: int = 1,
-        max_iter: int = 2000,
-        log_interval: int = 20,
-        gamma_x: float = 1.6,
-        max_feval: int = 12000,
-        extra_iters: int = 0,
-    ) -> None:
+    def set_general_params(self, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, extra_iters: int = 0) -> None:
         """
         Set general solver parameters.
 
@@ -507,14 +476,7 @@ class Solver:
             Number of extra iterations to run after solution is found.
         """
 
-    def set_ils_params(
-        self,
-        ils_tol: float = 0.001,
-        ils_max_iter: int = 20,
-        ils_min_iter: int = 2,
-        ils_sigma: float = 0.0001,
-        ils_tik_lam: float = 0.0,
-    ) -> None:
+    def set_ils_params(self, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> None:
         """
         Set indirect linear solver parameters.
 
@@ -536,16 +498,8 @@ class SolverGroptSDMM(Solver):
     """SDMM solver for GrOpt gradient optimization problems."""
 
     def __init__(self) -> None: ...
-    def set_sdmm_params(
-        self,
-        rw_interval: int = 8,
-        rw_e_corr: float = 0.4,
-        rw_eps: float = 1e-36,
-        rw_scalelim: float = 1.5,
-        grw_min_infeasible: int = 20,
-        grw_interval: int = 20,
-        grw_mod: float = 2.0,
-    ) -> None:
+
+    def set_sdmm_params(self, rw_interval: int = 8, rw_e_corr: float = 0.4, rw_eps: float = 1e-36, rw_scalelim: float = 1.5, grw_min_infeasible: int = 20, grw_interval: int = 20, grw_mod: float = 2.0) -> None:
         """
         Set SDMM-specific parameters.
 
@@ -586,6 +540,7 @@ class SolverOSQP(Solver):
     """OSQP solver for GrOpt gradient optimization problems."""
 
     def __init__(self) -> None: ...
+
     def solve(self, gparams: GroptParams) -> SolveResult:
         """
         Run the OSQP solver.
@@ -601,20 +556,7 @@ class SolverOSQP(Solver):
             The optimization result containing the waveform and convergence info.
         """
 
-def solve(
-    params: GroptParams,
-    min_iter: int = 1,
-    max_iter: int = 2000,
-    log_interval: int = 20,
-    gamma_x: float = 1.6,
-    max_feval: int = 12000,
-    extra_iters: int = 0,
-    ils_tol: float = 0.001,
-    ils_max_iter: int = 20,
-    ils_min_iter: int = 2,
-    ils_sigma: float = 0.0001,
-    ils_tik_lam: float = 0.0,
-) -> SolveResult:
+def solve(params: GroptParams, min_iter: int = 1, max_iter: int = 2000, log_interval: int = 20, gamma_x: float = 1.6, max_feval: int = 12000, extra_iters: int = 0, ils_tol: float = 0.001, ils_max_iter: int = 20, ils_min_iter: int = 2, ils_sigma: float = 0.0001, ils_tik_lam: float = 0.0) -> SolveResult:
     """
     Convenience function to solve a GrOpt problem.
 
@@ -638,12 +580,7 @@ class NormType(enum.Enum):
 
     Inf = 1
 
-def estimate_row_col_norms(
-    gparams: GroptParams, n_reps: int = 10, norm_type: NormType = NormType.Inf
-) -> tuple[
-    Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')],
-    Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')],
-]:
+def estimate_row_col_norms(gparams: GroptParams, n_reps: int = 10, norm_type: NormType = NormType.Inf) -> tuple[Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]]:
     """
     Estimate row and column norms of the operator matrix.
 
@@ -664,12 +601,7 @@ def estimate_row_col_norms(
         Estimated norm for each variable column.
     """
 
-def get_eq_vecs(
-    gparams: GroptParams,
-) -> tuple[
-    Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')],
-    Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')],
-]:
+def get_eq_vecs(gparams: GroptParams) -> tuple[Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]]:
     """
     Get the current equilibration vectors from all operators.
 
@@ -759,14 +691,7 @@ def estimate_individual_spec_norm(gparams: GroptParams, n_iters: int = 20, op_id
         Estimated spectral norm.
     """
 
-def get_SAFE(
-    G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')],
-    dt: float,
-    true_safe: bool = True,
-    new_first_axis: int = 0,
-    demo_params: bool = True,
-    safe_params: object | None = None,
-) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
+def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, true_safe: bool = True, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
     """
     Compute the SAFE (PNS) response for a gradient waveform.
 
@@ -793,7 +718,7 @@ def get_SAFE(
 
 def test_eigen_assertions(test_type: int) -> None:
     """
-    Test that assertions are running in Eigen.
+    Test that assertions are running in Eigen. 
 
     Each test is a different assertion that should be triggered in Eigen.  All tests are
     expected to pass in normal execution.

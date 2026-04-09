@@ -14,9 +14,10 @@ class Op_TV : public Operator
 {
     protected:
         double tv_lam = 0.0;
+        int order = 1;
 
     public:
-        Op_TV(const ProblemData &_pdata, double _tv_lam, double _weight_mod);
+        Op_TV(const ProblemData &_pdata, double _tv_lam, int _order, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

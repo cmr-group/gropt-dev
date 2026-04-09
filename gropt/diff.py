@@ -161,6 +161,18 @@ def _diff_solve_TE(
     if 'eddy_lam' in params:
         gparams.add_eddy(params['eddy_lam'])
 
+    if 'tv_lam' in params:
+        gparams.add_TV(params['tv_lam'], weight_mod=params['tv_weight'] if 'tv_weight' in params else 5)
+
+    if 'identity_lam' in params:
+        gparams.add_obj_identity(params['identity_lam'])
+    
+    if 'acoustic' in params:
+        freqs = params['acoustic']['freqs']
+        bws = params['acoustic'].get('bws', np.zeros_like(freqs))
+        if len(freqs) > 0:
+            gparams.add_acoustic(freqs, bws, weight_mod=0.5, bw_scale=0.6)
+
     gparams.add_bvalue(bval_min, mode='minval_max', start_idx0=start_idx, max_scale=bval_scale)
 
     gparams.prepare()

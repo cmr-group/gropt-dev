@@ -11,6 +11,7 @@
 #include "op_safe.hpp"
 #include "op_slew.hpp"
 #include "op_tv.hpp"
+#include "op_acoustic.hpp"
 
 namespace Gropt {
 
@@ -385,8 +386,12 @@ void GroptParams::add_eddy(const Eigen::VectorXd &lam, double tol, double weight
     all_op.push_back(std::make_unique<Op_Eddy>(pdata, lam, tol, weight_mod));
 }
 
-void GroptParams::add_TV(double tv_lam, double weight_mod) {
-    all_op.push_back(std::make_unique<Op_TV>(pdata, tv_lam, weight_mod));
+void GroptParams::add_acoustic(std::vector<double> freqs, std::vector<double> bws, double bw_scale, double weight_mod) {
+    all_op.push_back(std::make_unique<Op_Acoustic>(pdata, freqs, bws, weight_mod, bw_scale));
+}
+
+void GroptParams::add_TV(double tv_lam, int order, double weight_mod) {
+    all_op.push_back(std::make_unique<Op_TV>(pdata, tv_lam, order, weight_mod));
 }
 
 void GroptParams::add_obj_identity(double weight_mod) {
