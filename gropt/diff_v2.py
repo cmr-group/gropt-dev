@@ -1,5 +1,66 @@
 import gropt
 import numpy as np
+import concurrent.futures
+from tqdm.auto import tqdm
+
+
+def _evaluate_te_worker(args):
+    TE, params, target_bval, kwargs = args
+    result = diff_solve_TE(TE, params, bval_min=target_bval / 2, **kwargs)
+    return TE, result.converged, result.bvalue
+
+
+class _GridSearchResult:
+    def __init__(self, converged, bvalue):
+        self.converged = converged
+        self.bvalue = bvalue
+
+
+def diff_min_TE_parallel(params, target_bval=0, TE0=10e-3, TE1=120e-3, num_steps=10, max_workers=None, **kwargs):
+    if target_bval == 0:
+        target_bval = params['bvalue']
+
+    min_TE = params['T_90'] + params['T_180'] + params['T_readout']
+    min_TE = max(min_TE, 2 * (params['T_180'] + params['T_readout']))
+
+    TE0 += min_TE
+    TEs = np.linspace(TE0, TE1, num_steps)
+
+    print(f'Starting parallel grid search for {num_steps} TEs from {TE0*1000:.2f} ms to {TE1*1000:.2f} ms...', flush=True)
+
+    worker_args = [(TE, params, target_bval, kwargs) for TE in TEs]
+
+    results = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_te = {executor.submit(_evaluate_te_worker, args): args[0] for args in worker_args}
+        
+        with tqdm(total=num_steps, desc="TE Grid Search") as pbar:
+            for future in concurrent.futures.as_completed(future_to_te):
+                TE, converged, bvalue = future.result()
+                result = _GridSearchResult(converged, bvalue)
+                results.append((TE, result))
+                
+                status_str = f"TE: {TE * 1000:.2f} ms | b: {bvalue:.2f} | {'OK' if converged else 'FAIL'}"
+                pbar.set_postfix_str(status_str)
+                pbar.update(1)
+
+    print('Grid search done!', flush=True)
+
+    # Sort results by TE to evaluate them from lowest to highest
+    results.sort(key=lambda x: x[0])
+
+    best_TE = None
+    for TE, result in results:
+        if result.converged and result.bvalue >= target_bval:
+            best_TE = TE
+            break
+
+    if best_TE is not None:
+        print(f'Refining at Best TE: {best_TE * 1000:.2f} ms with exact target B-value...', flush=True)
+        final_result = diff_solve_TE(best_TE, params, bval_min=target_bval, bvalue_mode='setval', refine=False, **kwargs)
+        return best_TE, final_result
+
+    return None, None
 
 
 def diff_min_TE(params, target_bval=0, TE0=10e-3, TE1=120e-3, stop_dt=0.1e-3, **kwargs):
