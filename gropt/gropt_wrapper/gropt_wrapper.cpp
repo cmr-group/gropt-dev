@@ -227,6 +227,48 @@ set_others : bool, optional
     If True, update inv_vec, set_vals, and fixer with standard values.)doc"
         )
 
+        // setvec_set_vals — accepts numpy array, NaN = free, finite = fixed
+        .def("setvec_set_vals", [](Gropt::GroptParams &self, nb::ndarray<double, nb::ndim<1>> set_vals) {
+            Eigen::Map<const Eigen::VectorXd> v(set_vals.data(), set_vals.shape(0));
+            self.setvec_set_vals(Eigen::VectorXd(v), 1);
+        }, "set_vals"_a,
+R"doc(Manually set the set_vals vector (1D), and update fixer from its NaN pattern.
+
+NaN entries mark a point as free, finite entries lock the waveform to that value
+at that index. The fixer mask is rebuilt automatically (1.0 = free, 0.0 = fixed),
+and X0 is updated at the fixed positions to match.
+
+Note: pdata.inv_vec is not touched — call vec_init_simple() (or one of the
+diff_init variants) first if you need it allocated.
+
+Parameters
+----------
+set_vals : np.ndarray
+    1D array of length N. NaN = free, finite value = fixed.)doc"
+        )
+
+        .def("setvec_set_vals", [](Gropt::GroptParams &self, nb::ndarray<double, nb::ndim<2>> set_vals) {
+            int Naxis = set_vals.shape(0);
+            int N = set_vals.shape(1);
+            Eigen::VectorXd flat(N * Naxis);
+            const double *data = set_vals.data();
+            for (int i = 0; i < N * Naxis; i++) {
+                flat(i) = data[i];
+            }
+            self.setvec_set_vals(flat, Naxis);
+        }, "set_vals"_a,
+R"doc(Manually set the set_vals vector (2D: Naxis x N), and update fixer from its NaN pattern.
+
+NaN entries mark a point as free, finite entries lock the waveform to that value
+at that index. The fixer mask is rebuilt automatically, and X0 is updated at the
+fixed positions to match.
+
+Parameters
+----------
+set_vals : np.ndarray
+    2D array of shape (Naxis, N). NaN = free, finite value = fixed.)doc"
+        )
+
         // set_ils_solver
         .def("set_ils_solver", &Gropt::GroptParams::set_ils_solver,
             "ils_method"_a = "CG",

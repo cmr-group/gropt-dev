@@ -16,6 +16,15 @@ namespace Gropt {
 
 GroptParams::GroptParams() {}
 
+void GroptParams::rebuild_fixer_from_set_vals() {
+    pdata.fixer.setOnes(pdata.set_vals.size());
+    for (int i = 0; i < pdata.set_vals.size(); i++) {
+        if (!std::isnan(pdata.set_vals(i))) {
+            pdata.fixer(i) = 0.0;
+        }
+    }
+}
+
 void GroptParams::vec_init_simple(int _N, int _Naxis, double first_val, double last_val) {
     if (_N > 0) {
         N = _N;
@@ -34,9 +43,7 @@ void GroptParams::vec_init_simple(int _N, int _Naxis, double first_val, double l
     pdata.set_vals(0) = first_val;
     pdata.set_vals(N - 1) = last_val;
 
-    pdata.fixer.setOnes(N * Naxis);
-    pdata.fixer(0) = 0.0;
-    pdata.fixer(N - 1) = 0.0;
+    rebuild_fixer_from_set_vals();
 
     pdata.X0.setOnes(N * Naxis);
     pdata.X0 *= .01;
@@ -67,14 +74,40 @@ void GroptParams::setvec_X0(const Eigen::VectorXd &_X0, int _Naxis, bool set_oth
         pdata.set_vals.setZero(N * Naxis);
         pdata.set_vals.array() *= NAN;
 
-        pdata.fixer.setOnes(N * Naxis);
-
         for (int j = 0; j < Naxis; j++) {
             pdata.set_vals((j * N)) = pdata.X0((j * N));
             pdata.set_vals((j * N) + N - 1) = pdata.X0((j * N) + N - 1);
+        }
 
-            pdata.fixer((j * N)) = 0.0;
-            pdata.fixer((j * N) + N - 1) = 0.0;
+        rebuild_fixer_from_set_vals();
+    }
+
+    vec_init_status = N;
+}
+
+void GroptParams::setvec_set_vals(const Eigen::VectorXd &_set_vals, int _Naxis) {
+    if (_Naxis <= 0) {
+        throw std::invalid_argument("setvec_set_vals: Naxis must be > 0");
+    }
+    if (_set_vals.size() % _Naxis != 0) {
+        throw std::invalid_argument("setvec_set_vals: set_vals.size() must be divisible by Naxis");
+    }
+
+    int _N = static_cast<int>(_set_vals.size()) / _Naxis;
+    N = _N;
+    Naxis = _Naxis;
+    Ntot = N * Naxis;
+
+    pdata.set_vals = _set_vals;
+    rebuild_fixer_from_set_vals();
+
+    if (pdata.X0.size() != Ntot) {
+        pdata.X0.setOnes(Ntot);
+        pdata.X0 *= .01;
+    }
+    for (int i = 0; i < pdata.set_vals.size(); i++) {
+        if (!std::isnan(pdata.set_vals(i))) {
+            pdata.X0(i) = pdata.set_vals(i);
         }
     }
 
@@ -121,12 +154,7 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
     pdata.set_vals(0) = 0.0;
     pdata.set_vals(N - 1) = 0.0;
 
-    pdata.fixer.setOnes(N);
-    for (int i = 0; i < pdata.set_vals.size(); i++) {
-        if (!isnan(pdata.set_vals(i))) {
-            pdata.fixer(i) = 0.0;
-        }
-    }
+    rebuild_fixer_from_set_vals();
 
     pdata.X0.setOnes(N);
     for (int i = 0; i < pdata.set_vals.size(); i++) {
@@ -178,12 +206,7 @@ int GroptParams::diff_init_preencode(double _dt, double _TE, double _T_90, doubl
     pdata.set_vals(0) = 0.0;
     pdata.set_vals(N - 1) = 0.0;
 
-    pdata.fixer.setOnes(N);
-    for (int i = 0; i < pdata.set_vals.size(); i++) {
-        if (!isnan(pdata.set_vals(i))) {
-            pdata.fixer(i) = 0.0;
-        }
-    }
+    rebuild_fixer_from_set_vals();
 
     pdata.X0.setOnes(N);
     for (int i = 0; i < pdata.set_vals.size(); i++) {
@@ -237,12 +260,7 @@ void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, doubl
     pdata.set_vals(0) = 0.0;
     pdata.set_vals(N - 1) = 0.0;
 
-    pdata.fixer.setOnes(N);
-    for (int i = 0; i < pdata.set_vals.size(); i++) {
-        if (!isnan(pdata.set_vals(i))) {
-            pdata.fixer(i) = 0.0;
-        }
-    }
+    rebuild_fixer_from_set_vals();
 
     pdata.X0.setOnes(N);
     for (int i = 0; i < pdata.set_vals.size(); i++) {
@@ -284,13 +302,8 @@ void GroptParams::vec_reduce_simple(int N_reduce) {
     set_vals_new(0) = pdata.set_vals(0);
     set_vals_new(N - 1) = pdata.set_vals(pdata.set_vals.size() - 1);
 
-    Eigen::VectorXd fixer_new;
-    fixer_new.setOnes(N * Naxis);
-    fixer_new(0) = 0.0;
-    fixer_new(N - 1) = 0.0;
-
     pdata.set_vals = set_vals_new;
-    pdata.fixer = fixer_new;
+    rebuild_fixer_from_set_vals();
 
     vec_init_status = N;
 }
