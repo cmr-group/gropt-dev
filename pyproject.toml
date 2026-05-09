@@ -66,3 +66,4 @@ rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cm
     "clean-full",
     "touch-wrapper",
 ] }
+test-cpp = "cmake -S . -B build-tests -DGROPT_BUILD_TESTS=ON -DGROPT_EIGEN_ASSERTIONS=ON && cmake --build build-tests --config Release && ctest --test-dir build-tests --output-on-failure -C Release"

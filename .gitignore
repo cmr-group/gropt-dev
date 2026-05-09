@@ -1,6 +1,7 @@
 private*
 build-release/
 build-debug/
+build-tests/
 stubs/
 .scikit-build/
 

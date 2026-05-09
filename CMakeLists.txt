@@ -63,6 +63,12 @@ else()
     target_compile_definitions(gropt_core PRIVATE EIGEN_NO_DEBUG)
 endif()
 
+option(GROPT_BUILD_TESTS "Build C++ tests" OFF)
+if(GROPT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 install(TARGETS gropt_wrapper LIBRARY DESTINATION gropt)
 
 # Stub generation requires importing the built module, so it only works for native builds.
