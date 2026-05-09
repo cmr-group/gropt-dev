@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'May  6 2026 20:08:25'
+__build_date__: str = 'May  7 2026 13:43:33'
 
 def set_log_level(level: int) -> None:
     """
