@@ -107,7 +107,7 @@ void Operator::add_obj(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     forward_op(X, Ax_temp);
     transpose_op(Ax_temp, x_temp);
 
-    out.array() += obj_weight * Ax_temp.array();
+    out.array() += obj_weight * x_temp.array();
 
     spdlog::trace("Operator::add_obj   name = {}  obj_weight = {:.1e}", name, obj_weight);
 }
