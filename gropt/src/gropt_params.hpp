@@ -63,6 +63,7 @@ class GroptParams {
     int diff_init_preencode(double _dt, double _TE, double _T_90, double _T_180, double _T_readout, double _T_pre);
     void diff_init_deadtime(double _dt, double _TE, double _T_90, double _T_180, double _T_readout);
     void setvec_X0(const Eigen::VectorXd &_X0, int _Naxis, bool set_others);
+    void setvec_set_vals(const Eigen::VectorXd &_set_vals, int _Naxis);
 
     void vec_reduce_simple(int N_reduce);
 
@@ -101,6 +102,11 @@ class GroptParams {
     void print_op_details();
 
     double get_output_bvalue(const Eigen::VectorXd &X);
+
+  private:
+    // Rebuilds pdata.fixer from the NaN pattern of pdata.set_vals:
+    // 1.0 where free (NaN), 0.0 where fixed (finite).
+    void rebuild_fixer_from_set_vals();
 };
 
 Eigen::VectorXd linear_interpolate(const Eigen::VectorXd &in, int out_size);

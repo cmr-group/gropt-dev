@@ -1,6 +1,6 @@
 [project]
 name = "gropt"
-version = "2.0.0rc11"
+version = "2.0.0rc12"
 requires-python = ">=3.10"
 dependencies = ["numpy"]
 
@@ -54,11 +54,11 @@ dev = { features = ["dev", "docs"], solve-group = "default" }
 clean = "python clean.py"
 clean-full = "python clean.py --full"
 touch-wrapper = "python -c \"from pathlib import Path; Path('gropt/gropt_wrapper/gropt_wrapper.cpp').touch()\""
-rebuild = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
+rebuild = { cmd = "python -m pip install --no-build-isolation -v -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=OFF", depends-on = [
     "clean",
     "touch-wrapper",
 ] }
-rebuild-full = { cmd = "python -m pip install --no-build-isolation -v -e .", depends-on = [
+rebuild-full = { cmd = "python -m pip install --no-build-isolation -v -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=OFF", depends-on = [
     "clean-full",
     "touch-wrapper",
 ] }
@@ -66,3 +66,4 @@ rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cm
     "clean-full",
     "touch-wrapper",
 ] }
+test-cpp = "cmake -S . -B build-tests -DGROPT_BUILD_TESTS=ON -DGROPT_EIGEN_ASSERTIONS=ON && cmake --build build-tests --config Release && ctest --test-dir build-tests --output-on-failure -C Release"
