@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'May  7 2026 13:43:33'
+__build_date__: str = 'May 17 2026 09:36:00'
 
 def set_log_level(level: int) -> None:
     """
@@ -298,6 +298,23 @@ class GroptParams:
             Maximum allowed gradient slew rate [T/m/s].
         rot_variant : bool, optional
             If True, use rotationally invariant formulation.
+        weight_mod : float, optional
+            Weighting factor for this constraint.
+        """
+
+    def add_smax_vec(self, smax_vec: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], rot_variant: bool = True, weight_mod: float = 1.0) -> None:
+        """
+        Add a per-location slew rate constraint.
+
+        Parameters
+        ----------
+        smax_vec : np.ndarray
+            Slew-rate limit at each location [T/m/s]. Length (N-1) is broadcast
+            across all axes; length Naxis*(N-1) sets a per-axis limit. Only
+            supported with rot_variant=True.
+        rot_variant : bool, optional
+            Must be True. A vector limit on the slew magnitude across axes is
+            not supported.
         weight_mod : float, optional
             Weighting factor for this constraint.
         """

@@ -326,6 +326,24 @@ weight_mod : float, optional
     Weighting factor for this constraint.)doc"
         )
 
+        // add_smax_vec
+        .def("add_smax_vec", &Gropt::GroptParams::add_smax_vec,
+            "smax_vec"_a, "rot_variant"_a = true, "weight_mod"_a = 1.0,
+R"doc(Add a per-location slew rate constraint.
+
+Parameters
+----------
+smax_vec : np.ndarray
+    Slew-rate limit at each location [T/m/s]. Length (N-1) is broadcast
+    across all axes; length Naxis*(N-1) sets a per-axis limit. Only
+    supported with rot_variant=True.
+rot_variant : bool, optional
+    Must be True. A vector limit on the slew magnitude across axes is
+    not supported.
+weight_mod : float, optional
+    Weighting factor for this constraint.)doc"
+        )
+
         // add_moment
         .def("add_moment", &Gropt::GroptParams::add_moment,
             "order"_a = 0, "target"_a = 0.0, "tol"_a = 1e-6, "units"_a = "mT*ms/m",
