@@ -73,6 +73,7 @@ class GroptParams {
 
     void add_gmax(double gmax, bool rot_variant, double weight_mod);
     void add_smax(double smax, bool rot_variant, double weight_mod);
+    void add_smax_vec(const Eigen::VectorXd &smax_vec, bool rot_variant, double weight_mod);
     void add_concomitant(int start_idx, bool rot_variant, double weight_mod);
     void add_moment(double order, double target, double tol0, std::string units, int moment_axis, int start_idx0,
                     int stop_idx0, int ref_idx0, double weight_mod);

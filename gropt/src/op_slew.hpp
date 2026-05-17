@@ -20,9 +20,11 @@ class Op_Slew : public Operator
 {
     protected:
         double smax;
+        Eigen::VectorXd smax_vec;
 
     public:
         Op_Slew(const ProblemData &_pdata, double _smax, bool _rot_variant, double _weight_mod);
+        Op_Slew(const ProblemData &_pdata, const Eigen::VectorXd &_smax_vec, bool _rot_variant, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);
