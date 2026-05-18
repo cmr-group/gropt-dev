@@ -295,6 +295,24 @@ weight_mod : float, optional
     Weighting factor for this constraint.)doc"
         )
 
+        // add_gmax_vec
+        .def("add_gmax_vec", &Gropt::GroptParams::add_gmax_vec,
+            "gmax_vec"_a, "rot_variant"_a = true, "weight_mod"_a = 1.0,
+R"doc(Add a per-location gradient amplitude constraint.
+
+Parameters
+----------
+gmax_vec : np.ndarray
+    Gradient amplitude limit at each location [T/m]. Length N is broadcast
+    across all axes; length Naxis*N sets a per-axis limit. Only supported
+    with rot_variant=True.
+rot_variant : bool, optional
+    Must be True. A vector limit on the gradient magnitude across axes is
+    not supported.
+weight_mod : float, optional
+    Weighting factor for this constraint.)doc"
+        )
+
 
         // add_concomitant
         .def("add_concomitant", &Gropt::GroptParams::add_concomitant,

@@ -6,7 +6,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'May 17 2026 09:36:00'
+__build_date__: str = 'May 17 2026 17:59:53'
 
 def set_log_level(level: int) -> None:
     """
@@ -270,6 +270,23 @@ class GroptParams:
             Maximum allowed gradient magnitude [T/m].
         rot_variant : bool, optional
             If True, use rotationally invariant formulation.
+        weight_mod : float, optional
+            Weighting factor for this constraint.
+        """
+
+    def add_gmax_vec(self, gmax_vec: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], rot_variant: bool = True, weight_mod: float = 1.0) -> None:
+        """
+        Add a per-location gradient amplitude constraint.
+
+        Parameters
+        ----------
+        gmax_vec : np.ndarray
+            Gradient amplitude limit at each location [T/m]. Length N is broadcast
+            across all axes; length Naxis*N sets a per-axis limit. Only supported
+            with rot_variant=True.
+        rot_variant : bool, optional
+            Must be True. A vector limit on the gradient magnitude across axes is
+            not supported.
         weight_mod : float, optional
             Weighting factor for this constraint.
         """

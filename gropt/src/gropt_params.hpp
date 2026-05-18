@@ -72,6 +72,7 @@ class GroptParams {
     void set_ils_solver(std::string ils_method);
 
     void add_gmax(double gmax, bool rot_variant, double weight_mod);
+    void add_gmax_vec(const Eigen::VectorXd &gmax_vec, bool rot_variant, double weight_mod);
     void add_smax(double smax, bool rot_variant, double weight_mod);
     void add_smax_vec(const Eigen::VectorXd &smax_vec, bool rot_variant, double weight_mod);
     void add_concomitant(int start_idx, bool rot_variant, double weight_mod);

@@ -21,9 +21,11 @@ class Op_Gradient : public Operator
 {
     protected:
         double gmax;
+        Eigen::VectorXd gmax_vec;
 
     public:
         Op_Gradient(const ProblemData &_pdata, double _gmax, bool _rot_variant, double _weight_mod);
+        Op_Gradient(const ProblemData &_pdata, const Eigen::VectorXd &_gmax_vec, bool _rot_variant, double _weight_mod);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);
