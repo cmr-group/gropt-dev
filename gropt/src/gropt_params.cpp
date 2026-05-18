@@ -339,6 +339,10 @@ void GroptParams::add_gmax(double gmax, bool rot_variant, double weight_mod) {
     all_op.push_back(std::make_unique<Op_Gradient>(pdata, gmax, rot_variant, weight_mod));
 }
 
+void GroptParams::add_gmax_vec(const Eigen::VectorXd &gmax_vec, bool rot_variant, double weight_mod) {
+    all_op.push_back(std::make_unique<Op_Gradient>(pdata, gmax_vec, rot_variant, weight_mod));
+}
+
 void GroptParams::add_smax(double smax, bool rot_variant, double weight_mod) {
     all_op.push_back(std::make_unique<Op_Slew>(pdata, smax, rot_variant, weight_mod));
 }

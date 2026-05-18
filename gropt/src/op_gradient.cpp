@@ -12,6 +12,19 @@ Op_Gradient::Op_Gradient(const ProblemData &_pdata, double _gmax, bool _rot_vari
     weight_mod = _weight_mod;
 }
 
+Op_Gradient::Op_Gradient(const ProblemData &_pdata, const Eigen::VectorXd &_gmax_vec, bool _rot_variant,
+                         double _weight_mod)
+    : Operator(_pdata) {
+    if (!_rot_variant) {
+        throw std::invalid_argument("Op_Gradient vector gmax is only supported with rot_variant=true");
+    }
+    name = "Gradient";
+    gmax_vec = _gmax_vec;
+    gmax = (gmax_vec.size() > 0) ? gmax_vec.maxCoeff() : 0.0;
+    rot_variant = _rot_variant;
+    weight_mod = _weight_mod;
+}
+
 void Op_Gradient::init() {
     spdlog::trace("Op_Gradient::init  N = {}", pdata->N);
 
@@ -23,6 +36,20 @@ void Op_Gradient::init() {
     spec_norm = 1.0;
 
     Ax_size = pdata->Naxis * pdata->N;
+
+    if (gmax_vec.size() > 0) {
+        int full_size = pdata->Naxis * pdata->N;
+        if (gmax_vec.size() == pdata->N && pdata->Naxis > 1) {
+            Eigen::VectorXd broadcast(full_size);
+            for (int i_ax = 0; i_ax < pdata->Naxis; i_ax++) {
+                broadcast.segment(i_ax * pdata->N, pdata->N) = gmax_vec;
+            }
+            gmax_vec = broadcast;
+        } else if (gmax_vec.size() != full_size) {
+            throw std::invalid_argument(
+                "Op_Gradient: gmax_vec size must be N or Naxis*N");
+        }
+    }
 
     if (do_init_weights) {
         obj_weight = 1.0;
@@ -44,9 +71,11 @@ void Op_Gradient::prox(Eigen::VectorXd &X) {
     }
 
     if (rot_variant) {
+        bool use_vec = (gmax_vec.size() == X.size());
         for (int i = 0; i < X.size(); i++) {
-            double lower_bound = (target - tol);
-            double upper_bound = (target + tol);
+            double tol_i = use_vec ? (1.0 - cushion) * gmax_vec(i) : tol;
+            double lower_bound = target - tol_i;
+            double upper_bound = target + tol_i;
             X(i) = X(i) < lower_bound ? lower_bound : X(i);
             X(i) = X(i) > upper_bound ? upper_bound : X(i);
 
@@ -94,9 +123,11 @@ void Op_Gradient::check(Eigen::VectorXd &X) {
     }
 
     if (rot_variant) {
+        bool use_vec = (gmax_vec.size() == X.size());
         for (int i = 0; i < X.size(); i++) {
-            double lower_bound = (target - tol0);
-            double upper_bound = (target + tol0);
+            double tol_i = use_vec ? gmax_vec(i) : tol0;
+            double lower_bound = target - tol_i;
+            double upper_bound = target + tol_i;
 
             if ((X(i) < lower_bound) || (X(i) > upper_bound) && isnan(pdata->set_vals(i))) {
                 is_feas = 0;
