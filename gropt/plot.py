@@ -7,7 +7,7 @@ def get_moments(g, dt, inv_vec=None, start_idx=0, scale_to_one=True):
     if g.squeeze().ndim == 2:
         g = g[0]  # TODO: 3-axis case, right now just assumes 1 axis
 
-    Nm = 5
+    Nm = 10
     tt = np.arange(g.size) * dt
     _m = np.zeros((Nm, g.size))
 
@@ -88,11 +88,13 @@ def plot_waves(
     mode='regular',
     params={},
     highlight_rf=True,
+    figsize=None,
+    dpi = 80,
 ):
 
     if start_idx == 0:
         start_idx = params.get('start_idx', 0)
-    if eddy_lam == 0:
+    if np.isscalar(eddy_lam) and eddy_lam == 0:
         eddy_lam = params.get('eddy_lam', 0.0)
     if stim_vec is None:
         stim_vec = params.get('stim_vec', None)
@@ -128,12 +130,15 @@ def plot_waves(
     to_plot = ['gradient', 'slew', 'moments']
     if len(all_stim) > 0:
         to_plot.append('stim')
-    if plot_eddy or eddy_lam > 0:
+    eddy_lam = np.atleast_1d(eddy_lam)
+    if plot_eddy or np.any(eddy_lam > 0):
         to_plot.append('eddy')
 
     N_plots = len(to_plot)
     N_rows = (N_plots + N_cols - 1) // N_cols
-    f, axarr = plt.subplots(N_rows, N_cols, squeeze=False, figsize=(10, N_rows * 3.0), layout='tight')
+    if figsize is None:
+        figsize= (N_cols * 5.0, N_rows * 3.0)
+    f, axarr = plt.subplots(N_rows, N_cols, squeeze=False, figsize=figsize, layout='tight', dpi = dpi)
 
     # Diffusion Title String
     # ======================================
@@ -144,7 +149,7 @@ def plot_waves(
             label += f'TE: {1000 * TE:.2f} ms  ---  '
 
         bval = get_bval(g, dt, inv_vec, start_idx=start_idx)
-        label += f'b-value: {bval:.0f} $mm^2/s$  ---  '
+        label += f'b-value: {bval:.2f} $mm^2/s$  ---  '
 
         c_ratio = get_concomitant(g, dt, inv_vec, start_idx=start_idx)
         label += f'concomitant ratio: {c_ratio:.2f}'
@@ -237,8 +242,9 @@ def plot_waves(
             ax.axhline(linestyle='--', color='0.7')
             ax.plot(all_lam, all_e)
 
-            if eddy_lam > 0:
-                ax.axvline(eddy_lam * 1e3, linestyle='--', color='r', alpha=0.7)
+            for _elam in eddy_lam:
+                if _elam > 0:
+                    ax.axvline(_elam * 1e3, linestyle='--', color='r', alpha=0.4)
 
             ax.set_title('Eddy Spectrum')
             ax.set_xlabel('lambda [ms]')

@@ -30,6 +30,7 @@ set(GROPT_SOURCES
     ${GROPT_SRC_DIR}/op_safe.cpp
     ${GROPT_SRC_DIR}/op_eddy.cpp
     ${GROPT_SRC_DIR}/op_tv.cpp
+    ${GROPT_SRC_DIR}/op_diffbasin.cpp
     ${GROPT_SRC_DIR}/solver.cpp
     ${GROPT_SRC_DIR}/solver_groptsdmm.cpp
     ${GROPT_SRC_DIR}/solver_osqp.cpp

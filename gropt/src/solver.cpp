@@ -49,47 +49,84 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
     spdlog::info("  Iteration = {:d}   Total f_eval = {:d}", iiter, result.n_feval);
     spdlog::info("  ||x|| = {:.2e}", X.norm());
     spdlog::info(" ");
-    spdlog::info("          Name      Feasibile   min(Ax)       max(Ax)      tol0 ");
-    spdlog::info("-------------------------------------------------------------");
+    spdlog::info("          Name      Feasible    min(Ax)       max(Ax)      target        tol0 ");
+    spdlog::info("---------------------------------------------------------------------------------");
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
         op->Ax_temp.setZero();
         op->forward_op(X, op->Ax_temp);
+        op->check(op->Ax_temp); // fresh feasibility of the RETURNED waveform (not the last loop iterate)
 
-        spdlog::info("    {:^16}    {:d}       {: .2e}    {: .2e}    {: .2e}", op->name, op->hist_feas.back(),
-                     op->Ax_temp.minCoeff() - op->target, op->Ax_temp.maxCoeff() - op->target, op->tol0);
+        // Physical (un-normalized) constraint values for the table: forward() is the raw A*X in the
+        // same units as target/tol0, whereas forward_op() above is divided by spec_norm (and equil-
+        // scaled) for the solver. Use a local vector so op->Ax_temp (the check() input) is untouched.
+        Eigen::VectorXd Ax_phys(op->Ax_size);
+        op->forward(X, Ax_phys);
+
+        spdlog::info("    {:^16}    {:d}       {: .2e}    {: .2e}    {: .2e}    {: .2e}", op->name,
+                     op->hist_feas.back(), Ax_phys.minCoeff(), Ax_phys.maxCoeff(), op->target, op->tol0);
 
         if (op->hist_feas.back() == 0) {
             result.converged = false;
         }
     }
 
-    // Check if one of the constraints is b-value and if so, report the final b-value
-    for (int i = 0; i < gparams->all_op.size(); i++) {
-        Operator *op = gparams->all_op[i].get();
-        if (op->name == "b-value") {
-            Op_BValue *op_bvalue = dynamic_cast<Op_BValue *>(op);
-            if (X.array().isNaN().any()) {
-                result.bvalue = 0;
-            } else {
-                if (op_bvalue != nullptr) {
+    // Report the final b-value if a b-value operator exists, whether it was added as a
+    // constraint (all_op) or as a maximization objective (all_obj).
+    auto report_bvalue = [&](std::vector<std::unique_ptr<Operator>> &ops) {
+        for (auto &op_ptr : ops) {
+            Operator *op = op_ptr.get();
+            if (op->name == "b-value") {
+                Op_BValue *op_bvalue = dynamic_cast<Op_BValue *>(op);
+                if (X.array().isNaN().any()) {
+                    result.bvalue = 0;
+                } else if (op_bvalue != nullptr) {
                     result.bvalue = op_bvalue->get_bvalue(X);
                 } else {
                     spdlog::warn("Operator named 'b-value' is not an Op_BValue instance.");
                 }
             }
         }
+    };
+    report_bvalue(gparams->all_op);
+    report_bvalue(gparams->all_obj);
+}
+
+WarmStart Solver::capture_warmstart(const Eigen::VectorXd &X) {
+    // Snapshot the current ADMM state: primal X, plus each operator's dual (ws->y1), penalty
+    // (weight) and relaxation (gamma), tagged by unique_name and the operator's Ax-block layout
+    // so it can be matched and resized in a later solve. The consensus z is deliberately NOT
+    // stored -- it is regenerated as z = A*X when the snapshot is loaded (see warmstart.hpp).
+    WarmStart w;
+    if (gparams == nullptr) return w;
+    w.active = true;
+    w.N = gparams->N;
+    w.Naxis = gparams->Naxis;
+    w.dt = gparams->dt;
+    w.X = X;
+    w.fixer = gparams->pdata.fixer;
+    for (size_t i = 0; i < gparams->all_op.size() && i < ws.size(); i++) {
+        Operator *op = gparams->all_op[i].get();
+        OpWarmState st;
+        st.key = op->unique_name;
+        st.y = ws[i]->y1;
+        st.weight = ws[i]->weight;
+        st.gamma = ws[i]->gamma;
+        st.spec_norm = op->spec_norm; // normalization at capture, to rescale the dual on load
+        st.blocks = op->Ax_block_lengths();
+        w.ops.push_back(st);
     }
+    return w;
 }
 
 void Solver::set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval,
-                                int extra_iters) {
+                                int obj_patience) {
     this->min_iter = min_iter;
     this->max_iter = max_iter;
     this->log_interval = log_interval;
     this->gamma_x = gamma_x;
     this->max_feval = max_feval;
-    this->extra_iters = extra_iters;
+    this->obj_patience = obj_patience;
 }
 
 void Solver::set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam) {

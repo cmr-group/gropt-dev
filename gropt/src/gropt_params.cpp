@@ -1,9 +1,12 @@
 #include "spdlog/spdlog.h"
 
+#include <map>
+
 #include "gropt_params.hpp"
 
 #include "op_bvalue.hpp"
 #include "op_concomitant.hpp"
+#include "op_diffbasin.hpp"
 #include "op_eddy.hpp"
 #include "op_gradient.hpp"
 #include "op_identity.hpp"
@@ -330,6 +333,36 @@ void GroptParams::prepare() {
         all_obj[i]->init();
     }
 
+    // Assign each operator a stable unique_name "<name>#<occurrence>" so duplicate-named operators
+    // stay distinguishable (e.g. Moment#0, Moment#1). Used to match operators across solves for
+    // warm starting (see warmstart.hpp); rebuilding the problem in the same order reproduces them.
+    {
+        std::map<std::string, int> name_counts;
+        for (auto &op : all_op) {
+            op->unique_name = op->name + "#" + std::to_string(name_counts[op->name]++);
+        }
+    }
+
+    // Build the exact equality projector from any operators flagged use_projection (moments with
+    // project=true, etc.). Each contributes its linear-equality
+    // rows via append_eq_rows. If any participating operator's rows depend on the iterate
+    // (eq_rows_vary -> relinearized), the solver rebuilds the projector each outer iteration.
+    {
+        bool any_proj = false;  // Are any projections on
+        eq_proj_dynamic = false;  // Do the rows change
+        for (auto &op : all_op) {
+            if (op->use_projection) {
+                any_proj = true;
+                if (op->eq_rows_vary()) eq_proj_dynamic = true;
+            }
+        }
+        if (any_proj) {
+            build_eq_proj(pdata.X0, true); // initial build (logs rank/conditioning)
+        } else {
+            eq_proj.active = false;
+        }
+    }
+
     op_prep_status = N;
 
     spdlog::trace("GroptParams::prepare() end");
@@ -351,14 +384,64 @@ void GroptParams::add_smax_vec(const Eigen::VectorXd &smax_vec, bool rot_variant
     all_op.push_back(std::make_unique<Op_Slew>(pdata, smax_vec, rot_variant, weight_mod));
 }
 
-void GroptParams::add_concomitant(int start_idx, bool rot_variant, double weight_mod) {
-    all_op.push_back(std::make_unique<Op_Concomitant>(pdata, start_idx, rot_variant, weight_mod));
+void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
+    // Collect linear-equality rows from every operator (linearized at x0), stack, and build.
+    std::vector<Eigen::VectorXd> rows;
+    std::vector<double> targets;
+    for (auto &op : all_op) {
+        op->append_eq_rows(rows, targets, x0);
+    }
+
+    int k = static_cast<int>(rows.size());
+    if (k == 0) {
+        eq_proj.active = false; // nothing to project this iteration (e.g. degenerate linearization)
+        return;
+    }
+
+    Eigen::MatrixXd M(k, Ntot);
+    Eigen::VectorXd t(k);
+    for (int r = 0; r < k; r++) {
+        M.row(r) = rows[r].transpose();
+        t(r) = targets[r];
+    }
+    eq_proj.build(M, t, pdata.fixer, eq_proj_solver, eq_proj_rcond);
+
+    if (do_log) {
+        if (!eq_proj.rank_ok) {
+            // TODO: This is wrong to some degree, it often works just fine when this ewrror is triggered.
+            spdlog::warn("Equality projection: the free (non-fixed) DOFs cannot independently control the "
+                          "{} projected row(s) -- nearly linearly dependent (scale-invariant cond = {:.2e}). "
+                          "Free more of the waveform or reduce projected constraints.",
+                          k, eq_proj.cond);
+        } else {
+            spdlog::info("Equality projection active: {} row(s), independence cond = {:.2e}", k, eq_proj.cond);
+        }
+    }
+}
+
+void GroptParams::add_concomitant(int start_idx, bool rot_variant, double weight_mod, double tol0,
+                                  double target, bool fix_gamma, double gamma_fix, bool project,
+                                  bool as_objective) {
+    auto op = std::make_unique<Op_Concomitant>(pdata, start_idx, rot_variant, weight_mod, tol0, target);
+    op->fix_gamma = fix_gamma;
+    op->gamma_fix = gamma_fix;
+    if (as_objective) {  // TODO: probably get rid of this, it didn't really help anything, though may be a good demo pathway for other operators
+        // Augmented-Lagrangian objective: drives c(x)=0 from the all_obj path (CG LHS/RHS + scalar
+        // dual). Not the optimization target, so it must not corrupt best-feasible scoring.
+        op->is_score_obj = false;
+        all_obj.push_back(std::move(op));
+    } else {
+        op->use_projection = project; // project=true: exact relinearized equality projection; else
+        all_op.push_back(std::move(op)); // soft ADMM box/band constraint (prox)
+    }
 }
 
 void GroptParams::add_moment(double order, double target, double tol0, std::string units, int moment_axis,
-                             int start_idx0, int stop_idx0, int ref_idx0, double weight_mod) {
-    all_op.push_back(std::make_unique<Op_Moment>(pdata, order, target, tol0, units, moment_axis, start_idx0, stop_idx0,
-                                                 ref_idx0, weight_mod));
+                             int start_idx0, int stop_idx0, int ref_idx0, double weight_mod, bool project) {
+    auto op = std::make_unique<Op_Moment>(pdata, order, target, tol0, units, moment_axis, start_idx0, stop_idx0,
+                                          ref_idx0, weight_mod);
+    op->use_projection = project; // exact null-space projection instead of ADMM penalty
+    all_op.push_back(std::move(op));
 }
 
 void GroptParams::add_SAFE(double stim_thresh, int new_first_axis, double weight_mod) {
@@ -396,18 +479,32 @@ void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, const Eig
 }
 
 void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod, int mode,
-                             double max_scale) {
+                             double max_scale, bool as_objective, bool linearize) {
 
-    all_op.push_back(std::make_unique<Op_BValue>(pdata, target, tol, start_idx0, stop_idx0, weight_mod,
-                                                 static_cast<BVALUE_MODE>(mode), max_scale));
+    auto op = std::make_unique<Op_BValue>(pdata, target, tol, start_idx0, stop_idx0, weight_mod,
+                                          static_cast<BVALUE_MODE>(mode), max_scale);
+    if (as_objective) {
+        op->linearize_obj = linearize;    // concave maximization -> linearize to RHS (DCA) by default
+        all_obj.push_back(std::move(op)); // maximize b-value via the objective path (obj_weight = -1)
+    } else {
+        all_op.push_back(std::move(op)); // enforce b-value as a constraint
+    }
 }
 
-void GroptParams::add_eddy(const Eigen::VectorXd &lam, double tol, double weight_mod) {
-    all_op.push_back(std::make_unique<Op_Eddy>(pdata, lam, tol, weight_mod));
+void GroptParams::add_eddy(const Eigen::VectorXd &lam, double tol, double weight_mod, bool project) {
+    auto op = std::make_unique<Op_Eddy>(pdata, lam, tol, weight_mod);
+    op->use_projection = project; // exact null-space projection (eddy current == 0) instead of box ADMM
+    all_op.push_back(std::move(op));
 }
 
-void GroptParams::add_TV(double tv_lam, double weight_mod) {
-    all_op.push_back(std::make_unique<Op_TV>(pdata, tv_lam, weight_mod));
+void GroptParams::add_TV(double tv_lam, double weight_mod, int order) {
+    all_op.push_back(std::make_unique<Op_TV>(pdata, tv_lam, weight_mod, order));
+}
+
+void GroptParams::add_diff_basin(double window_time, double eps_factor, double gmax, double weight_mod,
+                                 bool same_sign) {
+    all_op.push_back(
+        std::make_unique<Op_DiffBasin>(pdata, window_time, eps_factor, gmax, weight_mod, same_sign));
 }
 
 void GroptParams::add_obj_identity(double weight_mod) {
@@ -416,12 +513,10 @@ void GroptParams::add_obj_identity(double weight_mod) {
 
 void GroptParams::reset_op_weights() {
     for (auto &op : all_op) {
-        // op->weight_mod = 1.0;
         op->spec_norm = 1.0;
         op->spec_norm2 = 1.0;
     }
     for (auto &op : all_obj) {
-        // op->weight_mod = 1.0;
         op->spec_norm = 1.0;
         op->spec_norm2 = 1.0;
     }

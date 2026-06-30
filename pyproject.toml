@@ -6,7 +6,7 @@ dependencies = ["numpy"]
 
 [project.optional-dependencies]
 gui = ["pyqt6", "matplotlib"]
-dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn", "ipywidgets"]
+dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn", "ipywidgets", "ipympl", "plotly", "nbformat", "anywidget"]
 docs = [
     "mkdocs",
     "mkdocs-material",

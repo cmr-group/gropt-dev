@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "spdlog/spdlog.h"
 
 #include "ils_bicgstabl.hpp"
@@ -43,6 +45,9 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
     r = (b - Ax);
     double rnorm = r.norm();
     double rnorm0 = rnorm;
+    double bnorm0 = b.norm();
+    // Warm-start-relative reduction floored by a ||b||-relative absolute tolerance.
+    double stop_thresh = std::max(tol * rnorm0, tol_abs_rel * bnorm0);
 
     r_shadow = r;  // This could be random too.
 
@@ -115,7 +120,7 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
             rs[0] = rs[0] - gammap(jj)*rs[jj];
         }
         rnorm = rs[0].norm();
-        if ((rnorm <= tol * rnorm0))
+        if ((rnorm <= stop_thresh))
         {
             spdlog::trace("ILS_BiCGstabl::solve  break for (res <= tol)  ii = {:d}", ii);
             break;
@@ -128,6 +133,9 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
     elapsed_us = stop_time - start_time;
 
     hist_n_iter.push_back(ii+1);
+    hist_rnorm0.push_back(rnorm0);
+    hist_rnorm.push_back(rs[0].norm());
+    hist_bnorm0.push_back(b.norm());
 
     return x;
 }

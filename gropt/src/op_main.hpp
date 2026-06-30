@@ -24,6 +24,9 @@ class Operator // This is the main parent class for every operator in GrOpt
   public:
     std::string name;
 
+    // Stable per-operator identifier, assigned in GroptParams::prepare() as "<name>#<occurrence>"
+    std::string unique_name;
+
     const ProblemData *pdata;
 
     int N;
@@ -45,6 +48,18 @@ class Operator // This is the main parent class for every operator in GrOpt
 
     double obj_weight = 1.0;
     double weight_mod = 1.0;
+    double admm_weight = 1.0;
+    // Objective ops only: if true, this objective enters the x-subproblem as a linearized gradient
+    // in the RHS 
+    bool linearize_obj = false;
+    // Objective ops only: true if this is the optimization TARGET used for best-feasible scoring
+    // (e.g. b-value max). False for objective-path terms that merely drive a constraint to zero
+    bool is_score_obj = true;
+
+    bool use_projection = false;
+
+    bool fix_gamma = false;
+    double gamma_fix = 1.0;
 
     Eigen::VectorXd x_temp;
     Eigen::VectorXd x_temp_obj;
@@ -79,7 +94,24 @@ class Operator // This is the main parent class for every operator in GrOpt
     virtual void add_Atb(Eigen::VectorXd &b, const WorkspaceSolver &ws);
     void add_AtAx(Eigen::VectorXd &x, Eigen::VectorXd &out, const WorkspaceSolver &ws);
     virtual void add_obj(Eigen::VectorXd &x, Eigen::VectorXd &out);
+    virtual void add_obj_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out, bool normalize = false);
+    // Refresh per-outer-iteration objective state at the current iterate x0 (default no-op). Used by
+    // augmented-Lagrangian objective terms to freeze their linearization and update the scalar dual.
+    virtual void update_obj_state(const Eigen::VectorXd &x0) {}
     void print_details();
+
+    // EqualityProjection participation. An operator enforcing a linear equality (or a nonlinear one
+    // relinearized at the current iterate x0) appends its coefficient row(s) and target(s) here.
+    // Operators not using projection append nothing.
+    virtual void append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vector<double> &targets,
+                                const Eigen::VectorXd &x0) const {}
+    // True if the appended rows depend on x0 (relinearized each outer iteration -> rebuild projector).
+    virtual bool eq_rows_vary() const { return false; }
+
+    // Flat partition of this operator's Ax-space output (sum == Ax_size), used to resize the dual
+    // y across a grid change one block at a time so stacked blocks never bleed together (see
+    // warmstart.hpp).
+    virtual std::vector<int> Ax_block_lengths() const;
 };
 
 } // namespace Gropt

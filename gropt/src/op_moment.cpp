@@ -89,6 +89,13 @@ void Op_Moment::init() {
     spdlog::trace("    i_start = {:d}  i_stop = {:d}", i_start, i_stop);
 }
 
+void Op_Moment::append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vector<double> &targets,
+                               const Eigen::VectorXd &x0) const {
+    if (!use_projection) return;
+    rows.push_back(A.row(0).transpose()); // constant linear moment functional (independent of x0)
+    targets.push_back(target);
+}
+
 void Op_Moment::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = A * X; }
 
 void Op_Moment::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) { out = A.transpose() * X; }

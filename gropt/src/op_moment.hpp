@@ -47,6 +47,11 @@ class Op_Moment : public Operator
         virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);
         virtual void prox(Eigen::VectorXd &X);
         virtual void check(Eigen::VectorXd &X);
+
+        // Linear moment functional: a single constant row (A) with the moment target. eq_rows_vary
+        // is false (the row does not depend on x0).
+        virtual void append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vector<double> &targets,
+                                    const Eigen::VectorXd &x0) const;
 };
 
 }  // end namespace Gropt

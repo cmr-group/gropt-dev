@@ -65,6 +65,10 @@ class Op_SAFE : public Operator {
     virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);
     virtual void prox(Eigen::VectorXd &X);
     virtual void check(Eigen::VectorXd &X);
+
+    // SAFE stacks n_terms blocks per axis (Ax_size = n_terms*Naxis*N); each N-block is a separate
+    // time series, so it must be resized block-by-block rather than as one Ax_size/Naxis chunk.
+    virtual std::vector<int> Ax_block_lengths() const override { return std::vector<int>(n_terms * Naxis, N); }
 };
 
 } // namespace Gropt

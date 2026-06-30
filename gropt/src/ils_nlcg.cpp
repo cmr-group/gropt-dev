@@ -103,6 +103,9 @@ Eigen::VectorXd ILS_NLCG::solve(Eigen::VectorXd &x_in)
     elapsed_us = stop_time - start_time;
 
     hist_n_iter.push_back(ii+1);
+    hist_rnorm0.push_back(sqrt(rnorm0)); // rnorm0 is stored squared in NLCG
+    hist_rnorm.push_back(r.norm());
+    hist_bnorm0.push_back(b.norm());
 
     return x1;
 }

@@ -101,6 +101,8 @@ void Operator::add_AtAx(Eigen::VectorXd &X, Eigen::VectorXd &out, const Workspac
 }
 
 void Operator::add_obj(Eigen::VectorXd &X, Eigen::VectorXd &out) {
+    if (linearize_obj) return; // DCA/linearized objectives contribute via add_obj_rhs (RHS), not LHS
+
     Ax_temp.setZero();
     x_temp.setZero();
 
@@ -110,6 +112,39 @@ void Operator::add_obj(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     out.array() += obj_weight * x_temp.array();
 
     spdlog::trace("Operator::add_obj   name = {}  obj_weight = {:.1e}", name, obj_weight);
+}
+
+// Linearized objective contribution to the RHS (convex-concave / DCA): freezes the objective
+// gradient at the current iterate x0 so the LHS stays positive-definite. Adds -obj_weight * AᵀA x0
+// (for obj_weight < 0 this is an ascent pull toward larger ||A x||, i.e. maximization).
+void Operator::add_obj_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out, bool normalize) {
+    if (!linearize_obj) return; // convex objectives contribute curvature via add_obj (LHS), not RHS
+
+    Ax_temp.setZero();
+    x_temp.setZero();
+
+    forward_op(x0, Ax_temp);
+    transpose_op(Ax_temp, x_temp);
+
+    double scale = -obj_weight;
+    if (normalize) {
+        double n = x_temp.norm();
+        if (n > 1e-300) scale /= n; // self-normalize the direction; magnitude = |obj_weight| (constant)
+    }
+    out.array() += scale * x_temp.array();
+
+    spdlog::trace("Operator::add_obj_rhs   name = {}  obj_weight = {:.1e}  normalize = {}", name, obj_weight,
+                  normalize);
+}
+
+std::vector<int> Operator::Ax_block_lengths() const {
+    // Naxis equal, axis-contiguous blocks -- the layout every operator uses except SAFE. When
+    // Ax_size isn't a multiple of Naxis the output isn't axis-partitioned (e.g. a single scalar
+    // moment), so treat it as one N-independent block (it then resizes by carry-through).
+    if (Naxis > 0 && Ax_size % Naxis == 0) {
+        return std::vector<int>(Naxis, Ax_size / Naxis);
+    }
+    return std::vector<int>{Ax_size};
 }
 
 void Operator::check(Eigen::VectorXd &X) {

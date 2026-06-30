@@ -94,14 +94,10 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
 
         get_residuals(X);
 
+        // OSQP path stops on the first feasible point (it is not the b-value-objective path —
+        // that uses SolverGroptSDMM, which has the best-feasible / obj_patience stopping).
         if ((logger(X) > 0) && (iiter > min_iter)) {
-            if (extra_iters > 0) {
-                spdlog::info("First solved at iiter {:d}, now {:d} extra iterations", iiter, extra_iters);
-                min_iter = iiter + extra_iters;
-                extra_iters = 0;
-            } else {
-                break;
-            }
+            break;
         }
 
         total_feval += ils_solver->hist_n_iter.back();

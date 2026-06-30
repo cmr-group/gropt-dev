@@ -14,6 +14,8 @@
 namespace Gropt
 {
 
+    class Op_BValue; // forward decl (record_debug reads the achieved b-value)
+
     class SolverGroptSDMM : public Solver
     {
     public:
@@ -42,6 +44,12 @@ namespace Gropt
         void get_residuals(Eigen::VectorXd &X);
         void set_sdmm_params(int rw_interval, double rw_e_corr, double rw_eps, double rw_scalelim,
                              int grw_min_infeasible, int grw_interval, double grw_mod);
+
+      private:
+        // solve() helpers -- behavior-preserving extractions that keep solve() readable.
+        Eigen::VectorXd resolve_initial_primal();             // warm-start resize, or the cold X0
+        void init_workspaces(const Eigen::VectorXd &X0_init); // per-op SDMM workspaces + warm-dual injection
+        void record_debug(Eigen::VectorXd &X, Op_BValue *bval_op); // per-iteration extra_debug capture
     };
 
 } // namespace Gropt
