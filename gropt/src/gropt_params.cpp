@@ -437,10 +437,12 @@ void GroptParams::add_concomitant(int start_idx, bool rot_variant, double weight
 }
 
 void GroptParams::add_moment(double order, double target, double tol0, std::string units, int moment_axis,
-                             int start_idx0, int stop_idx0, int ref_idx0, double weight_mod, bool project) {
+                             int start_idx0, int stop_idx0, int ref_idx0, double weight_mod, bool project,
+                             bool absolute_tol) {
     auto op = std::make_unique<Op_Moment>(pdata, order, target, tol0, units, moment_axis, start_idx0, stop_idx0,
                                           ref_idx0, weight_mod);
-    op->use_projection = project; // exact null-space projection instead of ADMM penalty
+    op->use_projection = project;      // exact null-space projection instead of ADMM penalty
+    op->absolute_tol = absolute_tol;   // tol is an absolute per-order bound vs the default M0-anchored scaling
     all_op.push_back(std::move(op));
 }
 
@@ -448,6 +450,7 @@ void GroptParams::add_SAFE(double stim_thresh, int new_first_axis, double weight
     auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
+    op_F->safe_eps = safe_eps;
     all_op.push_back(std::move(op_F));
 }
 
@@ -458,6 +461,7 @@ void GroptParams::add_SAFE(double stim_thresh, const Eigen::VectorXd &tau1, cons
     auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
+    op_F->safe_eps = safe_eps;
     all_op.push_back(std::move(op_F));
 }
 
@@ -465,6 +469,7 @@ void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, int new_f
     auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
+    op_F->safe_eps = safe_eps;
     all_op.push_back(std::move(op_F));
 }
 
@@ -475,6 +480,7 @@ void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, const Eig
     auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
+    op_F->safe_eps = safe_eps;
     all_op.push_back(std::move(op_F));
 }
 

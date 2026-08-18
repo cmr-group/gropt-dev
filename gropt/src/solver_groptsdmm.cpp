@@ -6,6 +6,7 @@
 #include "ils_nlcg.hpp"
 #include "solver_groptsdmm.hpp"
 #include "op_bvalue.hpp"
+#include "fft_tools.hpp"
 
 namespace Gropt {
 
@@ -55,6 +56,13 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     }
     r_primal.setZero(total_Ax_size);
 
+    // Optional low-frequency projection of the iterate (fft_tools). Inactive when cutoff_freq <= 0.
+    LowFreqProjector lowfreq;
+    if (cutoff_freq > 0.0) {
+        lowfreq.setup(gparams->N, gparams->Naxis, gparams->dt, cutoff_freq, gparams->pdata.fixer,
+                      cutoff_trans);
+    }
+
     // Locate a b-value operator (constraint or objective) for per-iteration b-value logging
     Op_BValue *bval_op = nullptr;
     if (extra_debug) {
@@ -84,6 +92,13 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     bool has_best = false;
     int iters_since_improve = 0;
 
+    // Trust-region step control (optional): build the selected StepMonitor and track a per-solve
+    // proximal sigma that ramps up on rejected steps and relaxes back toward ils_sigma on accepted ones.
+    if (tr_enable) {
+        step_monitor = make_step_monitor(tr_monitor, tr_tol, tr_bump);
+    }
+    double tr_sigma = ils_sigma;
+
     int total_feval = 0;
     for (iiter = 0; iiter < max_iter; ++iiter) {
         spdlog::trace("Starting GroptSDMM iteration {:d} SolverGroptSDMM::solve", iiter);
@@ -98,7 +113,46 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             for (auto &o : gparams->all_obj) {
                 o->update_obj_state(X);
             }
-            Xhat = ils_solver->solve(X);
+            // Feasibility-gated objective: scale the objective pull by exp(-total_violation/scale) -- ~0
+            // while a constraint is violated (let the clamps shape a feasible waveform, no cold overshoot),
+            // ->1 once feasible (climb to the max). Keeps the objective from launching past the constraints
+            // before they engage. Off (gate=1) when obj_gate_enable is false.
+            if (obj_gate_enable) {
+                double viol = 0.0;
+                for (auto &op : gparams->all_op) {
+                    viol += op->constraint_violation(X);
+                }
+                double g = std::exp(-viol / std::max(obj_gate_scale, 1e-30));
+                for (auto &o : gparams->all_obj) {
+                    o->obj_gate = g;
+                }
+            }
+
+            // Freeze nonlinear-constraint linearizations.
+            if (step_monitor) {
+                // Trust region: solve, test whether the (nonlinear) model held over the step; if it was
+                // outrun, re-solve from X with a larger proximal sigma. Accept relaxes sigma back down.
+                int nrej = 0;
+                while (true) {
+                    for (auto &op : gparams->all_op) op->freeze_linearization(X);
+                    ils_solver->sigma = tr_sigma;
+                    Xhat = ils_solver->solve(X);
+                    StepDecision d = step_monitor->check(*gparams, X, Xhat, tr_sigma);
+                    for (auto &op : gparams->all_op) op->unfreeze_linearization();
+                    if (d.accept) {
+                        tr_sigma = std::max(ils_sigma, tr_sigma * tr_decay);
+                        break;
+                    }
+                    if (++nrej > tr_max_reject) {
+                        break; // give up: take the (most-damped) step rather than stall
+                    }
+                    tr_sigma *= d.sigma_scale;
+                }
+            } else {  // Normal solve: freeze linearizations, solve, unfreeze. No trust-region test.
+                for (auto &op : gparams->all_op) op->freeze_linearization(X);
+                Xhat = ils_solver->solve(X);
+                for (auto &op : gparams->all_op) op->unfreeze_linearization();
+            }
         } else {
             Xhat = X;
         }
@@ -112,6 +166,21 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         update(Xhat);
 
         X = gamma_x * Xhat + (1 - gamma_x) * X;
+
+        // Re-project the OVER-RELAXED iterate onto the equality surface.
+        if (reproject_iterate && gparams->eq_proj.active) {
+            gparams->eq_proj.project_affine(X);
+        }
+
+        // Low-pass the iterate to suppress high-frequency oscillation. Applied until cutoff_iter
+        // (< 0 = every iteration). No-op when cutoff_freq <= 0. The low-pass changes the moments, so
+        // re-project onto the equality set.
+        if (lowfreq.active() && (cutoff_iter < 0 || iiter < cutoff_iter)) {
+            lowfreq.project(X);
+            if (gparams->eq_proj.active) {
+                gparams->eq_proj.project_affine(X);
+            }
+        }
 
         get_residuals(X);
 
@@ -397,6 +466,23 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X) {
         }
         if (max_index >= 0) {
             sdmm_ws[max_index].weight *= grw_mod;
+            if (grw_balanced && grw_mod > 0.0) {
+                // Rebalance instead of ratchet: restore the geometric mean of the ACTIVE (non-projected)
+                // constraint weights so the *grw_mod bump only shifts emphasis to the worst without
+                // growing the total constraint scale.
+                int K = 0;
+                for (auto &op : gparams->all_op) {
+                    if (!op->use_projection) K++;
+                }
+                if (K > 0) {
+                    double renorm = std::pow(grw_mod, 1.0 / K);
+                    for (int i = 0; i < static_cast<int>(gparams->all_op.size()); i++) {
+                        if (!gparams->all_op[i]->use_projection) {
+                            sdmm_ws[i].weight /= renorm;
+                        }
+                    }
+                }
+            }
         }
     }
 }

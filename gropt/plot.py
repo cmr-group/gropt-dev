@@ -64,9 +64,150 @@ def get_bval(g, dt, inv_vec=None, TE=0, start_idx=0):
     return bval
 
 
-def plot_diff(*args, mode='diff', **kwargs):
+def plot_diff(cfg, res, cols=2, figsize=None, dpi=80, savename=None, highlight_rf=True):
+    """Plot a diffusion solution from a DiffParams + a solve() result dict.
 
-    plot_waves(*args, mode=mode, **kwargs)
+    Parameters
+    ----------
+    cfg : gropt.diffusion.DiffParams
+        Problem definition (gmax/smax/MMT/timing/constraints).
+    res : dict
+        A result from ``gropt.diffusion.solve``. Uses ``res['X']`` (waveform), ``res['dt']``,
+        ``res['bvalue']``, and ``res.get('start_idx', 0)``.
+    cols : int, optional
+        Number of subplot columns.
+    figsize, dpi, savename : optional
+        Passed through to matplotlib; ``savename`` saves+closes instead of showing.
+    highlight_rf : bool, optional
+        Shade the 90/180 RF windows on the gradient panel.
+    """
+    g = np.asarray(res['X'])
+    if g.ndim == 2:
+        g = g[0]  # single-axis for now
+    dt = res['dt']
+    N = g.shape[-1]
+    start_idx = res.get('start_idx', 0)  # 0 for gropt/conventional; set by preencode
+    tt_ms = np.arange(N) * dt * 1e3
+
+    # 180 sign-flip vector (standard single-refocus layout)
+    inv_vec = np.ones(N)
+    tINV = start_idx + int(np.floor(cfg.TE / dt / 2.0))
+    inv_vec[tINV:] = -1
+
+    # Which panels to draw
+    to_plot = ['gradient', 'slew', 'moments']
+
+    stim = []
+    if cfg.pns_lim is not None or cfg.cns_lim is not None:
+        if cfg.safe_params is not None:
+            pns_params, cns_params = cfg.safe_params.resolve()
+        else:
+            pns_params, cns_params = gropt.get_random_safe_params()
+        if cfg.pns_lim is not None:
+            stim.append((gropt.get_SAFE(g, dt, safe_params=pns_params), 'PNS', cfg.pns_lim, 'r'))
+        if cfg.cns_lim is not None:
+            stim.append((gropt.get_SAFE(g, dt, safe_params=cns_params), 'CNS', cfg.cns_lim, 'm'))
+    if len(stim) > 0:
+        to_plot.append('stim')
+
+    eddy_lam = np.atleast_1d(cfg.eddy_lam) if cfg.eddy_lam else np.array([])
+    if eddy_lam.size > 0:
+        to_plot.append('eddy')
+
+    # RF span locations (always defined -> no NameError regardless of mode/timing)
+    t_start = cfg.T_pre or 0.0
+    t_inv = t_start + cfg.TE / 2.0
+    t_90_start = t_start
+    t_90_end = t_start + cfg.T_90
+    t_180_start = t_inv - cfg.T_180 / 2.0
+    t_180_end = t_inv + cfg.T_180 / 2.0
+
+    N_plots = len(to_plot)
+    N_rows = (N_plots + cols - 1) // cols
+    if figsize is None:
+        figsize = (cols * 5.0, N_rows * 3.0)
+    f, axarr = plt.subplots(N_rows, cols, squeeze=False, figsize=figsize, layout='tight', dpi=dpi)
+
+    c_ratio = get_concomitant(g, dt, inv_vec, start_idx=start_idx)
+    f.suptitle(
+        f'TE: {cfg.TE * 1e3:.2f} ms  ---  '
+        f'b-value: {res["bvalue"]:.1f} $s/mm^2$  ---  '
+        f'concomitant ratio: {c_ratio:.2f}'
+    )
+
+    for i_ax, ax in enumerate(axarr.flatten()):
+        plot_type = to_plot[i_ax] if i_ax < N_plots else None
+
+        if plot_type is None:
+            ax.set_visible(False)
+            continue
+
+        ax.axhline(linestyle='--', color='0.7')
+
+        if plot_type == 'gradient':
+            if cfg.gmax > 0:
+                ax.axhline(1000 * cfg.gmax, linestyle=':', color='r', alpha=0.7)
+                ax.axhline(-1000 * cfg.gmax, linestyle=':', color='r', alpha=0.7)
+            if highlight_rf:
+                ax.axvspan(t_90_start * 1e3, t_90_end * 1e3, color='coral', alpha=0.3)
+                ax.axvspan(t_180_start * 1e3, t_180_end * 1e3, color='coral', alpha=0.3)
+            ax.plot(tt_ms, g * 1000)
+            ax.set_title('Gradient')
+            ax.set_xlabel('t [ms]')
+            ax.set_ylabel('G [mT/m]')
+
+        elif plot_type == 'slew':
+            if cfg.smax > 0:
+                ax.axhline(cfg.smax, linestyle=':', color='r', alpha=0.7)
+                ax.axhline(-cfg.smax, linestyle=':', color='r', alpha=0.7)
+            ax.plot(tt_ms[:-1], np.diff(g) / dt)
+            ax.set_title('Slew')
+            ax.set_xlabel('t [ms]')
+            ax.set_ylabel('dG/dt [T/m/s]')
+
+        elif plot_type == 'moments':
+            mm = get_moments(g, dt, inv_vec, start_idx=start_idx)
+            for im in range(cfg.MMT + 1):
+                ax.plot(tt_ms, mm[im], label=f'{im}')
+            ax.legend(loc='upper left')
+            ax.set_title('Moments')
+            ax.set_xlabel('t [ms]')
+            ax.set_ylabel('Moment [a.u.]')
+
+        elif plot_type == 'stim':
+            for stim_wave, label, lim, color in stim:
+                ax.plot(tt_ms, stim_wave, label=label)
+                ax.axhline(lim, linestyle=':', color=color, alpha=0.7)
+            ax.set_title('SAFE')
+            ax.set_xlabel('t [ms]')
+            ax.legend(loc='lower left')
+
+        elif plot_type == 'eddy':
+            all_lam = np.linspace(0.1, 120, 1000)
+            all_e = []
+            for lam in all_lam:
+                _lam = lam * 1.0e-3
+                r = np.diff(np.exp(-np.arange(N + 1) * dt / _lam))[::-1]
+                all_e.append(100 * r @ g)
+            all_e = np.array(all_e)
+            if all_e.min() < -all_e.max():
+                all_e = -all_e
+            ax.plot(all_lam, all_e)
+            for _elam in eddy_lam:
+                if _elam > 0:
+                    ax.axvline(_elam * 1e3, linestyle='--', color='r', alpha=0.4)
+            ax.set_title('Eddy Spectrum')
+            ax.set_xlabel('lambda [ms]')
+            ax.set_ylabel('eddy spectrum [a.u.]')
+
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+
+    if savename is not None:
+        plt.savefig(savename, dpi=dpi)
+        plt.close()
+    else:
+        plt.show()
 
 
 def plot_waves(
@@ -90,6 +231,7 @@ def plot_waves(
     highlight_rf=True,
     figsize=None,
     dpi = 80,
+    savename = None,
 ):
 
     if start_idx == 0:
@@ -253,4 +395,8 @@ def plot_waves(
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
 
-    plt.show()
+    if savename is not None:
+        plt.savefig(savename, dpi=dpi)
+        plt.close()
+    else:
+        plt.show()

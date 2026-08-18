@@ -31,12 +31,18 @@ class Op_Moment : public Operator
         int moment_axis = 0;
         double moment_order;
         double moment_target = 0;
-        double moment_tol0 = 1e-6;
+        double moment_tol0 = 1e-6;     // absolute per-order tol (this order's physical units)
+        double moment_tol0_m0 = 1e-6;  // M0-anchored reference tol (order-0 units; scaled by ||A_k||/||A_0|| in init)
 
         std::string units = "mT*ms/m";
 
     public:
         Eigen::MatrixXd A;
+
+        // Tolerance mode. false (default) = M0-anchored: `tol` is the order-0 tolerance and higher orders
+        // scale their bound by ||A_k||/||A_0||
+        // true = the `tol` is an absolute bound in this order's physical units.
+        bool absolute_tol = false;
 
         Op_Moment(const ProblemData &_pdata, double _order, double _target, double _tol0, std::string _units,
                   int _moment_axis, int _start_idx0, int _stop_idx0, int _ref_idx0, double _weight_mod);

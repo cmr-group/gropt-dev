@@ -12,6 +12,7 @@
 #include "solver_osqp.hpp"
 #include "gropt_utils.hpp"
 #include "equilibrate.hpp"
+#include "fft_tools.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -45,6 +46,14 @@ level : int
             }
         );
         spdlog::default_logger()->sinks() = {sink};
+    });
+
+    // Drop the callback sink so the captured Python callable is released NOW, while the interpreter is
+    // still alive. The sink lives in the spdlog global default_logger; if that global is torn down during
+    // C++ static destruction (after Py_Finalize) it destroys the captured nb::callable and decrefs a
+    // Python object with no interpreter left -> SIGSEGV at exit. setup_logging registers this via atexit.
+    m.def("clear_log_callback", []() {
+        spdlog::default_logger()->sinks().clear();
     });
 
     
@@ -123,6 +132,14 @@ that define a gradient optimization problem.)doc"
             "Rank tolerance for eq_proj_solver = COD only (singular values below eq_proj_rcond * "
             "largest are dropped); ignored by LDLT. Larger drops more near-dependent rows; <= 0 uses "
             "Eigen's default threshold. Default 1e-10.")
+
+        .def_rw("safe_eps", &Gropt::GroptParams::safe_eps,
+            "Softabs smoothing (slew units, T/m/s) applied to every SAFE (PNS/CNS) op's |.|. 0 = hard "
+            "abs (original). >0 replaces |v| with sqrt(v^2+eps^2) and the +-1 sign with a smooth "
+            "v/sqrt(v^2+eps^2), so the frozen linearization changes continuously instead of flipping "
+            "when a (filtered) slew crosses zero -- removes the near-zero sign churn that makes SAFE far "
+            "more unstable than the linear eddy constraint. Slightly conservative. Must be set before "
+            "add_SAFE. Try a few percent of smax (e.g. 1-5 for smax=200).")
 
         // vec_init_simple
         .def("vec_init_simple", &Gropt::GroptParams::vec_init_simple,
@@ -447,7 +464,7 @@ weight_mod : float, optional
         .def("add_moment", &Gropt::GroptParams::add_moment,
             "order"_a = 0, "target"_a = 0.0, "tol"_a = 1e-6, "units"_a = "mT*ms/m",
             "axis"_a = 0, "start_idx"_a = -1, "stop_idx"_a = -1, "ref_idx"_a = 0,
-            "weight_mod"_a = 1.0, "project"_a = false,
+            "weight_mod"_a = 1.0, "project"_a = false, "absolute_tol"_a = false,
 R"doc(Add a moment constraint.
 
 Parameters
@@ -457,7 +474,10 @@ order : int, optional
 target : float, optional
     Target moment value.
 tol : float, optional
-    Tolerance for satisfying the constraint.
+    Order-0 (M0) feasibility tolerance. It is M0-anchored: higher-order moments scale their tolerance
+    up by the row-norm ratio ||A_k|| / ||A_0|| (= (1e3*T_span)^k / sqrt(2k+1)), so this one number is
+    order-consistent -- the same relative margin over each order's numerical floor -- in both projection
+    and ADMM-box mode.
 units : str, optional
     Units: 'mT*ms/m', 'T*s/m', 'rad*s/m', or 's/m'.
 axis : int, optional
@@ -469,7 +489,14 @@ stop_idx : int, optional
 ref_idx : int, optional
     Reference index (t=0 for moment calculations).
 weight_mod : float, optional
-    Weighting factor for this constraint.)doc"
+    Weighting factor for this constraint.
+project : bool, optional
+    Enforce the moment via exact null-space projection instead of an ADMM penalty.
+absolute_tol : bool, optional
+    Tolerance mode. False (default): M0-anchored -- `tol` is the order-0 tolerance and higher orders
+    scale their bound by ||A_k||/||A_0||, so nulling is order-consistent. True: `tol` is an absolute
+    bound in THIS order's physical units -- use with a nonzero higher-order `target` (e.g. a specified
+    M2) when you want a fixed physical tolerance rather than a row-norm-scaled one.)doc"
         )
 
         // add_SAFE
@@ -1001,6 +1028,50 @@ ils_tik_lam : float, optional
             "grw: minimum infeasible streak before adaptive reweighting kicks in.")
         .def_rw("grw_interval", &Gropt::SolverGroptSDMM::grw_interval, "grw: adaptive reweighting interval.")
         .def_rw("grw_mod", &Gropt::SolverGroptSDMM::grw_mod, "grw: multiplicative weight-bump factor.")
+        .def_rw("grw_balanced", &Gropt::SolverGroptSDMM::grw_balanced,
+            "grw: if True, REBALANCE instead of ratchet -- after bumping the worst constraint by grw_mod, "
+            "divide every active constraint weight by grw_mod^(1/K) to hold their geometric mean fixed. "
+            "Same emphasis shift on the worst, but the total constraint scale (vs the objective) is "
+            "preserved, so the b-value pull isn't progressively drowned out.")
+        .def_rw("reproject_iterate", &Gropt::SolverGroptSDMM::reproject_iterate,
+            "Re-project the over-relaxed iterate onto the equality (moment/eddy/concomitant) surface every "
+            "outer iteration (default True). Prevents the moment residual leaking under gamma_x != 1 + a "
+            "loose CG. Set False to allow the old constraint-violating roaming (e.g. basin-crossing study).")
+        .def_rw("cutoff_freq", &Gropt::SolverGroptSDMM::cutoff_freq,
+            "Low-frequency projection cutoff [Hz]; <= 0 disables. Each outer iteration the iterate is "
+            "projected onto frequencies <= cutoff_freq (per-axis DCT hard low-pass) to suppress "
+            "high-frequency oscillation.")
+        .def_rw("cutoff_iter", &Gropt::SolverGroptSDMM::cutoff_iter,
+            "Outer iteration to STOP the cutoff_freq projection at; < 0 = project on every iteration.")
+        .def_rw("cutoff_trans", &Gropt::SolverGroptSDMM::cutoff_trans,
+            "Raised-cosine roll-off width of the low-pass, as a fraction of the cutoff bin "
+            "(0 = brick wall, rings on plateaus; ~0.5 attenuates the near-cutoff oscillation band).")
+        .def_rw("tr_enable", &Gropt::SolverGroptSDMM::tr_enable,
+            "Trust-region step control (default False). After each inner CG, a StepMonitor checks whether "
+            "the linearized model held over the step; if not, re-solve from X with the proximal sigma "
+            "scaled up. Globalizes the nonlinear SAFE linearization so the objective's large steps can't "
+            "outrun it (why SAFE blows up where a linear eddy/slew constraint holds).")
+        .def_rw("tr_tol", &Gropt::SolverGroptSDMM::tr_tol,
+            "Trust-region reject threshold. For tr_monitor='linearization_error' it is the max allowed "
+            "relative SAFE model error ||true-linear||/||true|| (~0.1-0.3); <=0 keeps the monitor default.")
+        .def_rw("tr_bump", &Gropt::SolverGroptSDMM::tr_bump,
+            "Proximal-sigma multiplier applied on each rejected step (default 4).")
+        .def_rw("tr_max_reject", &Gropt::SolverGroptSDMM::tr_max_reject,
+            "Max re-solves per outer iteration before taking the most-damped step anyway (default 5).")
+        .def_rw("tr_decay", &Gropt::SolverGroptSDMM::tr_decay,
+            "Sigma relaxation factor toward ils_sigma on an accepted step (default 0.5).")
+        .def_rw("tr_monitor", &Gropt::SolverGroptSDMM::tr_monitor,
+            "Which divergence signal drives the trust region: 'linearization_error' (default, "
+            "self-calibrating SAFE model fidelity), 'feasibility' (funnel), or 'rel_step' (||dx||/||x||).")
+        .def_rw("obj_gate_enable", &Gropt::SolverGroptSDMM::obj_gate_enable,
+            "Feasibility-gated objective (default False). Scales the objective pull by "
+            "exp(-total_constraint_violation/obj_gate_scale): ~0 while infeasible (no cold overshoot past "
+            "the constraints before they engage), ->1 when feasible (climb to max b). Fixes the fine-dt "
+            "objective overshoot that no fixed bval_obj_weight can (too strong overshoots, too weak "
+            "collapses).")
+        .def_rw("obj_gate_scale", &Gropt::SolverGroptSDMM::obj_gate_scale,
+            "How sharply the objective gate opens as the constraint violation shrinks (in constraint "
+            "units, e.g. ~0.05 of the SAFE limit). Smaller = stay gated closer to exact feasibility.")
 
         .def("set_sdmm_params", &Gropt::SolverGroptSDMM::set_sdmm_params,
             "rw_interval"_a = 8, "rw_e_corr"_a = 0.4, "rw_eps"_a = 1e-36,
@@ -1368,6 +1439,25 @@ Returns
 -------
 np.ndarray
     SAFE response curve.)doc"
+    );
+
+    // low_freq_project: per-free-run DST-I low-pass projection -- exposes fft_tools.LowFreqProjector.
+    // `fixer` is the binary free-mask (1=free, 0=fixed); pass an empty array to treat every sample free.
+    m.def("low_freq_project", [](Eigen::VectorXd x, double dt, double cutoff_hz,
+                                 Eigen::VectorXd fixer, int Naxis, double trans_frac) -> Eigen::VectorXd {
+        int N = static_cast<int>(x.size()) / Naxis;
+        Gropt::LowFreqProjector proj;
+        proj.setup(N, Naxis, dt, cutoff_hz, fixer, trans_frac);
+        proj.project(x);
+        return x;
+    }, "x"_a, "dt"_a, "cutoff_hz"_a, "fixer"_a = Eigen::VectorXd(), "Naxis"_a = 1, "trans_frac"_a = 0.0,
+R"doc(Low-frequency projection of a waveform via per-free-run DST-I (fft_tools.LowFreqProjector).
+
+x is length Naxis*N laid out axis-major. Each maximal run of free samples (fixer==1), bounded by fixed
+zeros, is band-limited independently with a DST-I. The cutoff at cutoff_hz (per the dt grid) uses a
+raised-cosine roll-off of fractional width trans_frac (0 = brick wall, the default). trans_frac>0 only
+worsens plateau ripple (it strips the harmonics that flatten a plateau). Pass fixer empty to treat all
+samples as free. Returns the projected copy.)doc"
     );
 
     m.def("test_eigen_assertions", &Gropt::test_eigen_assertions,

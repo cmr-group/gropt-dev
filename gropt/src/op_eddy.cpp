@@ -113,6 +113,13 @@ void Op_Eddy::prox(Eigen::VectorXd &X) {
 }
 
 void Op_Eddy::check(Eigen::VectorXd &X) {
+    // When projected (project=True), the null-space projection enforces this, not the ADMM box -- don't
+    // let a projection-precision residual gate all_feasible / converged.
+    if (use_projection) {
+        hist_feas.push_back(1);
+        return;
+    }
+
     int is_feas = 1;
 
     if (do_equil) {

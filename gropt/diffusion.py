@@ -1,320 +1,338 @@
-from dataclasses import dataclass, replace
-from typing import Optional
+"""GrOpt diffusion helpers.
 
-import gropt
+Simplest call (no optional constraints -- just gmax/smax/moments/b-value):
+
+    from gropt.diffusion import DiffParams, solve
+    res = solve(DiffParams(TE=60e-3, T_90=3e-3, T_180=5e-3, T_readout=16e-3))
+    G = res["X"]
+"""
+
+from __future__ import annotations
+
+import copy
+import itertools
+from dataclasses import dataclass, replace
+from timeit import default_timer as timer
+
 import numpy as np
 
-
-def diff_min_TE(params, target_bval=0, TE0=10e-3, TE1=120e-3, stop_dt=0.1e-3, **kwargs):
-
-    if target_bval == 0:
-        target_bval = params['bvalue']
-
-    stop_dt = max(stop_dt, 2 * params['dt'])
-
-    min_TE = params['T_90'] + params['T_180'] + params['T_readout']
-    min_TE = max(min_TE, 2 * (params['T_180'] + params['T_readout']))
-
-    TE0 += min_TE
-
-    result0 = diff_solve_TE(TE0, params, bval_min=target_bval / 2, **kwargs)
-    result1 = diff_solve_TE(TE1, params, bval_min=target_bval / 2, **kwargs)
-
-    for _i in range(3):
-        if not result1.converged or result1.bvalue < target_bval:
-            result1 = diff_solve_TE(TE1, params, bval_min=4 ** (_i + 1) * target_bval, **kwargs)
-
-    if not result1.converged or result1.bvalue < target_bval:
-        print(
-            f'ERROR: Max TE {TE1} did not converge or was too low bvalue: {result1.converged}  {result1.bvalue}'
-        )
-
-    print('Searching TE: ', end='', flush=True)
-    for _i in range(10):
-        _TE = TE0 + (TE1 - TE0) / 2
-        _result = diff_solve_TE(_TE, params, bval_min=target_bval / 2, **kwargs)
-
-        if not _result.converged:
-            print(f'!{_TE * 1000:.2f}', end=' ', flush=True)
-        else:
-            print(f'{_TE * 1000:.2f}', end=' ', flush=True)
-
-        if _result.converged:
-            if _result.bvalue > target_bval:
-                TE1 = _TE
-                result1 = _result
-            else:
-                TE0 = _TE
-                result0 = _result
-        else:
-            TE0 = _TE
-            result0 = _result
-
-    print('Done!', flush=True)
-
-    if result0.converged and result0.bvalue > target_bval:
-        return TE0, result0
-    if _result.converged and _result.bvalue > target_bval:
-        return _TE, _result
-    if result1.converged and result1.bvalue > target_bval:
-        return TE1, result1
-
-    return None, None
-
-
-def diff_solve_TE(TE, params, bval_min=100.0, refine=False, **kwargs):
-    result = _diff_solve_TE(TE, params, bval_min=bval_min, **kwargs)
-
-    if refine:
-        if not result.converged:
-            result2 = _diff_solve_TE(TE, params, bval_min=bval_min / 2, **kwargs)
-        else:
-            bval0 = result.bvalue
-            if bval0 < bval_min:
-                result2 = _diff_solve_TE(TE, params, bval_min=0.8 * bval0, **kwargs)
-            else:
-                result2 = _diff_solve_TE(TE, params, bval_min=0.8 * bval0, **kwargs)
-
-        if (result2.converged and not result.converged) or (
-            result2.converged and result2.bvalue > result.bvalue
-        ):
-            result = result2
-
-    return result
-
-
-def _diff_solve_TE(
-    TE,
-    params,
-    bval_min=100.0,
-    dt=0.0,
-    obj_patience=30,
-    ils_max_iter=24,
-    moment_tol=1e-5,
-    bval_scale=1.02,
-    **kwargs,
-):
-
-    if dt == 0:
-        dt = params['dt']
-
-    if 'diff_mode' in params:
-        diff_mode = params['diff_mode']
-    else:
-        diff_mode = 'gropt'
-
-    # Set up the GrOpt problem
-    gparams = gropt.GroptParams()
-
-    start_idx = 0
-    if diff_mode == 'gropt':
-        gparams.diff_init(
-            dt=dt,
-            TE=TE,
-            T_90=params['T_90'],
-            T_180=params['T_180'],
-            T_readout=params['T_readout'],
-        )
-    elif diff_mode == 'conventional':
-        gparams.diff_init_deadtime(
-            dt=dt,
-            TE=TE,
-            T_90=params['T_90'],
-            T_180=params['T_180'],
-            T_readout=params['T_readout'],
-        )
-    elif diff_mode == 'preencode':
-        start_idx = gparams.diff_init_preencode(
-            dt=dt,
-            TE=TE,
-            T_90=params['T_90'],
-            T_180=params['T_180'],
-            T_readout=params['T_readout'],
-            T_pre=params['T_pre'],
-        )
-        params['start_idx'] = start_idx
-    else:
-        msg = f'Unknown diff_mode: {diff_mode}'
-        raise ValueError(msg)
-
-    gparams.add_gmax(params['gmax'])
-    gparams.add_smax(params['smax'])
-    for _i_moment in range(params['MMT'] + 1):
-        gparams.add_moment(_i_moment, 0.0, start_idx=start_idx, tol=moment_tol)
-
-    if 'pns_lim' in params:
-        if 'pns_params' in params:
-            gparams.add_SAFE(params['pns_lim'], safe_params=params['pns_params'])
-        else:
-            pns_params, cns_params = gropt.get_random_safe_params()
-            params['pns_params'] = pns_params
-            gparams.add_SAFE(params['pns_lim'], safe_params=pns_params)
-
-    if 'cns_lim' in params:
-        if 'cns_params' in params:
-            gparams.add_SAFE(params['cns_lim'], safe_params=params['cns_params'])
-        else:
-            pns_params, cns_params = gropt.get_random_safe_params()
-            params['cns_params'] = cns_params
-            gparams.add_SAFE(params['cns_lim'], safe_params=cns_params)
-
-    if 'concomitant' in params:
-        gparams.add_concomitant(start_idx=start_idx, weight_mod=1e4)
-
-    if 'eddy_lam' in params:
-        gparams.add_eddy(params['eddy_lam'])
-
-    gparams.add_bvalue(bval_min, mode='minval_max', start_idx0=start_idx, max_scale=bval_scale)
-
-    gparams.prepare()
-
-    result = diff_solve(gparams, obj_patience=obj_patience, ils_max_iter=ils_max_iter)
-
-    return result
-
-
-def diff_solve(gparams, obj_patience=30, ils_max_iter=30):
-    solver = gropt.SolverGroptSDMM()
-    solver.set_general_params(max_feval=200000, max_iter=20000, gamma_x=1.6, obj_patience=obj_patience)
-    solver.set_ils_params(ils_max_iter=ils_max_iter, ils_tol=1e-12, ils_sigma=0.0001, ils_tik_lam=0.0001)
-    solver.set_sdmm_params(rw_interval=16, grw_interval=41)
-    result = solver.solve(gparams)
-    return result
-
-
-def diff_build_gparams(
-    TE,
-    params,
-    bval_min=100.0,
-    dt=0.0,
-    moment_tol=1e-5,
-    bval_scale=1.02,
-    bval_mode = 'minval_max',
-):
-
-    if dt == 0:
-        dt = params['dt']
-
-    if 'diff_mode' in params:
-        diff_mode = params['diff_mode']
-    else:
-        diff_mode = 'gropt'
-
-    # Set up the GrOpt problem
-    gparams = gropt.GroptParams()
-
-    start_idx = 0
-    if diff_mode == 'gropt':
-        gparams.diff_init(
-            dt=dt,
-            TE=TE,
-            T_90=params['T_90'],
-            T_180=params['T_180'],
-            T_readout=params['T_readout'],
-        )
-    elif diff_mode == 'conventional':
-        gparams.diff_init_deadtime(
-            dt=dt,
-            TE=TE,
-            T_90=params['T_90'],
-            T_180=params['T_180'],
-            T_readout=params['T_readout'],
-        )
-    elif diff_mode == 'preencode':
-        start_idx = gparams.diff_init_preencode(
-            dt=dt,
-            TE=TE,
-            T_90=params['T_90'],
-            T_180=params['T_180'],
-            T_readout=params['T_readout'],
-            T_pre=params['T_pre'],
-        )
-        params['start_idx'] = start_idx
-    else:
-        msg = f'Unknown diff_mode: {diff_mode}'
-        raise ValueError(msg)
-
-    gparams.add_gmax(params['gmax'])
-    gparams.add_smax(params['smax'])
-    for _i_moment in range(params['MMT'] + 1):
-        gparams.add_moment(_i_moment, 0.0, start_idx=start_idx, tol=moment_tol)
-
-    if 'pns_lim' in params:
-        if 'pns_params' in params:
-            gparams.add_SAFE(params['pns_lim'], safe_params=params['pns_params'])
-        else:
-            pns_params, cns_params = gropt.get_random_safe_params()
-            params['pns_params'] = pns_params
-            gparams.add_SAFE(params['pns_lim'], safe_params=pns_params)
-
-    if 'cns_lim' in params:
-        if 'cns_params' in params:
-            gparams.add_SAFE(params['cns_lim'], safe_params=params['cns_params'])
-        else:
-            pns_params, cns_params = gropt.get_random_safe_params()
-            params['cns_params'] = cns_params
-            gparams.add_SAFE(params['cns_lim'], safe_params=cns_params)
-
-    if 'concomitant' in params:
-        gparams.add_concomitant(start_idx=start_idx, weight_mod=1e4)
-
-    if 'eddy_lam' in params:
-        gparams.add_eddy(params['eddy_lam'])
-
-    if bval_mode == 'obj':
-        gparams.add_bvalue(as_objective=True, start_idx0=start_idx, weight_mod=bval_scale)
-    else:
-        gparams.add_bvalue(bval_min, mode=bval_mode, start_idx0=start_idx, max_scale=bval_scale)
-
-    gparams.prepare()
-
-    return gparams
+import gropt
+from gropt.readasc import asc_to_safe, get_random_safe_params
 
 
 # ===========================================================================
-# Dataclass-based config (PLACEHOLDER -- will change). Frozen so it is hashable
-# (ready as a warm-start-library key) and trivially picklable for loky workers.
-# This is the problem DEFINITION only; solver settings live on the Solver.
-# TE is a field -- sweep with dataclasses.replace(cfg, TE=...).
+# Problem DEFINITION
 # ===========================================================================
 @dataclass(frozen=True)
 class DiffParams:
-    # swept axis + timing [s]
+    """Diffusion problem definition."""
+
+    # --- required timing [s] ---
     TE: float
     T_90: float
     T_180: float
     T_readout: float
     dt: float = 400e-6
-    # hardware
-    gmax: float = 0.19          # [T/m]
-    smax: float = 200.0         # [T/m/s]
-    # diffusion
-    MMT: int = 0                # null M0..M_MMT
-    bvalue: float = 1000.0      # target [s/mm^2]
-    # mode / structure
-    diff_mode: str = "gropt"            # 'gropt' | 'conventional' | 'preencode'
-    T_pre: Optional[float] = None       # preencode only
-    # optional constraints (None / False => off)
-    concomitant: bool = False
-    eddy_lam: Optional[float] = None
-    pns_lim: Optional[float] = None
-    cns_lim: Optional[float] = None
-    safe_seed: int = 42                 # regenerate SAFE dicts in-worker (hashable + reproducible)
-    # problem-shaping knobs
-    moment_tol: float = 1e-5
-    moment_project: bool = True
-    bval_mode: str = "obj"              # 'obj' (maximize) or a constraint mode e.g. 'minval_max'
-    bval_min: float = 100.0             # only used when bval_mode != 'obj'
-    bval_scale: float = 1.02
 
-    def structural_key(self):
-        """Discrete signature for bucketing warm-start matches (exact match required)."""
-        return (self.diff_mode, self.MMT, self.concomitant, self.eddy_lam is not None,
-                self.pns_lim is not None, self.cns_lim is not None, self.bval_mode)
+    T_pre: float | None = None   # preencode only
+
+
+    # --- gradient amplitude ---
+    gmax: float = 0.08           # [T/m]
+    w_gmax: float = 1.0
+
+
+    # --- slew rate ---
+    smax: float = 200.0          # [T/m/s]
+    w_smax: float = 1.0
+
+
+    # --- moments ---
+    MMT: int = 0                 # null moments M0..M_MMT
+    moment_project: bool = True  # exact null-space projection (recommended)
+    moment_tol: float = 1e-5     # order-0 (M0) tol; M0-anchored -- higher orders scale their bound by the
+                                 # row-norm ratio ||A_k||/||A_0|| (same relative margin over each order's
+                                 # numerical floor), order-consistent in both projection and ADMM-box mode
+    w_moment: float = 1.0
+
+
+    # --- diffusion ---
+    bvalue: float = 1000.0       # target [s/mm^2]. CURRENTLY UNUSED
+    diff_mode: str = "gropt"        # "gropt" | "conventional" | "preencode"
+    bval_mode: str = "obj"          # "obj" (maximize b) | a constraint mode e.g. "minval_max"
+    bval_min: float = 100.0         # constraint modes only
+    bval_obj_weight: float = 1.0    # obj mode: rate knob (with normalize_obj, ~1 is a good default)
+    bval_max_scale: float = 1.02    # constraint mode: MINVALMAX per-iter scaling
+    w_bval: float = 1.0             # constraint-mode b-value only
+
+
+    # --- SAFE, PNS, CNS ---
+    pns_lim: float | None = None         # SAFE PNS threshold
+    cns_lim: float | None = None         # SAFE cardiac threshold
+    safe_params: SafeSource | None = None   # where pns/cns params come from (default: random seed 42)
+    safe_eps: float = 0.0                # softabs smoothing (slew units) for SAFE |.|; 0=hard abs.
+                                         # >0 smooths the sign through zero -> removes the near-zero sign
+    w_pns: float = 1.0
+    w_cns: float = 1.0
+
+    # --- optional constraints (None / False => off) ---
+    concomitant: bool = False
+    w_concomitant: float = 1.0
+    concomitant_project = True
+
+    eddy_lam: float | None = None
+    w_eddy: float = 1.0
+    eddy_project = True
+
+    
+    # --- basin control (None => off) ---
+    basin_same_sign: bool | None = None  # False: force sign-flip (global) basin; True: no-flip (local)
+    basin_window: float = 1e-3
+    basin_eps: float = 0.07
+
+    # --- stability regularizer: order-2 TV (jerk) lifts the flat b-value optimum -> less slew jitter ---
+    jerk_lam: float = 0.0           # add_TV(order=2) lambda; 0 = off
+    w_jerk: float = 1.0
+
+    # --- initial waveform X0 (seed for the solve) ---
+    x0_mode: str = "diff_init"      # "diff_init" (built-in small 1e-2 seed) | "const" | "sine"
+    x0_amp: float = 0.01            # amplitude of the free-region seed (const, sine)
+    x0_invert: bool = True          # apply the inv_vec post-180 sign flip -- const: seed *= inv_vec;
+                                    #   sine: flip the post-180 lobes (post_sign=-1). False = single sign.
+    x0_periods: float = 1.0         # full sine periods per free lobe (sine mode; each lobe is 0 at both ends)
+    x0_project: bool = False        # pre-project the seed onto the moment null-space (M0..M_MMT = 0)
+
+
+# ===========================================================================
+# Solver SETTINGS
+# ===========================================================================
+@dataclass(frozen=True)
+class SolverCfg:
+    """Solver settings."""
+
+    # outer loop
+    max_iter: int = 4000
+    max_feval: int = 200000
+    min_iter: int = 1
+    obj_patience: int = 20          # obj mode: stop after N feasible iters with no improvement
+    obj_rtol: float = 1e-4
+    gamma_x: float = 1.6
+    
+
+    # inner (CG) solver -- inexact regime (ils_tol ~0.1) is the stable operating point
+    ils_tol: float = 0.1
+    ils_max_iter: int = 20
+    ils_min_iter: int = 2
+    ils_sigma: float = 1e-4
+    ils_tik_lam: float = 0.0
+
+    # reweighter -- BB ON, grw OFF (see module docstring). BB (Barzilai-Borwein per-op) is the
+    # robust penalty scaler that makes ADMM converge across problem scales; without it every op
+    # sits at weight_mod=1 and a binding constraint (e.g. low slew) never balances -> non-convergence
+    # on otherwise-easy problems. grw (the global doubler) is the small-dt blowup vector, left off.
+    bb_reweight: bool = True        # BB per-operator adaptation
+    rw_interval: int = 8            # BB cadence: reweight every rw_interval outer iters
+    rw_e_corr: float = 0.2          # Xu et al. safeguarding correlation threshold e_cor in [0,1]:
+                                    # BB only updates a weight when the spectral-step correlation
+                                    # exceeds this. LOWER = more aggressive/frequent updates; HIGHER =
+                                    # more conservative (trust only strong curvature). 0.2 = the Xu et
+                                    # al. value; the old C++ default 0.4 starved low-slew/small-dt cases
+                                    # of adaptation (non-convergence). 0.2 converges them, no blowup.
+    rw_scalelim: float = 2.0        # max multiplicative change per reweight step (rate limiter;
+                                    # 1.0 = frozen weight, larger = faster/looser adaptation)
+    rw_eps: float = 1e-36           # safeguard floor for the correlation/norm guards
+    grw: bool = False               # global "double the most-infeasible op" -- blowup risk
+    grw_interval: int = 20          # grw cadence (only when grw)
+    grw_mod: float = 2.0            # grw multiplier (only when grw)
+    grw_balanced: bool = False      # rebalance (÷grw_mod^(1/K) all) instead of ratchet up -- preserves
+                                    # the geometric mean so the objective isn't drowned as grw pushes
+
+    reproject_iterate: bool = True  # re-project the over-relaxed iterate onto the moment/eddy/concomitant
+                                    # surface each outer iter (fixes the gamma_x != 1 moment leak). Set
+                                    # False only to allow the old constraint-violating basin-crossing roam.
+
+    # low-frequency projection (fft_tools): each outer iteration, low-pass the iterate at cutoff_freq [Hz]
+    # (per free-run DST-I) to remove the near-Nyquist oscillation the b-value objective excites.
+    # cutoff_freq <= 0 => off. cutoff_iter = outer iter to STOP projecting at; -1 = every iteration.
+    # Keep cutoff_freq well above the lobe ramp bandwidth (~0.1-0.2*Nyquist, e.g. 5-10kHz at dt=10us);
+    # too low and the sine basis can't build a flat plateau -> a 1/cutoff truncation ripple on the tops.
+    # cutoff_trans = raised-cosine roll-off width (fraction of the cutoff bin); 0 = brick wall (default).
+    # It only WORSENS plateau ripple (it strips the harmonics that flatten the top), so leave it 0 unless
+    # a specific case wants a soft edge.
+    cutoff_freq: float = -1.0
+    cutoff_iter: int = -1
+    cutoff_trans: float = 0.0
+
+    # trust-region step control (default off): after each inner CG, a StepMonitor decides accept/reject;
+    # a rejected step is re-solved from X with the proximal sigma scaled up. Globalizes the nonlinear SAFE
+    # linearization so the objective's large steps can't outrun it (the reason SAFE blows up where a linear
+    # eddy/slew constraint holds). tr_monitor: "feasibility" (funnel -- forbids the constraint violation
+    # from growing; stops both the slow creep past SAFE and blow-ups; best for the b-max objective),
+    # "linearization_error" (SAFE model fidelity; keeps the model valid but is feasibility-blind), or
+    # "rel_step" (||dx||/||x||). tr_tol <=0 keeps the monitor's own default (0.02 feasibility, 0.2 lin).
+    tr_enable: bool = False
+    tr_tol: float = -1.0
+    tr_bump: float = 4.0
+    tr_max_reject: int = 5
+    tr_decay: float = 0.5
+    tr_monitor: str = "linearization_error"
+
+    # feasibility-gated objective (default off): scale the b-pull by exp(-total_violation/gate_scale) so
+    # it can't cold-overshoot past the constraints before they engage (~0 infeasible, ->1 feasible). Fixes
+    # the fine-dt objective overshoot that no fixed bval_obj_weight can (too strong overshoots, too weak
+    # collapses). Pairs with tr_enable (direction) and grw (clamp strength).
+    obj_gate: bool = False
+    obj_gate_scale: float = 0.05
+
+    extra_debug: bool = False       # populate solver.get_debug()
+
+
+# ===========================================================================
+# SAFE (PNS / cardiac) parameter source
+# ===========================================================================
+@dataclass(frozen=True)
+class SafeSource:
+    """Hashable pointer to SAFE model parameters, resolved to ``(pns, cns)`` dicts by ``resolve``.
+
+    * ``kind="random"`` -- synthetic params from ``seed`` (default).
+    * ``kind="asc"``    -- params parsed from the scanner file ``asc_file`` (required).
+    """
+
+    kind: str = "random"
+    seed: int = 42
+    asc_file: str | None = None
+
+    def resolve(self):
+        """Return ``(params_pns, params_cns)`` dicts."""
+        if self.kind == "random":
+            return get_random_safe_params(self.seed)
+        if self.kind == "asc":
+            if self.asc_file is None:
+                msg = "SafeSource(kind='asc') requires asc_file"
+                raise ValueError(msg)
+            return asc_to_safe(self.asc_file)
+        msg = f"Unknown SafeSource kind: {self.kind!r}"
+        raise ValueError(msg)
+
+# ===========================================================================
+# Builders
+# ===========================================================================
+def _build_x0(gp, cfg: DiffParams, start_idx: int):
+    """Construct an initial waveform per ``cfg.x0_mode``; returns the flat array, or None to keep the
+    built-in ``diff_init`` seed. Fixed regions (90/180 gaps, endpoints) always take their set_vals (0)."""
+    if cfg.x0_mode == "diff_init":
+        return None
+    N, dt = gp.N, gp.dt
+    inv = np.asarray(gp.getvec_inv_vec())
+    fixer = np.asarray(gp.getvec_fixer())     # 1 = free, 0 = fixed
+    setv = np.asarray(gp.getvec_set_vals())   # NaN = free, value = fixed
+    free = fixer > 0.5
+    x = np.zeros(N)
+
+    if cfg.x0_mode == "const":
+        x[free] = cfg.x0_amp
+        if cfg.x0_invert:
+            x = x * inv                        # +amp pre-180, -amp post-180
+    elif cfg.x0_mode == "sine":
+        # fill each maximal free run with a full-period sine on s in [0,1] inclusive -> exactly 0 at both
+        # lobe ends (joins the fixed zeros with no jump), zero-mean (M0-friendly), bipolar.
+        i = 0
+        while i < N:
+            if not free[i]:
+                i += 1
+                continue
+            j = i
+            while j < N and free[j]:
+                j += 1
+            n = j - i
+            if n >= 2:
+                s = np.arange(n) / (n - 1)
+                x[i:j] = cfg.x0_amp * np.sin(2.0 * np.pi * cfg.x0_periods * s)
+            i = j
+        if cfg.x0_invert:
+            x[inv < 0] *= -1.0                 # flip the post-180 lobes (post_sign = -1)
+    else:
+        msg = f"Unknown x0_mode: {cfg.x0_mode!r}"
+        raise ValueError(msg)
+
+    x[~free] = np.nan_to_num(setv[~free])      # fixed regions -> their set_vals
+
+    if cfg.x0_project and cfg.MMT >= 0:
+        # project onto the moment null-space (M0..M_MMT = 0), moving only free DOFs (like the solver)
+        t = np.arange(N) * dt
+        M = np.array([(t ** k) * inv for k in range(cfg.MMT + 1)])
+        M[:, :start_idx] = 0.0
+        Mt = M * fixer[None, :]                # free-DOF masked
+        x = x - Mt.T @ np.linalg.lstsq(Mt @ Mt.T, M @ x, rcond=None)[0]
+    return x
+
+
+def suggest_moment_tol(cfg: DiffParams, cushion: float = 10.0):
+    """Estimate the moment-nulling numerical floor and suggest a ``moment_tol``.
+
+    The null-space projection nulls each moment to a floor ~ ``eps * ||A_k|| * ||G||``. Because
+    ``moment_tol`` is M0-anchored, the relevant number is the order-0 floor::
+
+        floor_M0 ~ eps * ||A_0|| * ||G|| ~ eps * 1e6 * gmax * T_free      (op units, mT*ms/m)
+
+    with ``||A_0|| = 1e6*dt*sqrt(N_free)``, ``||G|| ~ gmax*sqrt(N_free)`` (diffusion is ~bang-bang near
+    ``gmax``), and ``T_free = dt*N_free`` the free-encoding duration. Empirically this is a conservative
+    upper bound on the achieved floor (actual ~0.05-0.7x it, and flat in ``MMT`` and ``dt``), so setting
+    ``moment_tol = cushion * floor`` keeps a safe margin. The M0-anchoring carries the same relative
+    margin to every higher order automatically.
+
+    Parameters
+    ----------
+    cfg : DiffParams
+        Problem definition (uses ``dt``, ``gmax``, and the timing that sets the free window).
+    cushion : float, optional
+        Safety factor over the floor. Default 10 (one order of magnitude).
+
+    Returns
+    -------
+    dict
+        Keys: ``floor_M0``, ``suggested_tol``, ``T_free``, ``N_free``, ``A0_norm``, ``G_norm_est``.
+    """
+    gp = gropt.GroptParams()
+    if cfg.diff_mode == "conventional":
+        gp.diff_init_deadtime(dt=cfg.dt, TE=cfg.TE, T_90=cfg.T_90, T_180=cfg.T_180, T_readout=cfg.T_readout)
+    elif cfg.diff_mode == "preencode":
+        gp.diff_init_preencode(dt=cfg.dt, TE=cfg.TE, T_90=cfg.T_90, T_180=cfg.T_180,
+                               T_readout=cfg.T_readout, T_pre=cfg.T_pre or 0.0)
+    else:
+        gp.diff_init(dt=cfg.dt, TE=cfg.TE, T_90=cfg.T_90, T_180=cfg.T_180, T_readout=cfg.T_readout)
+
+    dt = gp.dt
+    n_free = int(np.count_nonzero(np.asarray(gp.getvec_inv_vec())))
+    t_free = dt * n_free
+    a0_norm = 1e6 * dt * np.sqrt(n_free)          # ||A_0|| over the free window
+    g_norm_est = cfg.gmax * np.sqrt(n_free)       # ||G|| ~ bang-bang near gmax
+    floor = np.finfo(float).eps * a0_norm * g_norm_est   # = eps * 1e6 * gmax * T_free
+    return dict(floor_M0=floor, suggested_tol=cushion * floor, T_free=t_free,
+                N_free=n_free, A0_norm=a0_norm, G_norm_est=g_norm_est)
+
+
+def _unique_op_names(gp):
+    """Reproduce the C++ ``unique_name`` (``"<name>#<occurrence>"``) for each op, in all_op order.
+
+    Mirrors the assignment in ``GroptParams::prepare`` (gropt_params.cpp); these are the keys
+    ``get_warmstart``/``set_warmstart`` match operators by.
+    """
+    counts = {}
+    names = []
+    for name in gp.get_op_names():
+        n = counts.get(name, 0)
+        counts[name] = n + 1
+        names.append(f"{name}#{n}")
+    return names
 
 
 def build_gparams(cfg: DiffParams):
-    """Build a GroptParams from a DiffParams. Returns (gparams, start_idx); does NOT mutate cfg."""
+    """Build GroptParams from a DiffParams.
+
+    Returns ``(gp, start_idx, op_weights)``, where ``op_weights`` maps each operator's warm-start
+    key to the ``weight_mod`` this cfg built it with (see :func:`apply_fresh_weights`).
+    """
     gp = gropt.GroptParams()
 
     start_idx = 0
@@ -323,69 +341,705 @@ def build_gparams(cfg: DiffParams):
     elif cfg.diff_mode == "conventional":
         gp.diff_init_deadtime(dt=cfg.dt, TE=cfg.TE, T_90=cfg.T_90, T_180=cfg.T_180, T_readout=cfg.T_readout)
     elif cfg.diff_mode == "preencode":
+        if cfg.T_pre is None:
+            msg = "diff_mode='preencode' requires T_pre"
+            raise ValueError(msg)
         start_idx = gp.diff_init_preencode(dt=cfg.dt, TE=cfg.TE, T_90=cfg.T_90, T_180=cfg.T_180,
                                            T_readout=cfg.T_readout, T_pre=cfg.T_pre)
     else:
-        raise ValueError(f"Unknown diff_mode: {cfg.diff_mode}")
+        msg = f"Unknown diff_mode: {cfg.diff_mode!r}"
+        raise ValueError(msg)
 
-    gp.add_gmax(cfg.gmax)
-    gp.add_smax(cfg.smax)
+    # op_weights tracks each constraint operator's initial weight_mod IN all_op ORDER; keyed by
+    # warm-start name at the end, once prepare() has fixed the operator list.
+    op_weights = []
+
+    # always-on hardware + moment nulling
+    gp.add_gmax(cfg.gmax, weight_mod=cfg.w_gmax)
+    op_weights.append(cfg.w_gmax)
+
+    gp.add_smax(cfg.smax, weight_mod=cfg.w_smax)
+    op_weights.append(cfg.w_smax)
+
     for m in range(cfg.MMT + 1):
-        gp.add_moment(m, 0.0, start_idx=start_idx, tol=cfg.moment_tol, project=cfg.moment_project)
+        gp.add_moment(m, 0.0, start_idx=start_idx, tol=cfg.moment_tol,
+                      weight_mod=cfg.w_moment, project=cfg.moment_project)
+        op_weights.append(cfg.w_moment)
 
-    if cfg.pns_lim is not None:
-        pns, _ = gropt.get_random_safe_params(cfg.safe_seed)
-        gp.add_SAFE(cfg.pns_lim, safe_params=pns)
-    if cfg.cns_lim is not None:
-        _, cns = gropt.get_random_safe_params(cfg.safe_seed)
-        gp.add_SAFE(cfg.cns_lim, safe_params=cns)
+    # SAFE (PNS / cardiac) -- both share one source (random seed or asc file)
+    if cfg.pns_lim is not None or cfg.cns_lim is not None:
+        # calling SafeSource() gets random if safe_params was None
+        pns_params, cns_params = (cfg.safe_params or SafeSource()).resolve()
+        gp.safe_eps = cfg.safe_eps  # copied into each Op_SAFE by add_SAFE; must be set first
+        if cfg.pns_lim is not None:
+            gp.add_SAFE(cfg.pns_lim, safe_params=pns_params, weight_mod=cfg.w_pns)
+            op_weights.append(cfg.w_pns)
+        if cfg.cns_lim is not None:
+            gp.add_SAFE(cfg.cns_lim, safe_params=cns_params, weight_mod=cfg.w_cns)
+            op_weights.append(cfg.w_cns)
+
     if cfg.concomitant:
-        gp.add_concomitant(start_idx=start_idx, project=True)
+        gp.add_concomitant(start_idx=start_idx, project=cfg.concomitant_project, weight_mod=cfg.w_concomitant)
+        op_weights.append(cfg.w_concomitant)
     if cfg.eddy_lam is not None:
-        gp.add_eddy(cfg.eddy_lam)
+        gp.add_eddy(cfg.eddy_lam, weight_mod=cfg.w_eddy, project=cfg.eddy_project)
+        op_weights.append(cfg.w_eddy)
 
+    # order-2 TV (jerk) stability regularizer
+    if cfg.jerk_lam > 0.0:
+        gp.add_TV(cfg.jerk_lam, weight_mod=cfg.w_jerk, order=2)
+        op_weights.append(cfg.w_jerk)
+
+    # basin orientation (opt-in): keep small, it is inactive at the optimum
+    if cfg.basin_same_sign is not None:
+        gp.add_diff_basin(cfg.basin_window, cfg.basin_eps, cfg.gmax, same_sign=cfg.basin_same_sign)
+        op_weights.append(1.0)  # add_diff_basin weight_mod default
+
+    # b-value: objective (maximize) or constraint
     if cfg.bval_mode == "obj":
-        gp.add_bvalue(as_objective=True, start_idx0=start_idx, weight_mod=cfg.bval_scale)
+        gp.add_bvalue(as_objective=True, start_idx0=start_idx, weight_mod=cfg.bval_obj_weight)
         gp.normalize_obj = True
     else:
-        gp.add_bvalue(cfg.bval_min, mode=cfg.bval_mode, start_idx0=start_idx, max_scale=cfg.bval_scale)
+        gp.add_bvalue(cfg.bval_min, mode=cfg.bval_mode, start_idx0=start_idx,
+                      weight_mod=cfg.w_bval, max_scale=cfg.bval_max_scale)
+        op_weights.append(cfg.w_bval)
+
+    # optional custom initial waveform (x0_mode="diff_init" keeps the built-in small seed)
+    x0 = _build_x0(gp, cfg, start_idx)
+    if x0 is not None:
+        gp.setvec_X0(x0, set_others=False)
 
     gp.prepare()
-    return gp, start_idx
+
+    # Key the weights by operator name. The count check catches an add_* above that forgot its
+    # matching op_weights.append (or an op that does not land in all_op).
+    names = _unique_op_names(gp)
+    if len(names) != len(op_weights):
+        msg = (f"tracked op_weights ({len(op_weights)}) != built operators ({len(names)}: "
+               f"{', '.join(names)}); an add_* call in build_gparams is missing its op_weights entry")
+        raise RuntimeError(msg)
+    return gp, start_idx, dict(zip(names, op_weights, strict=True))
 
 
-def add_basin_anchor(gparams, cfg, window_time=1e-3, eps_factor=0.07, same_sign=False):
-    """Add the diffusion basin-orientation constraint (GroptParams.add_diff_basin), pulling gmax
-    from cfg so you only pass the window/eps tuning. cfg may be a DiffParams or a params dict.
+def make_solver(scfg: SolverCfg | None = None):
+    """Build + configure a ``SolverGroptSDMM`` from a ``SolverCfg`` (including reweighter gating)."""
+    if scfg is None:
+        scfg = SolverCfg()
+        
+    s = gropt.SolverGroptSDMM()
+    s.max_iter = scfg.max_iter
+    s.min_iter = scfg.min_iter
+    s.obj_patience = scfg.obj_patience
+    s.obj_rtol = scfg.obj_rtol
+    s.gamma_x = scfg.gamma_x
+    s.max_feval = scfg.max_feval
+    s.extra_debug = scfg.extra_debug
+    s.cutoff_freq = scfg.cutoff_freq
+    s.cutoff_iter = scfg.cutoff_iter
+    s.cutoff_trans = scfg.cutoff_trans
+    s.tr_enable = scfg.tr_enable
+    s.tr_tol = scfg.tr_tol
+    s.tr_bump = scfg.tr_bump
+    s.tr_max_reject = scfg.tr_max_reject
+    s.tr_decay = scfg.tr_decay
+    s.tr_monitor = scfg.tr_monitor
+    s.obj_gate_enable = scfg.obj_gate
+    s.obj_gate_scale = scfg.obj_gate_scale
+    s.grw_balanced = scfg.grw_balanced
+    s.reproject_iterate = scfg.reproject_iterate
+    s.set_ils_params(ils_tol=scfg.ils_tol, ils_max_iter=scfg.ils_max_iter,
+                     ils_min_iter=scfg.ils_min_iter, ils_sigma=scfg.ils_sigma,
+                     ils_tik_lam=scfg.ils_tik_lam)
 
-    Keep eps_factor small (it's inactive at the optimum) for single-solve basin control, and keep
-    its sign convention consistent with any X0 seed orientation. same_sign=False (default) forces the
-    opposite-sign flip basin; same_sign=True forces the no-flip (local) basin.
+    # Reweighter gating without a do_rw setter:
+    #   BB is gated by ``iiter > rw_interval`` -> push rw_interval past max_iter to disable it.
+    #   grw multiplies by grw_mod -> grw_mod=1.0 is a no-op.
+    rw_interval = scfg.rw_interval if scfg.bb_reweight else (scfg.max_iter + 1)
+    grw_mod = scfg.grw_mod if scfg.grw else 1.0
+    s.set_sdmm_params(rw_interval=rw_interval, rw_e_corr=scfg.rw_e_corr, rw_eps=scfg.rw_eps,
+                      rw_scalelim=scfg.rw_scalelim, grw_interval=scfg.grw_interval, grw_mod=grw_mod)
+    return s
+
+
+# ===========================================================================
+# Warm-start prototyping helpers (this is where we validate the eventual C++ contract)
+# ===========================================================================
+def warmstart_summary(warmstart: dict):
+    """Human-readable view of what a snapshot carries.
+
+    Returns one row per operator (in all_op order): ``key``, ``y_norm`` (dual magnitude that gets
+    carried), ``weight`` (the ADMM rho the next solve would inherit), ``gamma``, and ``nblocks``.
     """
-    gmax = cfg.gmax if hasattr(cfg, "gmax") else cfg["gmax"]
-    gparams.add_diff_basin(window_time, eps_factor, gmax, same_sign=same_sign)
+    rows = []
+    for op in warmstart.get("ops", []):
+        y = np.asarray(op["y"])
+        rows.append({
+            "key": op["key"],
+            "y_norm": float(np.linalg.norm(y)),
+            "weight": float(op["weight"]),
+            "gamma": float(op["gamma"]),
+            "nblocks": len(op.get("blocks", [])),
+        })
+    return rows
 
 
-def solve_one(cfg: DiffParams, solver_kwargs=None):
-    """loky-friendly worker: frozen cfg in, plain picklable data out (build gparams here).
+def apply_fresh_weights(warmstart: dict, op_weights: dict) -> dict:
+    """Return a copy of ``warmstart`` with the carried weights replaced by freshly built ones.
 
-    solver_kwargs : dict | None
-        Arbitrary Solver attribute overrides applied via setattr, e.g.
-        {"max_iter": 4000, "ils_tol": 0.01, "gamma_x": 1.4, "obj_patience": 10}.
-        Kept OUT of DiffParams so the config stays hashable/picklable. Only the
-        read/write Solver attributes work this way; method-only knobs (e.g.
-        set_sdmm_params: rw_interval, grw_interval) still need their own call.
+    Operators are matched by ``key`` -- the same ``unique_name`` matching ``set_warmstart`` does on
+    the C++ side -- so a topology change between solves is safe rather than silently misaligned: a
+    snapshot op with no counterpart in ``op_weights`` keeps its carried weight (the C++ matcher
+    drops it anyway), and an operator new to this build simply starts at its own ``weight_mod``.
     """
-    gp, _ = build_gparams(cfg)
-    solver = gropt.SolverGroptSDMM()
-    # placeholder defaults; override/extend via solver_kwargs
-    solver.max_iter = 4000
-    solver.obj_patience = 10
-    solver.ils_max_iter = 20
-    for k, v in (solver_kwargs or {}).items():
-        if not hasattr(solver, k):  # guard: setattr has no validation, so a typo would silently no-op
-            raise AttributeError(f"SolverGroptSDMM has no attribute '{k}' -- check solver_kwargs for typos")
-        setattr(solver, k, v)
+    ws = copy.deepcopy(warmstart)
+    for op in ws.get("ops", []):
+        w = op_weights.get(op["key"])
+        if w is not None:
+            op["weight"] = float(w)
+    return ws
+
+
+# ===========================================================================
+# Run helpers
+# ===========================================================================
+def _result_dict(cfg: DiffParams, r, solver, scfg: SolverCfg, gp=None, start_idx=0):
+    """Plain, picklable result. Always carries a warm-start snapshot for chaining."""
+    out = {
+        "TE": cfg.TE,
+        "dt": cfg.dt,
+        "start_idx": start_idx,  # 0 for gropt/conventional; >0 for preencode (moment/inv_vec offset)
+        "bvalue": float(r.bvalue),
+        "converged": bool(r.converged),
+        "n_iter": int(r.n_iter),
+        "n_feval": int(r.n_feval),
+        "X": np.asarray(r.X),
+        "warmstart": solver.get_warmstart(),
+    }
+    if scfg.extra_debug:
+        out["debug"] = solver.get_debug()
+        if gp is not None:
+            out["op_names"] = gp.get_op_names()
+    return out
+
+
+def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_weights: bool = True,
+          return_solver: bool = False):
+    """Build + solve a single ``DiffParams``. The main entry point.
+
+    Parameters
+    ----------
+    cfg : DiffParams
+        Problem definition.
+    scfg : SolverCfg, optional
+        Solver settings; defaults to ``SolverCfg()`` (reweighter off, inexact CG).
+    warmstart : dict, optional
+        A snapshot from a previous result's ``"warmstart"`` to seed this solve.
+    keep_weights : bool, optional
+        Only relevant with a ``warmstart``. True (default) reproduces the current C++ behavior:
+        each operator's ADMM weight is inherited from the snapshot. False rewrites the carried
+        weights to this ``cfg``'s freshly built ``weight_mod`` (keeping the interpolated primal +
+        duals) -- the prototype of the eventual ``set_warmstart(keep_weights=False)``. Use False
+        for a weight sweep/continuation so the schedule, not the snapshot, sets the weights.
+    return_solver : bool, optional
+        If True, also return ``(solver, gp)`` for interactive inspection. Default False keeps the
+        return value plain/picklable for loky workers.
+
+    Returns
+    -------
+    dict  (or ``(dict, solver, gp)`` if ``return_solver``)
+        Keys: TE, dt, start_idx, bvalue, converged, n_iter, X, warmstart, solve_time
+        [, debug, op_names].
+    """
+    scfg = scfg or SolverCfg()
+    gp, start_idx, op_weights = build_gparams(cfg)
+    solver = make_solver(scfg)
+    if warmstart is not None:
+        ws = warmstart if keep_weights else apply_fresh_weights(warmstart, op_weights)
+        solver.set_warmstart(ws)
+    start_t = timer()
     r = solver.solve(gp)
-    return dict(TE=cfg.TE, bvalue=float(r.bvalue), converged=bool(r.converged), X=np.asarray(r.X))
+    solve_t = timer() - start_t
+    out = _result_dict(cfg, r, solver, scfg, gp, start_idx)
+    out["solve_time"] = solve_t
+    if return_solver:
+        return out, solver, gp
+    return out
 
+
+def continuation(steps, base_cfg: DiffParams, scfg: SolverCfg = None, keep_weights: bool = False):
+    """Sequential, warm-started continuation over a list of ``DiffParams`` overrides.
+
+    Each ``step`` is a dict of field overrides applied via ``replace(base_cfg, **step)`` -- e.g.
+    a coarse->fine dt ramp ``[{"dt": 8e-4}, {"dt": 4e-4}, {"dt": 2e-4}]`` or a soft->stiff weight
+    ramp. Every step warm-starts from the previous step's best-feasible snapshot (primal + duals,
+    resized across a grid change), which is far more stable than a same-dt cold/near start.
+
+    ``keep_weights=False`` (the default here) rewrites the carried per-op weights to each step's
+    freshly built ``weight_mod`` via :func:`apply_fresh_weights`, so a WEIGHT continuation actually
+    bites -- the pure-Python prototype of the C++ flag. Set True for a pure dt continuation where
+    you want the adapted weights to ride along. Steps may change the operator set; weights follow
+    each operator by name, and a newly added one starts cold.
+
+    Returns the list of per-step result dicts (each as from :func:`solve`).
+    """
+    scfg = scfg or SolverCfg()
+    results = []
+    ws = None
+    for step in steps:
+        res = solve(replace(base_cfg, **step), scfg, warmstart=ws, keep_weights=keep_weights)
+        results.append(res)
+        ws = res["warmstart"]
+    return results
+
+
+def dt_schedule(dt_target: float, n_levels: int = 3, factor: float = 2.0):
+    """Coarse->fine dt continuation steps: ``dt_target * factor**(n-1) ... dt_target``.
+
+    Feed straight to :func:`continuation`, e.g.
+    ``continuation(dt_schedule(2e-4, n_levels=3), cfg)``.
+    """
+    return [{"dt": dt_target * factor ** k} for k in range(n_levels - 1, -1, -1)]
+
+
+# ===========================================================================
+# Parallel sweep (fan-out sibling of continuation)
+# ===========================================================================
+def _grid_points(base_cfg, base_scfg, cfg_grid, scfg_grid):
+    """Cross product of the cfg/scfg field-override grids -> list of (cfg, scfg) points."""
+
+    def combos(grid):
+        if not grid:
+            return [{}]
+        keys = list(grid.keys())
+        return [dict(zip(keys, vals, strict=True)) for vals in itertools.product(*(grid[k] for k in keys))]
+
+    return [(replace(base_cfg, **c), replace(base_scfg, **s))
+            for c in combos(cfg_grid) for s in combos(scfg_grid)]
+
+
+def _reusable_executor(max_workers, pool_timeout):
+    """Loky's reusable pool with a generous idle timeout.
+
+    loky's DEFAULT timeout is 10s, which reaps
+    the pool between notebook cells so every sweep re-pays the (slow) spawn -- the usual "loky init is
+    slow" complaint. A large timeout keeps the SAME warm pool alive across sweeps. Call with identical
+    args each time so loky REUSES the pool rather than recreating it.
+    """
+    from loky import get_reusable_executor
+
+    return get_reusable_executor(max_workers=max_workers, timeout=pool_timeout)
+
+
+def warm_pool(max_workers=None, pool_timeout=300.0):
+    """Pre-spawn the loky worker pool NOW so the one-time init cost is paid up front.
+     
+    (e.g. in a setupcell) instead of on your first real sweep. With the generous ``pool_timeout`` the pool then stays
+    warm across subsequent sweeps. No-op if loky is not installed. Use the SAME ``pool_timeout`` you
+    pass to :func:`sweep` so the pool is reused, not recreated.
+    """
+    try:
+        import loky
+    except ImportError:
+        return
+    ex = _reusable_executor(max_workers, pool_timeout)
+    n = max_workers or loky.cpu_count()
+    list(ex.map(int, range(2 * n)))  # force the workers to actually start
+
+
+def _map_parallel(fn, arglist, max_workers, parallel, pool_timeout):
+    """Run ``fn(*args)`` over ``arglist``.
+
+    Prefers loky's reusable (notebook-friendly) executor,
+    falls back to the stdlib ProcessPoolExecutor if loky is not installed; ``parallel=False`` runs
+    serially in-process (handy for debugging pickling or for tiny sweeps).
+    """
+    if not parallel:
+        return [fn(*args) for args in arglist]
+    try:
+        ex = _reusable_executor(max_workers, pool_timeout)
+        return [f.result() for f in [ex.submit(fn, *args) for args in arglist]]
+    except ImportError:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=max_workers) as ex:
+            return [f.result() for f in [ex.submit(fn, *args) for args in arglist]]
+
+
+def _map_serial_cutoff(fn, arglist, time_cutoff, max_failures):
+    """Serial ``fn`` map that ABANDONS the remaining points once the elapsed wall time or the running
+    failure count crosses a cutoff -- used to bail out of a sweep that is already slower / worse than the
+    best. Points not reached come back as ``None`` (the caller pads them as skipped-result dicts so the
+    result list stays full length). ``max_failures=0`` bails on the first failure."""
+    t0 = timer()
+    out, n_fail, stop = [], 0, False
+    for args in arglist:
+        if stop:
+            out.append(None)
+            continue
+        r = fn(*args)
+        out.append(r)
+        if (not r.get("converged", False)) or ("error" in r):
+            n_fail += 1
+        if (time_cutoff is not None and timer() - t0 > time_cutoff) or \
+           (max_failures is not None and n_fail > max_failures):
+            stop = True
+    return out
+
+
+def _solve_safe(cfg, scfg, warmstart, keep_weights):
+    """``solve`` wrapper for parallel workers that never raises: a failed point comes back as a result
+    dict with an ``error`` (and traceback) instead of aborting the batch -- essential when sampling
+    random params/configs, some of which will be pathological (blow-ups, invalid timings)."""
+    try:
+        return solve(cfg, scfg, warmstart=warmstart, keep_weights=keep_weights)
+    except Exception as exc:  # noqa: BLE001 -- capture ANY worker failure as data, not a crash
+        import traceback
+        return {"bvalue": 0.0, "converged": False, "n_iter": 0, "n_feval": 0, "X": None,
+                "error": f"{type(exc).__name__}: {exc}", "traceback": traceback.format_exc()}
+
+
+def _cfg_timing_error(cfg: DiffParams):
+    """Pure-arithmetic replica of the C++ ``diff_init*`` timing (all three ``diff_mode`` variants), used to
+    reject infeasible geometries BEFORE they reach C++. An infeasible timing (e.g. ``TE < T_readout``, or a
+    180 window wider than the waveform) makes ``N`` negative / an index land outside ``[0, N)``, which
+    aborts inside Eigen -- an uncatchable process crash that would poison a parallel batch. Returns ``None``
+    if the geometry is safe, else a short reason string. Conservative: it only flags what would crash.
+    """
+    dt, TE = cfg.dt, cfg.TE
+    if dt <= 0 or TE <= 0:
+        return f"non-positive dt/TE (dt={dt}, TE={TE})"
+    n_pre = int(np.floor((cfg.T_pre or 0.0) / dt)) if cfg.diff_mode == "preencode" else 0
+    N = n_pre + int((TE - cfg.T_readout) / dt) + 1
+    if N < cfg.MMT + 3:
+        return f"waveform too short: N={N} for MMT={cfg.MMT} (need >= MMT+3; check TE vs T_readout/dt)"
+    ind_90_end = n_pre + int(np.ceil(cfg.T_90 / dt))
+    if cfg.diff_mode == "conventional":
+        ind_180_end = int(np.ceil((TE / 2.0 + cfg.T_180 / 2.0) / dt))
+        ind_180_start = ind_90_end + (N - ind_180_end) - 1
+    else:
+        ind_180_start = n_pre + int(np.floor((TE / 2.0 - cfg.T_180 / 2.0) / dt))
+        ind_180_end = n_pre + int(np.ceil((TE / 2.0 + cfg.T_180 / 2.0) / dt))
+    for nm, idx in (("ind_90_end", ind_90_end), ("ind_180_start", ind_180_start), ("ind_180_end", ind_180_end)):
+        if idx < 0 or idx >= N:
+            return (f"{nm}={idx} outside [0,{N}) -- infeasible timing "
+                    f"(TE={TE}, T_180={cfg.T_180}, T_readout={cfg.T_readout})")
+    return None
+
+
+def sweep_points(points, *, warmstart: dict = None, keep_weights: bool = True, parallel: bool = True,
+                 max_workers: int = None, pool_timeout: float = 300.0, robust: bool = True,
+                 time_cutoff: float = None, max_failures: int = None):
+    """Parallel fan-out over an EXPLICIT list of points -- the list-based sibling of :func:`sweep`.
+
+    Use this when the points are not a Cartesian grid, e.g. RANDOM samples of params/configs (build them
+    with :func:`sample_points`, or by hand). Each point runs in its own process on the same reusable loky
+    pool as :func:`sweep` / :func:`warm_pool`.
+
+    Parameters
+    ----------
+    points : list
+        Each item is a ``(DiffParams, SolverCfg)`` pair, or a bare ``DiffParams`` (paired with a default
+        ``SolverCfg``).
+    warmstart, keep_weights, parallel, max_workers, pool_timeout
+        As in :func:`sweep`.
+    robust : bool, optional
+        If True (default), a point that raises returns a result dict with an ``error`` key instead of
+        aborting the whole batch. Set False to let exceptions propagate (debugging).
+    time_cutoff : float, optional
+        Abandon the sweep once its elapsed wall time (seconds) exceeds this -- to skip a run already
+        slower than your best. SERIAL ONLY (requires ``parallel=False``).
+    max_failures : int, optional
+        Abandon the sweep once more than this many points have failed (not converged / errored). ``0``
+        bails on the first failure. SERIAL ONLY. Unreached points are returned as ``error="abandoned"``
+        result dicts, so the list stays full length and an abandoned sweep scores as high-failures.
+
+    Returns
+    -------
+    list of result dicts, in input order; each carries ``r["cfg"]`` and ``r["scfg"]`` (so it stays
+    self-describing when sorted/filtered, and feeds the ``diffusion_stress`` plotters directly).
+    """
+    pts = [(p if isinstance(p, tuple) else (p, None)) for p in points]
+    pts = [(cfg, scfg or SolverCfg()) for (cfg, scfg) in pts]
+    fn = _solve_safe if robust else solve
+
+    early = time_cutoff is not None or max_failures is not None
+    if early and parallel:
+        msg = "time_cutoff / max_failures require parallel=False (early abandonment is serial)"
+        raise ValueError(msg)
+
+    # In robust mode, screen out geometrically-infeasible configs first: they would abort C++ (an
+    # uncatchable process crash that poisons the whole parallel batch), so they must never be dispatched.
+    errs = [(_cfg_timing_error(cfg) if robust else None) for (cfg, _) in pts]
+    live = [i for i, e in enumerate(errs) if e is None]
+    live_args = [(pts[i][0], pts[i][1], warmstart, keep_weights) for i in live]
+    if early:
+        solved = _map_serial_cutoff(fn, live_args, time_cutoff, max_failures)
+    else:
+        solved = _map_parallel(fn, live_args, max_workers, parallel, pool_timeout)
+
+    results = [None] * len(pts)
+    for i, r in zip(live, solved, strict=True):
+        results[i] = r
+    for i, e in enumerate(errs):
+        if e is not None:
+            results[i] = {"bvalue": 0.0, "converged": False, "n_iter": 0, "n_feval": 0, "X": None,
+                          "error": f"invalid config: {e}"}
+    # points left unrun by an early-abandon cutoff are still None -> pad as skipped so the list stays
+    # full length (keeps positional alignment across files; counts as a failure with b=0 downstream).
+    for i in range(len(pts)):
+        if results[i] is None:
+            results[i] = {"bvalue": 0.0, "converged": False, "n_iter": 0, "n_feval": 0, "X": None,
+                          "error": "abandoned"}
+    for (cfg, scfg), r in zip(pts, results, strict=True):
+        r["cfg"] = cfg
+        r["scfg"] = scfg
+    return results
+
+
+def was_abandoned(results) -> bool:
+    """True if a sweep was cut short by ``time_cutoff`` / ``max_failures`` (some points were left unrun
+    and padded with ``error='abandoned'``). Use it to skip saving a run you do not want to keep::
+
+        res = sweep(cfg, scfg, cfg_grid=grid, parallel=False, time_cutoff=45, max_failures=0)
+        if not was_abandoned(res):
+            save_result(res, ...)
+    """
+    return any(r.get("error") == "abandoned" for r in results)
+
+
+def sample_points(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_dists=None, scfg_dists=None,
+                  n: int = 100, seed: int = None):
+    """Draw ``n`` random ``(DiffParams, SolverCfg)`` points to feed :func:`sweep_points`.
+
+    ``cfg_dists`` / ``scfg_dists`` map a field name to a SAMPLER, one of:
+
+    * a callable ``rng -> value`` -- full control, e.g. log-uniform ``lambda r: 10 ** r.uniform(-3, -1)``;
+    * a 2-tuple ``(lo, hi)`` -- uniform float in ``[lo, hi)``;
+    * a list/tuple/array of choices -- one picked uniformly (use this for ints/strings, e.g. ``MMT``).
+
+    Fields not listed keep the ``base_cfg`` / ``base_scfg`` value. ``rng`` is a ``numpy.random.Generator``;
+    ``seed`` makes the draw reproducible. Note a 2-tuple of numbers is UNIFORM -- pass a 2-element *list*
+    for a two-way discrete choice.
+
+    Parameters
+    ----------
+    base_cfg, base_scfg : DiffParams, SolverCfg
+        The template; unsampled fields are taken from here (``base_scfg`` defaults to ``SolverCfg()``).
+    cfg_dists, scfg_dists : dict {field: sampler}, optional
+        Per-field samplers as described above.
+    n : int, optional
+        Number of points to draw. Default 100.
+    seed : int, optional
+        Seed for the random generator.
+
+    Returns
+    -------
+    list of ``(DiffParams, SolverCfg)``.
+    """
+    rng = np.random.default_rng(seed)
+    base_scfg = base_scfg or SolverCfg()
+
+    def draw(dists):
+        out = {}
+        for field, spec in (dists or {}).items():
+            if callable(spec):
+                out[field] = spec(rng)
+            elif isinstance(spec, tuple) and len(spec) == 2 and all(isinstance(v, (int, float)) for v in spec):
+                out[field] = float(rng.uniform(*spec))
+            else:  # list/tuple/array of discrete choices
+                out[field] = spec[int(rng.integers(len(spec)))]
+        return out
+
+    return [(replace(base_cfg, **draw(cfg_dists)), replace(base_scfg, **draw(scfg_dists)))
+            for _ in range(n)]
+
+
+def sweep(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_grid=None, scfg_grid=None,
+          warmstart: dict = None, keep_weights: bool = True, parallel: bool = True, max_workers: int = None,
+          pool_timeout: float = 300.0, time_cutoff: float = None, max_failures: int = None):
+    """Parallel fan-out sweep -- the independent-points sibling of :func:`continuation` (sequential).
+
+    Points are the CROSS PRODUCT of the field-override grids, each solved in its own process.
+    DiffParams and SolverCfg have disjoint field names, so ONE function covers both axes -- pick the
+    grid that matches what you are varying (no need for separate cfg/scfg sweep functions):
+
+        sweep(cfg, scfg, cfg_grid={"TE": np.linspace(50e-3, 100e-3, 8)})  # TE sweep (TE-search precursor)
+        sweep(cfg, scfg, scfg_grid={"ils_tol": [0.05, 0.1, 0.2]})  # solver-setting sweep
+        sweep(cfg, scfg, cfg_grid={"TE": tes}, scfg_grid={"gamma_x": [1.4, 1.6]})  # joint grid
+
+    Parameters
+    ----------
+    base_cfg, base_scfg : DiffParams, SolverCfg
+        The fixed problem/solver; ``base_scfg`` defaults to ``SolverCfg()``.
+    cfg_grid, scfg_grid : dict {field: [values]}, optional
+        Field overrides applied via ``replace``; ``None`` => that object is not varied.
+    warmstart : dict, optional
+        A SINGLE shared snapshot fed to every point (resized per grid). Solve one representative
+        point first and broadcast its ``["warmstart"]`` to seed the whole sweep. ``keep_weights``
+        applies as in :func:`solve`. Most useful when the points are near each other.
+    parallel : bool, optional
+        False runs serially in-process (debugging / tiny sweeps).
+    max_workers : int, optional
+        Process count; None lets the executor choose (~cpu count). Install ``loky`` for a persistent
+        reusable pool (no per-call re-spawn); otherwise the stdlib ProcessPoolExecutor is used.
+    pool_timeout : float, optional
+        loky only: idle seconds before the worker pool is reaped (default 300). loky's own default is
+        10s, which kills the pool between notebook cells so every sweep re-pays the slow spawn -- the
+        usual "loky init is slow" gotcha. Keep it consistent across calls (and with :func:`warm_pool`)
+        so the SAME warm pool is reused. Pre-spawn once with ``warm_pool()`` to move the init off your
+        first sweep.
+
+    Returns
+    -------
+    list of result dicts, one per point (grid order: cfg_grid outer, scfg_grid inner). Each result
+    also carries ``r["cfg"]`` and ``r["scfg"]`` so it stays self-describing when sorted/filtered.
+    """
+    base_scfg = base_scfg or SolverCfg()
+    points = _grid_points(base_cfg, base_scfg, cfg_grid, scfg_grid)
+    return sweep_points(points, warmstart=warmstart, keep_weights=keep_weights, parallel=parallel,
+                        max_workers=max_workers, pool_timeout=pool_timeout,
+                        time_cutoff=time_cutoff, max_failures=max_failures)
+
+
+# ===========================================================================
+# TE search
+# ===========================================================================
+def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float = None,
+              mode: str = "minval", te_lo: float = None, te_hi: float = None, te_tol: float = None,
+              max_expand: int = 6, verbose: bool = False):
+    """Smallest TE whose waveform reaches ``b >= target_b``, by monotonic bisection.
+
+    Oracle ``mode`` (real speed/robustness trade-off):
+
+    * ``"minval"`` (default, ROBUST): constraint-mode ``minval(bval_min=target_b)``; feasible ⇔ the
+      solve converges. Never blows up (a would-be blow-up reads as "infeasible -> larger TE"), correct
+      even under tight constraints. BUT a too-small TE has no scoring objective to stop early, so the
+      b-floor being unreachable means it runs to ``max_iter`` -- the ~half of evaluations below the
+      boundary are SLOW (measured ~100x a feasible one).
+    * ``"obj"`` (FAST): maximize b, feasible ⇔ ``converged and bvalue >= target_b`` (``bvalue`` is then
+      the MAX achievable b -- useful headroom). Stops on ``obj_patience`` in BOTH feasible and too-small
+      cases, so every evaluation is quick. BUT b-maximization is fragile under tight constraints -- it
+      can blow up -> reads as infeasible -> over-estimates TE, or fails if it blows up at every TE.
+      Use it when the objective is stable (e.g. no strict PNS).
+
+    Rule of thumb: ``obj`` for loose problems (much faster), ``minval`` when constraints are tight.
+    (Capping ``scfg.max_iter`` also bounds ``minval``'s too-small cost, at the risk of reading a
+    near-boundary feasible TE as infeasible -- off by one grid step.)
+
+    Parameters
+    ----------
+    base_cfg : DiffParams
+        Problem definition. Its ``TE`` is swept; ``bval_mode``/``bval_min`` are overridden per ``mode``.
+        ``target_b`` defaults to ``base_cfg.bvalue``.
+    scfg : SolverCfg, optional
+        Solver settings for each evaluation (defaults to ``SolverCfg()``).
+    mode : str, optional
+        ``"minval"`` (default) or ``"obj"`` -- see above.
+    te_lo, te_hi : float, optional
+        Initial TE bracket [s]. Defaults: ``te_lo`` = the minimum physical TE (b~0 there, infeasible),
+        ``te_hi`` = ``te_lo + 80 ms``. ``te_hi`` is grown up to ``max_expand`` times if not yet feasible.
+    te_tol : float, optional
+        TE resolution to stop at [s]. Defaults to ``dt`` and is clamped UP to ``dt`` (finer is
+        meaningless -- see GRID QUANTIZATION).
+    verbose : bool, optional
+        Print each evaluation.
+
+    Returns
+    -------
+    dict with keys:
+        TE        : smallest feasible TE [s] (bin start; None if none found in the expanded bracket).
+        N         : the sample count at that TE (``int((TE - T_readout)/dt) + 1``), or None.
+        cfg       : ``base_cfg`` at the found TE (original bval_mode etc.) -- ready for
+                    ``plot_diff(out["cfg"], out["result"])`` or a re-solve. None if not found.
+        result    : the solve dict at that TE (the feasibility waveform), or None.
+        n_solves  : total distinct solves used (same-bin re-evaluations are cached, not re-solved).
+        bracket   : (te_lo, te_hi) final bracket.
+        search_time : wall-clock seconds for the whole search.
+    """
+    t_start = timer()
+    scfg = scfg or SolverCfg()
+    target_b = base_cfg.bvalue if target_b is None else target_b
+    if mode not in ("minval", "obj"):
+        msg = f"te_search mode must be 'minval' or 'obj', got {mode!r}"
+        raise ValueError(msg)
+    dt = base_cfg.dt
+    t_ro = base_cfg.T_readout
+
+    # TE is quantized to the dt grid (N = int((TE - T_readout)/dt) + 1). Resolving finer than dt is
+    # wasted, so clamp te_tol up to dt and snap/cache candidates by grid index.
+    te_tol = dt if te_tol is None else max(te_tol, dt)
+
+    def grid_index(te):
+        return int((te - t_ro) / dt)          # matches diff_init's int() truncation
+
+    def bin_start(m):
+        return t_ro + m * dt                  # smallest TE giving grid index m (N = m + 1)
+
+    def bin_solve_te(m):
+        return t_ro + (m + 0.5) * dt          # canonical in-bin TE (robustly maps back to m)
+
+    cache = {}  # grid index m -> (feasible?, result)
+    n_solves = 0
+
+    def feasible(te):
+        nonlocal n_solves
+        m = grid_index(te)
+        if m not in cache:
+            n_solves += 1
+            if mode == "minval":
+                # feasibility: reach b >= target_b; feasible ⇔ the solve converges
+                cfg = replace(base_cfg, TE=bin_solve_te(m), bval_mode="minval", bval_min=target_b)
+            else:
+                # maximize b; feasible ⇔ converged (constraints met) AND the max b clears the target.
+                # A blow-up leaves converged=False -> reads as infeasible -> larger TE (conservative).
+                cfg = replace(base_cfg, TE=bin_solve_te(m), bval_mode="obj")
+            res = solve(cfg, scfg)
+            ok = bool(res["converged"]) and res["bvalue"] >= 0.999 * target_b
+            cache[m] = (ok, res)
+            if verbose:
+                print(f"  TE={bin_start(m) * 1e3:6.2f} ms (N={m + 1}) -> b={res['bvalue']:8.1f} "
+                      f"conv={res['converged']!s:5} {'feasible' if ok else 'infeasible'}", flush=True)
+        return cache[m]
+
+    # physical minimum TE (b ~ 0 there -> infeasible lower end)
+    min_te = max(base_cfg.T_90 + base_cfg.T_180 + base_cfg.T_readout,
+                 2.0 * (base_cfg.T_180 + base_cfg.T_readout))
+    if te_lo is None:
+        te_lo = min_te
+    if te_hi is None:
+        te_hi = min_te + 80e-3
+
+    def out(m, res):
+        # cfg = the ORIGINAL problem at the found TE (keeps base_cfg's bval_mode etc.), ready for
+        # plot_diff(out["cfg"], out["result"]) or a re-solve. TE is the bin start (== out["TE"]).
+        return {"TE": bin_start(m), "N": m + 1, "cfg": replace(base_cfg, TE=bin_start(m)),
+                "result": res, "n_solves": n_solves, "bracket": (te_lo, te_hi),
+                "search_time": timer() - t_start}
+
+    # ensure the high end is feasible, growing the span if not
+    ok_hi, res_hi = feasible(te_hi)
+    for _ in range(max_expand):
+        if ok_hi:
+            break
+        te_hi = te_lo + 2.0 * (te_hi - te_lo)
+        ok_hi, res_hi = feasible(te_hi)
+    if not ok_hi:
+        return {"TE": None, "N": None, "cfg": None, "result": None, "n_solves": n_solves,
+                "bracket": (te_lo, te_hi), "search_time": timer() - t_start}
+
+    # if the low end is already feasible, the answer is at/below it -- return it
+    ok_lo, res_lo = feasible(te_lo)
+    if ok_lo:
+        return out(grid_index(te_lo), res_lo)
+
+    # bisection: invariant te_lo infeasible, te_hi feasible; stop at the dt-grid resolution
+    best_m, best_res = grid_index(te_hi), res_hi
+    while te_hi - te_lo > te_tol:
+        te_mid = 0.5 * (te_lo + te_hi)
+        ok, res = feasible(te_mid)
+        if ok:
+            te_hi, best_m, best_res = te_mid, grid_index(te_mid), res
+        else:
+            te_lo = te_mid
+
+    return out(best_m, best_res)

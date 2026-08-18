@@ -1,3 +1,5 @@
+"""GrOpt: Gradient Optimization for MRI"""
+
 from collections.abc import Callable
 import enum
 from typing import Annotated, overload
@@ -6,7 +8,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Jun 14 2026 15:21:56'
+__build_date__: str = 'Aug 13 2026 14:36:18'
 
 def set_log_level(level: int) -> None:
     """
@@ -23,6 +25,8 @@ def set_log_level(level: int) -> None:
     """
 
 def set_log_callback(arg: Callable, /) -> None: ...
+
+def clear_log_callback() -> None: ...
 
 class SolveResult:
     """
@@ -137,6 +141,15 @@ class GroptParams:
 
     @eq_proj_rcond.setter
     def eq_proj_rcond(self, arg: float, /) -> None: ...
+
+    @property
+    def safe_eps(self) -> float:
+        """
+        Softabs smoothing (slew units, T/m/s) applied to every SAFE (PNS/CNS) op's |.|. 0 = hard abs (original). >0 replaces |v| with sqrt(v^2+eps^2) and the +-1 sign with a smooth v/sqrt(v^2+eps^2), so the frozen linearization changes continuously instead of flipping when a (filtered) slew crosses zero -- removes the near-zero sign churn that makes SAFE far more unstable than the linear eddy constraint. Slightly conservative. Must be set before add_SAFE. Try a few percent of smax (e.g. 1-5 for smax=200).
+        """
+
+    @safe_eps.setter
+    def safe_eps(self, arg: float, /) -> None: ...
 
     def vec_init_simple(self, N: int = -1, Naxis: int = -1, first_val: float = 0.0, last_val: float = 0.0) -> None:
         """
@@ -429,7 +442,7 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_moment(self, order: float = 0, target: float = 0.0, tol: float = 1e-06, units: str = 'mT*ms/m', axis: int = 0, start_idx: int = -1, stop_idx: int = -1, ref_idx: int = 0, weight_mod: float = 1.0, project: bool = False) -> None:
+    def add_moment(self, order: float = 0, target: float = 0.0, tol: float = 1e-06, units: str = 'mT*ms/m', axis: int = 0, start_idx: int = -1, stop_idx: int = -1, ref_idx: int = 0, weight_mod: float = 1.0, project: bool = False, absolute_tol: bool = False) -> None:
         """
         Add a moment constraint.
 
@@ -440,7 +453,10 @@ class GroptParams:
         target : float, optional
             Target moment value.
         tol : float, optional
-            Tolerance for satisfying the constraint.
+            Order-0 (M0) feasibility tolerance. It is M0-anchored: higher-order moments scale their tolerance
+            up by the row-norm ratio ||A_k|| / ||A_0|| (= (1e3*T_span)^k / sqrt(2k+1)), so this one number is
+            order-consistent -- the same relative margin over each order's numerical floor -- in both projection
+            and ADMM-box mode.
         units : str, optional
             Units: 'mT*ms/m', 'T*s/m', 'rad*s/m', or 's/m'.
         axis : int, optional
@@ -453,6 +469,13 @@ class GroptParams:
             Reference index (t=0 for moment calculations).
         weight_mod : float, optional
             Weighting factor for this constraint.
+        project : bool, optional
+            Enforce the moment via exact null-space projection instead of an ADMM penalty.
+        absolute_tol : bool, optional
+            Tolerance mode. False (default): M0-anchored -- `tol` is the order-0 tolerance and higher orders
+            scale their bound by ||A_k||/||A_0||, so nulling is order-consistent. True: `tol` is an absolute
+            bound in THIS order's physical units -- use with a nonzero higher-order `target` (e.g. a specified
+            M2) when you want a fixed physical tolerance rather than a row-norm-scaled one.
         """
 
     def add_SAFE(self, stim_thresh: float = 1.0, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None, weight_mod: float = 1.0) -> None:
@@ -948,6 +971,121 @@ class SolverGroptSDMM(Solver):
     @grw_mod.setter
     def grw_mod(self, arg: float, /) -> None: ...
 
+    @property
+    def grw_balanced(self) -> bool:
+        """
+        grw: if True, REBALANCE instead of ratchet -- after bumping the worst constraint by grw_mod, divide every active constraint weight by grw_mod^(1/K) to hold their geometric mean fixed. Same emphasis shift on the worst, but the total constraint scale (vs the objective) is preserved, so the b-value pull isn't progressively drowned out.
+        """
+
+    @grw_balanced.setter
+    def grw_balanced(self, arg: bool, /) -> None: ...
+
+    @property
+    def reproject_iterate(self) -> bool:
+        """
+        Re-project the over-relaxed iterate onto the equality (moment/eddy/concomitant) surface every outer iteration (default True). Prevents the moment residual leaking under gamma_x != 1 + a loose CG. Set False to allow the old constraint-violating roaming (e.g. basin-crossing study).
+        """
+
+    @reproject_iterate.setter
+    def reproject_iterate(self, arg: bool, /) -> None: ...
+
+    @property
+    def cutoff_freq(self) -> float:
+        """
+        Low-frequency projection cutoff [Hz]; <= 0 disables. Each outer iteration the iterate is projected onto frequencies <= cutoff_freq (per-axis DCT hard low-pass) to suppress high-frequency oscillation.
+        """
+
+    @cutoff_freq.setter
+    def cutoff_freq(self, arg: float, /) -> None: ...
+
+    @property
+    def cutoff_iter(self) -> int:
+        """
+        Outer iteration to STOP the cutoff_freq projection at; < 0 = project on every iteration.
+        """
+
+    @cutoff_iter.setter
+    def cutoff_iter(self, arg: int, /) -> None: ...
+
+    @property
+    def cutoff_trans(self) -> float:
+        """
+        Raised-cosine roll-off width of the low-pass, as a fraction of the cutoff bin (0 = brick wall, rings on plateaus; ~0.5 attenuates the near-cutoff oscillation band).
+        """
+
+    @cutoff_trans.setter
+    def cutoff_trans(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_enable(self) -> bool:
+        """
+        Trust-region step control (default False). After each inner CG, a StepMonitor checks whether the linearized model held over the step; if not, re-solve from X with the proximal sigma scaled up. Globalizes the nonlinear SAFE linearization so the objective's large steps can't outrun it (why SAFE blows up where a linear eddy/slew constraint holds).
+        """
+
+    @tr_enable.setter
+    def tr_enable(self, arg: bool, /) -> None: ...
+
+    @property
+    def tr_tol(self) -> float:
+        """
+        Trust-region reject threshold. For tr_monitor='linearization_error' it is the max allowed relative SAFE model error ||true-linear||/||true|| (~0.1-0.3); <=0 keeps the monitor default.
+        """
+
+    @tr_tol.setter
+    def tr_tol(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_bump(self) -> float:
+        """Proximal-sigma multiplier applied on each rejected step (default 4)."""
+
+    @tr_bump.setter
+    def tr_bump(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_max_reject(self) -> int:
+        """
+        Max re-solves per outer iteration before taking the most-damped step anyway (default 5).
+        """
+
+    @tr_max_reject.setter
+    def tr_max_reject(self, arg: int, /) -> None: ...
+
+    @property
+    def tr_decay(self) -> float:
+        """
+        Sigma relaxation factor toward ils_sigma on an accepted step (default 0.5).
+        """
+
+    @tr_decay.setter
+    def tr_decay(self, arg: float, /) -> None: ...
+
+    @property
+    def tr_monitor(self) -> str:
+        """
+        Which divergence signal drives the trust region: 'linearization_error' (default, self-calibrating SAFE model fidelity), 'feasibility' (funnel), or 'rel_step' (||dx||/||x||).
+        """
+
+    @tr_monitor.setter
+    def tr_monitor(self, arg: str, /) -> None: ...
+
+    @property
+    def obj_gate_enable(self) -> bool:
+        """
+        Feasibility-gated objective (default False). Scales the objective pull by exp(-total_constraint_violation/obj_gate_scale): ~0 while infeasible (no cold overshoot past the constraints before they engage), ->1 when feasible (climb to max b). Fixes the fine-dt objective overshoot that no fixed bval_obj_weight can (too strong overshoots, too weak collapses).
+        """
+
+    @obj_gate_enable.setter
+    def obj_gate_enable(self, arg: bool, /) -> None: ...
+
+    @property
+    def obj_gate_scale(self) -> float:
+        """
+        How sharply the objective gate opens as the constraint violation shrinks (in constraint units, e.g. ~0.05 of the SAFE limit). Smaller = stay gated closer to exact feasibility.
+        """
+
+    @obj_gate_scale.setter
+    def obj_gate_scale(self, arg: float, /) -> None: ...
+
     def set_sdmm_params(self, rw_interval: int = 8, rw_e_corr: float = 0.4, rw_eps: float = 1e-36, rw_scalelim: float = 1.5, grw_min_infeasible: int = 20, grw_interval: int = 20, grw_mod: float = 2.0) -> None:
         """
         [DEPRECATED -- prefer setting the properties directly, e.g. solver.rw_interval = 16] Set SDMM-specific parameters.
@@ -1194,6 +1332,17 @@ def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')
     -------
     np.ndarray
         SAFE response curve.
+    """
+
+def low_freq_project(x: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, cutoff_hz: float, fixer: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] = ..., Naxis: int = 1, trans_frac: float = 0.0) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
+    """
+    Low-frequency projection of a waveform via per-free-run DST-I (fft_tools.LowFreqProjector).
+
+    x is length Naxis*N laid out axis-major. Each maximal run of free samples (fixer==1), bounded by fixed
+    zeros, is band-limited independently with a DST-I. The cutoff at cutoff_hz (per the dt grid) uses a
+    raised-cosine roll-off of fractional width trans_frac (0 = brick wall, the default). trans_frac>0 only
+    worsens plateau ripple (it strips the harmonics that flatten a plateau). Pass fixer empty to treat all
+    samples as free. Returns the projected copy.
     """
 
 def test_eigen_assertions(test_type: int) -> None:

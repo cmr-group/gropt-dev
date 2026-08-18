@@ -1,5 +1,7 @@
 #include "spdlog/spdlog.h"
 
+#include <random>
+
 #include "op_main.hpp"
 #include "workspace_solver.hpp"
 
@@ -73,6 +75,37 @@ void Operator::transpose_op(Eigen::VectorXd &X, Eigen::VectorXd &out, bool apply
 
 void Operator::transpose_op(Eigen::VectorXd &X, Eigen::VectorXd &out) { transpose_op(X, out, true); }
 
+double Operator::estimate_self_spec_norm(int n_iters) {
+    int Ntot_local = pdata->N * pdata->Naxis;
+
+    // Deterministic fixed-seed random start (broad spectral content, no global-RNG dependence, so
+    // spec_norm is bit-reproducible). Power iteration converges to the top singular value regardless
+    // of the start, so the seed choice only affects early-iteration transients.
+    std::mt19937 gen(1234567u);
+    std::normal_distribution<double> dist(0.0, 1.0);
+    Eigen::VectorXd v(Ntot_local);
+    for (int i = 0; i < Ntot_local; i++) {
+        v(i) = dist(gen);
+    }
+    v.normalize();
+
+    Eigen::VectorXd Av(Ax_size);
+    Eigen::VectorXd AtAv(Ntot_local);
+    double lam = 0.0;
+    for (int it = 0; it < n_iters; it++) {
+        Av.setZero();
+        forward(v, Av); // raw linear op (Op_SAFE freezes its abs-signs from v)
+        AtAv.setZero();
+        transpose(Av, AtAv); // raw adjoint; AᵀA is symmetric PSD -> real power iteration
+        lam = AtAv.norm();   // = ||AᵀA v||; -> lambda_max(AᵀA) = ||A||^2 as v converges
+        if (lam <= 0.0) {
+            break;
+        }
+        v = AtAv / lam;
+    }
+    return std::sqrt(lam);
+}
+
 void Operator::add_Atb(Eigen::VectorXd &b, const WorkspaceSolver &ws) {
     spdlog::trace("Operator::add_Atb  start  name = {}", name);
 
@@ -126,7 +159,7 @@ void Operator::add_obj_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out, bool norma
     forward_op(x0, Ax_temp);
     transpose_op(Ax_temp, x_temp);
 
-    double scale = -obj_weight;
+    double scale = -obj_weight * obj_gate; // obj_gate in [0,1]: feasibility gate (1.0 = off)
     if (normalize) {
         double n = x_temp.norm();
         if (n > 1e-300) scale /= n; // self-normalize the direction; magnitude = |obj_weight| (constant)

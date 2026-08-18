@@ -155,8 +155,13 @@ class GroptParams {
     std::vector<std::unique_ptr<Operator>> all_op;
     std::vector<std::unique_ptr<Operator>> all_obj;
 
-    // If true, self-normalize the objective so weight_mod sets a CONSTANT step magnitude (the pull no longer grows with ||AᵀA x||). 
+    // If true, self-normalize the objective so weight_mod sets a CONSTANT step magnitude (the pull no longer grows with ||AᵀA x||).
     bool normalize_obj = false;
+
+    // Softabs smoothing (slew units) applied to every SAFE op's |.| (copied to each Op_SAFE in add_SAFE).
+    // 0 = hard abs (original). >0 smooths the sign through zero -> removes the near-zero sign churn that
+    // makes SAFE far more unstable than the linear eddy constraint. See Op_SAFE::safe_eps.
+    double safe_eps = 0.0;
 
     // Exact null-space projection for linear-equality constraints flagged project=true. Built in
     // prepare(); if any participating operator has iterate-dependent rows (eq_proj_dynamic), the
@@ -206,7 +211,7 @@ class GroptParams {
                          double target = 1.0, bool fix_gamma = false, double gamma_fix = 1.0,
                          bool project = false, bool as_objective = false);
     void add_moment(double order, double target, double tol0, std::string units, int moment_axis, int start_idx0,
-                    int stop_idx0, int ref_idx0, double weight_mod, bool project = false);
+                    int stop_idx0, int ref_idx0, double weight_mod, bool project = false, bool absolute_tol = false);
 
     void add_SAFE(double stim_thresh, int new_first_axis, double weight_mod);
     void add_SAFE(double stim_thresh, const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2,

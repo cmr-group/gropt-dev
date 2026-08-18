@@ -41,7 +41,10 @@ class IndirectLinearSolver
         double tol_abs_rel = 1e-8;
 
         IndirectLinearSolver(GroptParams &gparams, int _n_iter, double _sigma, double _tik_lam);
-        ~IndirectLinearSolver() = default;
+        // MUST be virtual: the solver holds this by base pointer (Solver::ils_solver) and `delete
+        // ils_solver` on an ILS_CG/ILS_NLCG/ILS_BiCGstabl instance. Without a virtual destructor only the
+        // base runs, leaking each derived class's Eigen work-vectors (~6 N-doubles per solve for ILS_CG).
+        virtual ~IndirectLinearSolver() = default;
 
         void set_workspace(const std::vector<WorkspaceSolver*>& _ws) {
             ws.assign(_ws.begin(), _ws.end());

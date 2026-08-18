@@ -6,7 +6,7 @@ dependencies = ["numpy"]
 
 [project.optional-dependencies]
 gui = ["pyqt6", "matplotlib"]
-dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn", "ipywidgets", "ipympl", "plotly", "nbformat", "anywidget"]
+dev = ["jupyterlab", "wheel", "scipy", "twine", "seaborn", "ipywidgets", "ipympl", "plotly", "nbformat", "anywidget", "loky", "tqdm"]
 docs = [
     "mkdocs",
     "mkdocs-material",
@@ -66,4 +66,8 @@ rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cm
     "clean-full",
     "touch-wrapper",
 ] }
+# Incremental (assertions ON): NO clean, so .scikit-build is reused and only changed files recompile
+# -- much faster for iterating on a source file or two. Use rebuild-test when you add/remove a source
+# file, change CMakeLists, or the incremental build gets confused.
+rebuild-fast = "python -m pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON"
 test-cpp = "cmake -S . -B build-tests -DGROPT_BUILD_TESTS=ON -DGROPT_EIGEN_ASSERTIONS=ON && cmake --build build-tests --config Release && ctest --test-dir build-tests --output-on-failure -C Release"

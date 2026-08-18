@@ -57,6 +57,17 @@ class Op_SAFE : public Operator {
     SAFEParams safe_params;
     int n_terms = 3;
 
+    // Softabs smoothing of the |.| nonlinearity (slew units). 0 = hard abs / sign=+-1 (original). When
+    // >0, |v| -> sqrt(v^2+eps^2) and sign -> v/sqrt(v^2+eps^2): the sign becomes a smooth ramp through 0
+    // instead of a +-1 jump, so the frozen linearization the solver uses changes continuously instead of
+    // flipping when a (filtered) slew sample crosses zero.
+    double safe_eps = 0.0;
+
+    // When true (set only for the duration of the inner CG via freeze_linearization), forward() does NOT
+    // recapture the |.| signs -- it uses the frozen signs1/2/3 and applies them LINEARLY (sign*value
+    // instead of abs), so the operator the CG sees is a fixed linear map. Restore to false afterward.
+    bool freeze_signs = false;
+
     Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod);
     Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_vec, double _weight_mod);
     virtual void init();
@@ -65,6 +76,12 @@ class Op_SAFE : public Operator {
     virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);
     virtual void prox(Eigen::VectorXd &X);
     virtual void check(Eigen::VectorXd &X);
+
+    // Freeze the |.| linearization at X for the inner CG (recapture signs once, then hold), and restore.
+    virtual void freeze_linearization(Eigen::VectorXd &X) override;
+    virtual void unfreeze_linearization() override { freeze_signs = false; }
+    virtual double linearization_error(const Eigen::VectorXd &x_new) override;
+    virtual double constraint_violation(const Eigen::VectorXd &x_new) override;
 
     // SAFE stacks n_terms blocks per axis (Ax_size = n_terms*Naxis*N); each N-block is a separate
     // time series, so it must be resized block-by-block rather than as one Ax_size/Naxis chunk.

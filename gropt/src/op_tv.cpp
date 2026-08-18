@@ -95,7 +95,7 @@ void Op_TV::prox(Eigen::VectorXd &X)
 
     // Prox of the L1 PENALTY  f(u) = tv_lam * ||u||_1  on the physical slew (order 1) / jerk
     // (order 2)
-    double thresh = tv_lam * spec_norm2 / rho;
+    double thresh = tv_lam * spec_norm2 / admm_weight;
 
     if (do_equil) {
         X.array() /= eq_rows.array();

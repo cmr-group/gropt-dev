@@ -14,6 +14,7 @@ find_package(nanobind CONFIG REQUIRED)
 set(GROPT_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gropt/src")
 set(GROPT_SOURCES
     ${GROPT_SRC_DIR}/equilibrate.cpp
+    ${GROPT_SRC_DIR}/fft_tools.cpp
     ${GROPT_SRC_DIR}/gropt_params.cpp
     ${GROPT_SRC_DIR}/gropt_utils.cpp
     ${GROPT_SRC_DIR}/ils.cpp
@@ -33,6 +34,7 @@ set(GROPT_SOURCES
     ${GROPT_SRC_DIR}/op_diffbasin.cpp
     ${GROPT_SRC_DIR}/solver.cpp
     ${GROPT_SRC_DIR}/solver_groptsdmm.cpp
+    ${GROPT_SRC_DIR}/step_monitor.cpp
     ${GROPT_SRC_DIR}/solver_osqp.cpp
     ${GROPT_SRC_DIR}/workspace_osqp.cpp
     ${GROPT_SRC_DIR}/workspace_sdmm.cpp
@@ -46,6 +48,17 @@ target_include_directories(gropt_core PUBLIC
     ${GROPT_SRC_DIR}/external
 )
 target_compile_definitions(gropt_core PUBLIC FMT_UNICODE=0)
+
+# PocketFFT (used only by fft_tools.cpp) tuning: single-threaded (our transforms are one small 1D
+# DCT per call -- the thread pool is pure overhead), and cache the plan so the same-N DCT done every
+# outer iteration doesn't rebuild its twiddles. On GCC/Clang PocketFFT auto-vectorizes to whatever
+# SIMD the target ISA enables (SSE2 baseline on x86-64; add -mavx2 -mfma, or /arch:AVX2 for MSVC, if
+# you are willing to require AVX2); on MSVC it falls back to scalar + the auto-vectorizer.
+target_compile_definitions(gropt_core PRIVATE POCKETFFT_NO_MULTITHREADING POCKETFFT_CACHE_SIZE=8)
+
+# Parallel compilation: the Visual Studio generator compiles a project's source files SERIALLY by
+# default; /MP fans them across all cores (big win on a full rebuild). (Ninja parallelizes on its own.)
+target_compile_options(gropt_core PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>)
 
 nanobind_add_module(gropt_wrapper
     gropt/gropt_wrapper/gropt_wrapper.cpp

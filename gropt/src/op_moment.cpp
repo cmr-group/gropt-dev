@@ -25,8 +25,21 @@ Op_Moment::Op_Moment(const ProblemData &_pdata, double _order, double _target, d
         throw std::invalid_argument("Unsupported units for moment constraint");
     }
 
+    // Order-0 units factor, for the M0-anchored tolerance (the default; see init). It uses the ORDER-0
+    // units scale, not this order's, so the anchor doesn't double-scale the order (moment_scale already
+    // carries the per-order factor for the absolute-tol mode and the target).
+    double moment_scale0 = 1.0;
+    if (units == "T*s/m") {
+        moment_scale0 = 1000.0 * 1000.0;
+    } else if (units == "rad*s/m") {
+        moment_scale0 = 1000.0 * 1000.0 / 4.257638544e7;
+    } else if (units == "s/m") {
+        moment_scale0 = 1000.0 * 1000.0 / 2.675153194e8;
+    } // mT*ms/m -> 1.0
+
     moment_target = _target * moment_scale;
-    moment_tol0 = _tol0 * moment_scale;
+    moment_tol0 = _tol0 * moment_scale;       // absolute per-order tol (this order's physical units)
+    moment_tol0_m0 = _tol0 * moment_scale0;   // M0-anchored reference (order-0 units; scaled by ||A_k||/||A_0|| in init)
     moment_axis = _moment_axis;
 
     start_idx0 = _start_idx0;
@@ -72,8 +85,18 @@ void Op_Moment::init() {
     }
     spec_norm = sqrt(spec_norm2);
 
+    // Two tolerance modes (see absolute_tol):
+    //  - M0-anchored (default): the passed tol is the ORDER-0 tolerance; higher orders scale their bound by
+    //    ||A_k|| / ||A_0|| = spec_norm / spec_norm_0 (||A_0|| = the order-0 row norm over the same window,
+    //    val_0 = 1e6*dt constant).
+    //  - absolute_tol: the passed tol is taken directly in THIS order's physical units (moment_tol0 =
+    //    tol * moment_scale(order)). Use it when you set a nonzero target for a higher order (e.g. a
+    //    specified M2) and want the tolerance to mean an absolute physical bound, not a row-norm-scaled one.
+    double base_val = 1000.0 * 1000.0 * pdata->dt; // val at order 0 (t^0 = 1)
+    double spec_norm_0 = base_val * sqrt((double)(i_stop - i_start));
+
     target = moment_target;
-    tol0 = moment_tol0;
+    tol0 = absolute_tol ? moment_tol0 : moment_tol0_m0 * (spec_norm / spec_norm_0);
     tol = (1.0 - cushion) * tol0;
 
     if (do_init_weights) {
@@ -132,10 +155,7 @@ void Op_Moment::check(Eigen::VectorXd &X) {
     X.array() *= spec_norm;
 
     for (int i = 0; i < X.size(); i++) {
-        double lower_bound = (target - tol0);
-        double upper_bound = (target + tol0);
-
-        if ((X(i) < lower_bound) || (X(i) > upper_bound)) {
+        if ((X(i) < target - tol0) || (X(i) > target + tol0)) {
             is_feas = 0;
         }
     }
