@@ -33,6 +33,7 @@ ignore = [
   "SIM108", # Allow if..else
 
   "PYI021", # Stubs need docstrings for nanobind
+  "FBT001", # Allow floating boolean arguments
 ]
 
 [format]
