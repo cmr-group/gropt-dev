@@ -10,38 +10,11 @@ execute_process(
 list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 find_package(nanobind CONFIG REQUIRED)
 
-# C++ source files (same as gropt/src/CMakeLists.txt minus main.cpp and fft_helper.cpp)
+# C++ core source list -- shared single source of truth with the standalone build (gropt/src).
 set(GROPT_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gropt/src")
-set(GROPT_SOURCES
-    ${GROPT_SRC_DIR}/equilibrate.cpp
-    ${GROPT_SRC_DIR}/fft_tools.cpp
-    ${GROPT_SRC_DIR}/gropt_params.cpp
-    ${GROPT_SRC_DIR}/gropt_utils.cpp
-    ${GROPT_SRC_DIR}/ils.cpp
-    ${GROPT_SRC_DIR}/ils_cg.cpp
-    ${GROPT_SRC_DIR}/ils_nlcg.cpp
-    ${GROPT_SRC_DIR}/ils_bicgstabl.cpp
-    ${GROPT_SRC_DIR}/op_main.cpp
-    ${GROPT_SRC_DIR}/op_bvalue.cpp
-    ${GROPT_SRC_DIR}/op_concomitant.cpp
-    ${GROPT_SRC_DIR}/op_gradient.cpp
-    ${GROPT_SRC_DIR}/op_identity.cpp
-    ${GROPT_SRC_DIR}/op_moment.cpp
-    ${GROPT_SRC_DIR}/op_slew.cpp
-    ${GROPT_SRC_DIR}/op_safe.cpp
-    ${GROPT_SRC_DIR}/op_eddy.cpp
-    ${GROPT_SRC_DIR}/op_tv.cpp
-    ${GROPT_SRC_DIR}/op_diffbasin.cpp
-    ${GROPT_SRC_DIR}/solver.cpp
-    ${GROPT_SRC_DIR}/solver_groptsdmm.cpp
-    ${GROPT_SRC_DIR}/step_monitor.cpp
-    ${GROPT_SRC_DIR}/solver_osqp.cpp
-    ${GROPT_SRC_DIR}/workspace_osqp.cpp
-    ${GROPT_SRC_DIR}/workspace_sdmm.cpp
-    ${GROPT_SRC_DIR}/workspace_solver.cpp
-)
+include(${GROPT_SRC_DIR}/sources.cmake)   # -> GROPT_CORE_SOURCES
 
-add_library(gropt_core STATIC ${GROPT_SOURCES})
+add_library(gropt_core STATIC ${GROPT_CORE_SOURCES})
 set_target_properties(gropt_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(gropt_core PUBLIC
     ${GROPT_SRC_DIR}

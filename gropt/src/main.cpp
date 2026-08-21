@@ -1,7 +1,7 @@
 #include "spdlog/spdlog.h"
-#include <matplot/matplot.h> 
-#include <highfive/H5Easy.hpp>
 
+#include <exception>
+#include <string>
 #include <vector>
 #include <algorithm>
 
@@ -17,29 +17,7 @@
 
 using namespace Gropt;
 
-void save_debug(GroptParams &params, Solver &solver) {
-    spdlog::info("Saving debug information...");
-
-    H5Easy::File file("debug_output.h5", H5Easy::File::Overwrite);
-    H5Easy::dump(file, "/hist_x", solver.hist_X);
-
-    H5Easy::dump(file, "/hist_cg_iter", solver.hist_cg_iter);
-
-    // for (int i = 0; i < params.all_op.size(); i++) {
-    //     Operator *op = params.all_op[i];
-    //     H5Easy::dump(file, "/op/" + op->name + "/hist_Ax", op->hist_Ax);
-    //     H5Easy::dump(file, "/op/" + op->name + "/hist_y", op->hist_y);
-    //     H5Easy::dump(file, "/op/" + op->name + "/hist_z", op->hist_z);
-    //     H5Easy::dump(file, "/op/" + op->name + "/hist_Aty", op->hist_Aty);
-    // }
-
-    // for (int i = 0; i < params.all_obj.size(); i++) {
-    //     Operator *op = params.all_obj[i];
-    //     H5Easy::dump(file, "/obj/" + op->name + "/hist_obj", op->hist_obj);
-    // }
-
-    spdlog::info("Debug information saved.");
-}
+void demo_diffusion(const std::string &recipe_path, const std::string &recipe_name);  // demo_diffusion.cpp
 
 /*
 void simple_test() {
@@ -289,11 +267,19 @@ void diff_demo_c()
 }
 */
 
-int main(int, char**){
+// Usage: gropt [recipe.json [recipe_name]]
+//   no args           -> the built-in default recipe
+//   recipe.json       -> the first recipe in that library file
+//   recipe.json NAME  -> that named recipe
+int main(int argc, char **argv){
     spdlog::set_level(spdlog::level::debug);
-
-    // simple_test();
-    // maximize_I();
-    
-    
+    const std::string recipe_path = (argc > 1) ? argv[1] : "";
+    const std::string recipe_name = (argc > 2) ? argv[2] : "";
+    try {
+        demo_diffusion(recipe_path, recipe_name);
+    } catch (const std::exception &e) {   // unreadable recipe file / unknown recipe name / bad mode
+        spdlog::error("{}", e.what());
+        return 1;
+    }
+    return 0;
 }
