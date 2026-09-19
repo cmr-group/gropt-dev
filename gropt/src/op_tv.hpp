@@ -1,6 +1,10 @@
 #ifndef OP_TV_H
 #define OP_TV_H
 
+/**
+ * Total-variation penalty tv_lam * ||D^order g||_1: the L1 norm of the slew (order 1) or jerk (order 2).
+ */
+
 #include <iostream>
 #include <string>
 #include <math.h>
@@ -14,9 +18,10 @@ class Op_TV : public Operator
 {
     protected:
         double tv_lam = 0.0;
+        int order = 1; // 1 = TV of the gradient (||slew||_1); 2 = TV of the slew (||jerk||_1)
 
     public:
-        Op_TV(const ProblemData &_pdata, double _tv_lam, double _weight_mod);
+        Op_TV(const ProblemData &_pdata, double _tv_lam, double _weight_mod, int _order = 1);
         virtual void init();
 
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);

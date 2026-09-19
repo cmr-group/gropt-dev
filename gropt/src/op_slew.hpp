@@ -2,9 +2,7 @@
 #define OP_SLEW_H
 
 /**
- * Constriant on slew rate, i.e. |dG/dt| <= smax
- * Supports the 'rot_variant" option to constrain either the individual slews
- * or the slew magnitude.
+ * Slew-rate constraint |dG/dt| <= smax [T/m/s]: per axis (rot_variant) or on the cross-axis magnitude.
  */
 
 #include <iostream>

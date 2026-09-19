@@ -45,15 +45,6 @@ void WorkspaceOSQP::reweight(int iiter, double scale_up, double scale_down, doub
         weight_scale = 1.0;
     }
 
-    // double max_exponent = std::log(1.0 + iiter);
-    // max_exponent = pow(10.0, max_exponent);
-
-    // if (weight > max_exponent) {
-    //     weight = max_exponent;
-    // } else if (weight < 1.0 / max_exponent) {
-    //     weight = 1.0 / max_exponent;
-    // }
-
     y00 = y0;
     z00 = z0;
 }

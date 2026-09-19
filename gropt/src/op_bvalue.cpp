@@ -31,10 +31,10 @@ void Op_BValue::init() {
     tol0 = bval_tol0;
     tol = (1.0 - cushion) * tol0;
 
-    GAMMA = 267.5221900e6;                                          // rad/S/T
+    GAMMA = 267.5221900e6;                                          // [rad/s/T]
     MAT_SCALE = pow((GAMMA / 1000.0 * pdata->dt), 2.0) * pdata->dt; // 1/1000 is for m->mm in b-value
 
-    // If start and stop indices are not set, constraint covers the whole axis
+    // start/stop <= 0: whole axis
     if (start_idx <= 0) {
         i_start = 0;
     } else {
@@ -49,7 +49,6 @@ void Op_BValue::init() {
 
     int Nnorm = i_stop - i_start;
     spec_norm2 = (Nnorm * Nnorm + Nnorm) / 2.0 * MAT_SCALE * 0.1175 * 4;
-    // spec_norm2 = spec_norm2 * spec_norm2;
     spec_norm = sqrt(spec_norm2);
 
     Ax_size = pdata->Naxis * pdata->N;

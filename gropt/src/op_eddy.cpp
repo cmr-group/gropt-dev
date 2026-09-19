@@ -2,8 +2,7 @@
 
 #include "op_eddy.hpp"
 
-// TODO:  When we build A with Naxis > 1, A could just have full length so forward and transpose are
-//        simple matrix multiplications instead of the segmented thing now.
+// TODO: build A as Nrows x Ntot so forward/transpose are plain matrix products instead of per-axis segments
 
 namespace Gropt {
 Op_Eddy::Op_Eddy(const ProblemData &_pdata, const Eigen::VectorXd &_lam, double _tol, double _weight_mod)
@@ -45,11 +44,30 @@ void Op_Eddy::init() {
     spec_norm = sqrt(spec_norm2);
     Ax_size = Nrows;
 
+    if (do_init_weights) {
+        obj_weight = 1.0;
+        obj_weight *= weight_mod;
+    }
+
     Operator::init();
 }
 
+void Op_Eddy::append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vector<double> &targets,
+                             const Eigen::VectorXd &x0) const {
+    if (!use_projection) return;
+    // One row per (axis, time constant): A.row(ii) embedded at that axis's segment, target 0
+    for (int i = 0; i < Naxis; i++) {
+        for (int i_lam = 0; i_lam < Nlam; i_lam++) {
+            int ii = i_lam + i * Nlam;
+            Eigen::VectorXd row = Eigen::VectorXd::Zero(Naxis * N);
+            row.segment(i * N, N) = A.row(ii).transpose();
+            rows.push_back(row);
+            targets.push_back(target);
+        }
+    }
+}
+
 void Op_Eddy::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
-    // TODO: Fix the Naxis Nlam selection
     for (int i = 0; i < Naxis; i++) {
         for (int i_lam = 0; i_lam < Nlam; i_lam++) {
             int ii = i_lam + i * Nlam;

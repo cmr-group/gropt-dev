@@ -1,40 +1,32 @@
-cmake_minimum_required(VERSION 3.10.0)
-project(gropt VERSION 0.0.0 LANGUAGES CXX)
+# Standalone C++ build (no Python / nanobind / pixi needed):
+#   cmake -S gropt/src -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
+#   cmake --build build-cpp
+#   ./build-cpp/gropt
+# Optional addons: -DGROPT_PLOTTING=ON (matplot++, needs gnuplot at runtime), -DGROPT_HDF5=ON (HighFive).
+cmake_minimum_required(VERSION 3.17)
+project(gropt LANGUAGES CXX)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external)
-add_definitions(-DFMT_UNICODE=0)
-add_definitions(-DH5_USE_EIGEN)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_subdirectory(external/matplotplusplus)
-add_subdirectory(external/highfive)
+include(${CMAKE_CURRENT_LIST_DIR}/gropt_core.cmake)   # -> gropt_core (shared with the Python build)
 
+# ---- standalone executable -----------------------------------------------------------------------
+add_executable(gropt main.cpp demo_diffusion.cpp)
+target_link_libraries(gropt PRIVATE gropt_core)
 
-set(SRC_FILES
-    fft_helper.cpp
-    gropt_params.cpp
-    gropt_utils.cpp
-    ils.cpp
-    ils_cg.cpp
-    ils_nlcg.cpp
-    ils_bicgstabl.cpp
-    op_bvalue.cpp
-    op_gradient.cpp
-    op_identity.cpp
-    op_main.cpp
-    op_moment.cpp
-    op_slew.cpp
-    op_safe.cpp
-    op_eddy.cpp
-    op_tv.cpp
-    solver.cpp
-    solver_groptsdmm.cpp
-    solver_osqp.cpp
-    workspace_osqp.cpp
-    workspace_sdmm.cpp
-    workspace_solver.cpp
-)
+# ---- optional plotting addon (matplot++) ---------------------------------------------------------
+option(GROPT_PLOTTING "Build the standalone with matplot++ plotting" OFF)
+if(GROPT_PLOTTING)
+    add_subdirectory(external/matplotplusplus)
+    target_link_libraries(gropt PRIVATE matplot)
+    target_compile_definitions(gropt PRIVATE GROPT_PLOTTING)
+endif()
 
-add_executable(gropt main.cpp ${SRC_FILES})
-target_link_libraries(gropt PUBLIC matplot HighFive::HighFive)  
-
+# ---- optional HDF5 solver-history dumps (HighFive) -----------------------------------------------
+option(GROPT_HDF5 "Build the standalone with HighFive/HDF5 solver-history dumps" OFF)
+if(GROPT_HDF5)
+    add_subdirectory(external/HighFive)
+    target_link_libraries(gropt PRIVATE HighFive::HighFive)
+    target_compile_definitions(gropt PRIVATE GROPT_HDF5)
+endif()

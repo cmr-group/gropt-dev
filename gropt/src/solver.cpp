@@ -32,8 +32,6 @@ int Solver::logger(Eigen::VectorXd &X) {
         }
     }
 
-    hist_cg_iter.push_back(ils_solver->hist_n_iter.back());
-
     return all_feasible;
 }
 
@@ -41,7 +39,10 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
 
     result.converged = true;
 
-    result.n_feval = std::accumulate(ils_solver->hist_n_iter.begin(), ils_solver->hist_n_iter.end(), 0);
+    result.n_feval = 0;
+    for (int n : ils_solver->hist_n_iter) {
+        if (n > 0) result.n_feval += n; // skip the -1 placeholder for iteration 0 (no inner solve)
+    }
 
     spdlog::info(" ");
     spdlog::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ");
@@ -49,47 +50,78 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
     spdlog::info("  Iteration = {:d}   Total f_eval = {:d}", iiter, result.n_feval);
     spdlog::info("  ||x|| = {:.2e}", X.norm());
     spdlog::info(" ");
-    spdlog::info("          Name      Feasibile   min(Ax)       max(Ax)      tol0 ");
-    spdlog::info("-------------------------------------------------------------");
+    spdlog::info("          Name      Feasible    min(Ax)       max(Ax)      target        tol0 ");
+    spdlog::info("---------------------------------------------------------------------------------");
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
         op->Ax_temp.setZero();
         op->forward_op(X, op->Ax_temp);
+        op->check(op->Ax_temp); // feasibility of the returned X, not the last loop iterate
 
-        spdlog::info("    {:^16}    {:d}       {: .2e}    {: .2e}    {: .2e}", op->name, op->hist_feas.back(),
-                     op->Ax_temp.minCoeff() - op->target, op->Ax_temp.maxCoeff() - op->target, op->tol0);
+        // Table values in the units of target/tol0: raw forward(), not the normalized forward_op().
+        Eigen::VectorXd Ax_phys(op->Ax_size);
+        op->forward(X, Ax_phys);
+
+        spdlog::info("    {:^16}    {:d}       {: .2e}    {: .2e}    {: .2e}    {: .2e}", op->name,
+                     op->hist_feas.back(), Ax_phys.minCoeff(), Ax_phys.maxCoeff(), op->target, op->tol0);
 
         if (op->hist_feas.back() == 0) {
             result.converged = false;
         }
     }
 
-    // Check if one of the constraints is b-value and if so, report the final b-value
-    for (int i = 0; i < gparams->all_op.size(); i++) {
-        Operator *op = gparams->all_op[i].get();
-        if (op->name == "b-value") {
-            Op_BValue *op_bvalue = dynamic_cast<Op_BValue *>(op);
-            if (X.array().isNaN().any()) {
-                result.bvalue = 0;
-            } else {
-                if (op_bvalue != nullptr) {
+    // Report the final b-value from a b-value operator in either all_op or all_obj.
+    auto report_bvalue = [&](std::vector<std::unique_ptr<Operator>> &ops) {
+        for (auto &op_ptr : ops) {
+            Operator *op = op_ptr.get();
+            if (op->name == "b-value") {
+                Op_BValue *op_bvalue = dynamic_cast<Op_BValue *>(op);
+                if (X.array().isNaN().any()) {
+                    result.bvalue = 0;
+                } else if (op_bvalue != nullptr) {
                     result.bvalue = op_bvalue->get_bvalue(X);
                 } else {
                     spdlog::warn("Operator named 'b-value' is not an Op_BValue instance.");
                 }
             }
         }
+    };
+    report_bvalue(gparams->all_op);
+    report_bvalue(gparams->all_obj);
+}
+
+WarmStart Solver::capture_warmstart(const Eigen::VectorXd &X) {
+    // Stores y1 (not z, which is regenerated as A*X on load), keyed by unique_name with its Ax-block layout.
+    WarmStart w;
+    if (gparams == nullptr) return w;
+    w.active = true;
+    w.N = gparams->N;
+    w.Naxis = gparams->Naxis;
+    w.dt = gparams->dt;
+    w.X = X;
+    w.fixer = gparams->pdata.fixer;
+    for (size_t i = 0; i < gparams->all_op.size() && i < ws.size(); i++) {
+        Operator *op = gparams->all_op[i].get();
+        OpWarmState st;
+        st.key = op->unique_name;
+        st.y = ws[i]->y1;
+        st.weight = ws[i]->weight;
+        st.gamma = ws[i]->gamma;
+        st.spec_norm = op->spec_norm; // to rescale the dual on load
+        st.blocks = op->Ax_block_lengths();
+        w.ops.push_back(st);
     }
+    return w;
 }
 
 void Solver::set_general_params(int min_iter, int max_iter, int log_interval, double gamma_x, int max_feval,
-                                int extra_iters) {
+                                int obj_patience) {
     this->min_iter = min_iter;
     this->max_iter = max_iter;
     this->log_interval = log_interval;
     this->gamma_x = gamma_x;
     this->max_feval = max_feval;
-    this->extra_iters = extra_iters;
+    this->obj_patience = obj_patience;
 }
 
 void Solver::set_ils_params(double ils_tol, int ils_max_iter, int ils_min_iter, double ils_sigma, double ils_tik_lam) {

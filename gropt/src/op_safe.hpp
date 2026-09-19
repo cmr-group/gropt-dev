@@ -2,7 +2,7 @@
 #define OP_SAFE_H
 
 /**
- * Constriant on SAFE model prediction of waveforms.
+ * Constraint on the SAFE-model PNS prediction of the gradient waveform, per axis and sample.
  */
 
 #include "Eigen/Dense"
@@ -26,7 +26,7 @@ class SAFEParams {
     std::vector<double> stim_limit = std::vector<double>(3, 0.0);
     std::vector<double> g_scale = std::vector<double>(3, 0.0);
 
-    // These aren't real parameters because they depend on dt, maybe they should be in Op_SAFE?
+    // Filter coefficients dt / (tau + dt), derived by calc_alphas(dt) rather than set by the user
     std::vector<double> alpha1 = std::vector<double>(3, 0.0);
     std::vector<double> alpha2 = std::vector<double>(3, 0.0);
     std::vector<double> alpha3 = std::vector<double>(3, 0.0);
@@ -57,6 +57,12 @@ class Op_SAFE : public Operator {
     SAFEParams safe_params;
     int n_terms = 3;
 
+    // Softabs smoothing of |.| [T/m/s]: |v| -> sqrt(v^2 + eps^2); 0 = exact |.|
+    double safe_eps = 0.0;
+
+    // Set during the inner CG: forward() applies the held signs1/2/3 linearly instead of |.|
+    bool freeze_signs = false;
+
     Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod);
     Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_vec, double _weight_mod);
     virtual void init();
@@ -65,6 +71,15 @@ class Op_SAFE : public Operator {
     virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);
     virtual void prox(Eigen::VectorXd &X);
     virtual void check(Eigen::VectorXd &X);
+
+    // Hold the |.| signs captured at X during the inner CG
+    virtual void freeze_linearization(Eigen::VectorXd &X) override;
+    virtual void unfreeze_linearization() override { freeze_signs = false; }
+    virtual double linearization_error(const Eigen::VectorXd &x_new) override;
+    virtual double constraint_violation(const Eigen::VectorXd &x_new) override;
+
+    // Ax is n_terms*Naxis separate length-N time series, not Naxis blocks
+    virtual std::vector<int> Ax_block_lengths() const override { return std::vector<int>(n_terms * Naxis, N); }
 };
 
 } // namespace Gropt

@@ -5,7 +5,7 @@
 
 namespace Gropt {
 
-class Operator;  // Forward declaration
+class Operator;
 
 struct WorkspaceSolver {
     // Per-operator iteration state (shared by all solvers)

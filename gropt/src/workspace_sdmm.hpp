@@ -5,7 +5,7 @@
 
 namespace Gropt {
 
-class Operator;  // Forward declaration
+class Operator;
 
 struct WorkspaceSDMM : WorkspaceSolver {
     // SDMM-specific reweighting history

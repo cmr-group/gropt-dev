@@ -31,9 +31,11 @@ void IndirectLinearSolver::get_lhs(Eigen::VectorXd &x, Eigen::VectorXd &out)
     out.array() += sigma * x.array();
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
+        if (gparams->all_op[i]->use_projection) continue; // enforced by the equality projection
         gparams->all_op[i]->add_AtAx(x, out, *ws[i]);
     }
 
+    // Convex objectives add AᵀA curvature here; linearized (DCA) ones add nothing (see get_rhs).
     for (int i = 0; i < gparams->all_obj.size(); i++) {
         gparams->all_obj[i]->add_obj(x, out);
     }
@@ -47,9 +49,14 @@ void IndirectLinearSolver::get_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out)
 
     spdlog::trace("IndirectLinearSolver::get_rhs  iteration size = {:d}", gparams->all_op.size());
     for (int i = 0; i < gparams->all_op.size(); i++) {
+        if (gparams->all_op[i]->use_projection) continue; // enforced by the equality projection
         gparams->all_op[i]->add_Atb(out, *ws[i]);
     }
 
+    // Linearized (DCA) objectives add their pull frozen at x0; convex ones add nothing (see get_lhs).
+    for (int i = 0; i < gparams->all_obj.size(); i++) {
+        gparams->all_obj[i]->add_obj_rhs(x0, out, gparams->normalize_obj);
+    }
 }
 
 } // close "namespace Gropt"

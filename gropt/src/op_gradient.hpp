@@ -2,10 +2,8 @@
 #define OP_GRADIENT_H
 
 /**
- * Constraint on gradient amplitude.  Supports the 'rot_variant' variable
- * to decide if gmax operates per axis or on the gradient magnitude
- *
- * Checks 'set_vals' and forces those values if they are not NaN
+ * Gradient amplitude constraint |g| <= gmax [T/m]: per axis (rot_variant) or on the cross-axis magnitude.
+ * The prox also pins samples with a non-NaN set_vals to that value.
  */
 
 #include <iostream>

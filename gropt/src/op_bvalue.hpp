@@ -20,15 +20,14 @@ enum BVALUE_MODE {
 class Op_BValue : public Operator
 {
     protected:
-        // These are the user inputted values
+        // Indices as passed by the caller (<= 0 = whole axis) and their working copies
         int start_idx0 = -1;
         int stop_idx0 = -1;
 
-        // These are the values after modifying problem parameters (i.e. changing N or Naxis)
         int start_idx;
         int stop_idx;
 
-        // These are the values used in the calculations
+        // Resolved [i_start, i_stop) range, set in init()
         int i_start;
         int i_stop;
 

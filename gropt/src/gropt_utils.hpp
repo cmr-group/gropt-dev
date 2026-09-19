@@ -2,11 +2,7 @@
 #define GROPT_UTILS_H
 
 /**
- * In general this is just a place for random usages of the GrOpt
- * operators for applications that aren't actual optimization.
- *
- * i.e. GIRF respone calculation or spectral calcs, or getting a
- * PNS curve for a waveform
+ * Non-optimization uses of the GrOpt operators, e.g. the SAFE PNS curve of a waveform.
  */
 
 #include "Eigen/Dense"
@@ -16,9 +12,9 @@
 
 namespace Gropt {
 
-// Eigen overload: demo params
+// SAFE PNS curve of G (axis-major), demo params
 Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis);
-// Eigen overload: custom params
+// Same, custom params
 Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
                                const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3,
                                const Eigen::VectorXd &a1, const Eigen::VectorXd &a2, const Eigen::VectorXd &a3,

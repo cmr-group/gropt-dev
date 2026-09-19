@@ -56,7 +56,6 @@ void get_eq_vecs(GroptParams &gparams, Eigen::VectorXd &row_norms, Eigen::Vector
         if (i == 0) {
             col_norms = op->eq_cols;
         } else {
-            // Check that col norms are the same across operators
             if (!col_norms.isApprox(op->eq_cols)) {
                 spdlog::error("Column norms are not the same across operators!");
             }
@@ -77,11 +76,6 @@ void rescale_eq_vecs(GroptParams &gparams, double row_scale, double col_scale) {
 void estimate_row_col_norms(GroptParams &gparams, int n_reps, NormType norm_type, Eigen::VectorXd &row_norms,
                             Eigen::VectorXd &col_norms) {
     spdlog::trace("Starting estimate_row_col_norms");
-
-    // for (int i = 0; i < gparams.all_op.size(); i++) {
-    //     Operator *op = gparams.all_op[i].get();
-    //     spdlog::info("Operator {} has weight {} and spec_norm2 {}", op->name, op->obj_weight, op->spec_norm2);
-    // }
 
     int N_rows = 0;
     for (int i = 0; i < gparams.all_op.size(); i++) {
@@ -148,7 +142,7 @@ double estimate_spec_norm(GroptParams &gparams, int n_iters) {
 
     int Ntot = gparams.N * gparams.Naxis;
 
-    // Make a VectorXd of size Ntot using a standard normal distribution, and normalize it to have norm 1
+    // Random unit start vector (Random() is uniform in [-1, 1])
     Eigen::VectorXd v = Eigen::VectorXd::Random(Ntot);
     v.normalize();
 
@@ -177,7 +171,7 @@ double estimate_individual_spec_norm(GroptParams &gparams, int n_iters, int op_i
 
     int Ntot = gparams.N * gparams.Naxis;
 
-    // Make a VectorXd of size Ntot using a standard normal distribution, and normalize it to have norm 1
+    // Random unit start vector (Random() is uniform in [-1, 1])
     Eigen::VectorXd v = Eigen::VectorXd::Random(Ntot);
     v.normalize();
 

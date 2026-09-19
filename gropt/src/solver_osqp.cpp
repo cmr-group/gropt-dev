@@ -11,19 +11,23 @@ namespace Gropt {
 SolveResult SolverOSQP::solve(GroptParams &_gparams) {
     spdlog::trace("Starting SolverOSQP::solve");
     gparams = &_gparams;
-    if (gparams->op_prep_status != gparams->N) {
+    if (gparams->needs_prepare()) {
         spdlog::info("Operators do not seem prepared, calling prepare()");
         gparams->prepare();
     }
 
-    // Initialize per-operator OSQP workspaces
+    // Per-solve state starts fresh (the objective gate may be left over from an SDMM solve).
+    debug_solver = DebugSolver{};
+    for (auto &o : gparams->all_obj) {
+        o->obj_gate = 1.0;
+    }
+
     osqp_ws.resize(gparams->all_op.size());
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
 
-        // Set initial weight based on operator type
+        // OSQP initial weights (1e4 table kept intentionally for this path)
         osqp_ws[i].weight = 1.0;
-        // Slew, moment, bvalue, SAFE, TV operators start with higher weight
         if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE" ||
             op->name == "TotalVariation") {
             osqp_ws[i].weight = 1e4;
@@ -34,7 +38,6 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
         osqp_ws[i].prep(*op, gparams->pdata.X0);
     }
 
-    // Populate base class ws pointers
     ws.resize(osqp_ws.size());
     for (int i = 0; i < osqp_ws.size(); i++) {
         ws[i] = &osqp_ws[i];
@@ -45,9 +48,6 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
         X.array() /= gparams->all_op[0]->eq_cols.array();
     }
     Eigen::VectorXd Xhat;
-
-    Px.setZero(X.size());
-    r_dual.setZero(X.size());
 
     if (gparams->ils_method == CG) {
         ils_solver = new ILS_CG(*gparams, ils_tol, ils_min_iter, ils_sigma, ils_max_iter, ils_tik_lam);
@@ -65,7 +65,6 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
     for (int i = 0; i < gparams->all_op.size(); i++) {
         total_Ax_size += gparams->all_op[i]->Ax_size;
     }
-    r_primal.setZero(total_Ax_size);
 
     // ===============================================
     //  OSQP iterations
@@ -80,31 +79,23 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
             Xhat = X;
         }
 
-        // if (Xhat.array().isNaN().any()) {
         if ((Xhat.array().abs() > 10).any()) {
-            // spdlog::error("NaN detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         };
 
-        // Update all constraints (do prox operations)
-        update(Xhat);
+        update(Xhat); // ADMM z/y updates (prox)
 
         X = gamma_x * Xhat + (1 - gamma_x) * X;
 
         get_residuals(X);
 
+        // Stop at the first feasible iterate after min_iter.
         if ((logger(X) > 0) && (iiter > min_iter)) {
-            if (extra_iters > 0) {
-                spdlog::info("First solved at iiter {:d}, now {:d} extra iterations", iiter, extra_iters);
-                min_iter = iiter + extra_iters;
-                extra_iters = 0;
-            } else {
-                break;
-            }
+            break;
         }
 
-        total_feval += ils_solver->hist_n_iter.back();
+        if (iiter > 0) total_feval += ils_solver->hist_n_iter.back(); // no inner solve at iteration 0
         if (total_feval > max_feval) {
             spdlog::info("Maximum function evaluations reached");
             break;
@@ -138,11 +129,11 @@ void SolverOSQP::update(Eigen::VectorXd &X) {
         // s = Ax
         op->forward_op(X, w.s1);
 
-        // z = prox(as + 1-a)z0 + p^-1y0)
+        // z = prox(a*s + (1-a)*z0 + y0/rho)
         w.z1 = w.gamma * w.s1 + (1 - w.gamma) * w.z0 + w.y0 / w.weight;
         op->prox(w.z1);
 
-        // y = y0 + p*(as + (1-a)z0 - z1)
+        // y = y0 + rho*(a*s + (1-a)*z0 - z)
         w.y1 = w.y0 + w.weight * (w.gamma * w.s1 + (1 - w.gamma) * w.z0 - w.z1);
 
         w.y0 = w.y1;
@@ -158,29 +149,11 @@ void SolverOSQP::update(Eigen::VectorXd &X) {
     }
 
     if (needs_reweight) {
-
-        std::ostringstream oss;
-        oss << "ReWeights: ";
-        for (int i = 0; i < gparams->all_op.size(); i++) {
-            oss << all_weight_scale(i) << " ";
-        }
-        // spdlog::info("{:d}  {}", iiter, oss.str());
-
         if ((all_weight_scale.array() >= max_scale).all()) {
-            // spdlog::warn("All weight scales above max_scale., scaling to max");
-            // all_weight_scale = all_weight_scale / all_weight_scale.maxCoeff();
             all_weight_scale.setOnes();
-
-            oss.str("");
-            oss << "Re-ReWeights: ";
-            for (int i = 0; i < gparams->all_op.size(); i++) {
-                oss << all_weight_scale(i) << " ";
-            }
-            // spdlog::info("{:d}  {}", iiter, oss.str());
         }
 
         for (int i = 0; i < gparams->all_op.size(); i++) {
-            Operator *op = gparams->all_op[i].get();
             WorkspaceOSQP &w = osqp_ws[i];
 
             if (all_weight_scale(i) > max_scale) {
@@ -197,7 +170,7 @@ void SolverOSQP::update(Eigen::VectorXd &X) {
 
 void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
 
-    //  Get dimensions (shouldn't be needed every iteration)
+    // TODO: dimensions don't change; compute once per solve
     int N_rows = 0;
     for (int i = 0; i < gparams->all_op.size(); i++) {
         N_rows += gparams->all_op[i]->Ax_size;
@@ -205,7 +178,7 @@ void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
 
     int N_cols = gparams->N * gparams->Naxis;
 
-    // Calculate relevant variables for residuals
+    // Stacked Ax, z, y and A^T y, recorded in the debug history
     Eigen::VectorXd Ax;
     Ax.setZero(N_rows);
 
@@ -246,7 +219,6 @@ void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
         std::vector<double> weight_vec;
         std::vector<double> gamma_vec;
         for (int i = 0; i < gparams->all_op.size(); i++) {
-            Operator *op = gparams->all_op[i].get();
             WorkspaceOSQP &w = osqp_ws[i];
             weight_vec.push_back(w.weight);
             gamma_vec.push_back(w.gamma);

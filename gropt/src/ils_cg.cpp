@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "spdlog/spdlog.h"
 
 #include "ils_cg.hpp"
@@ -23,8 +25,6 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
 
     double rnorm0;
     double bnorm0;
-    double tol0;
-    double res;
 
     double alpha;
     double beta;
@@ -33,8 +33,10 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     double pAp;
 
     x = x0;
+    if (gparams->eq_proj.active) {
+        gparams->eq_proj.project_affine(x); // feasible start for the equality constraints
+    }
     Eigen::VectorXd x_out = x;
-    double r_min = std::numeric_limits<double>::max();
 
     b.setZero();
     get_rhs(x0, b);
@@ -44,8 +46,13 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     get_lhs(x, Ax);
 
     r = (b - Ax);
+    if (gparams->eq_proj.active) {
+        gparams->eq_proj.project_dir(r); // keep CG residual/directions in the equality null-space
+    }
     rnorm0 = r.norm();
     bnorm0 = b.norm();
+    // Relative to the warm-start residual, so it tightens as ADMM converges.
+    double stop_thresh = std::max(tol * rnorm0, tol_abs_rel * bnorm0);
 
     p = r;
     gamma = r.dot(r);
@@ -57,6 +64,9 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
 
         Ap.setZero();
         get_lhs(p, Ap); // Ap = A*p
+        if (gparams->eq_proj.active) {
+            gparams->eq_proj.project_dir(Ap); // projected CG: effective operator is P A P
+        }
         pAp = p.dot(Ap);
         alpha = gamma / pAp;
 
@@ -69,7 +79,7 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
 
         p = beta * p + r;
 
-        if ((std::sqrt(gamma) <= tol * rnorm0) && (ii > min_iter)) {
+        if ((std::sqrt(gamma) <= stop_thresh) && (ii > min_iter)) {
             spdlog::trace("ILS_CG::solve  break for (res <= tol)  ii = {:d}", ii);
             break;
         }
@@ -80,7 +90,10 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
 
-    hist_n_iter.push_back(ii + 1);
+    hist_n_iter.push_back(std::min(ii + 1, n_iter)); // iterations done
+    hist_rnorm0.push_back(rnorm0);
+    hist_rnorm.push_back(r.norm());
+    hist_bnorm0.push_back(bnorm0);
 
     return x;
 }

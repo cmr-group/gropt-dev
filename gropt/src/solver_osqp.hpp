@@ -24,10 +24,6 @@ namespace Gropt
 
         int total_Ax_size;
 
-        Eigen::VectorXd Px;
-        Eigen::VectorXd r_dual;
-        Eigen::VectorXd r_primal;
-
         virtual SolveResult solve(GroptParams &_gparams);
         void update(Eigen::VectorXd &X);
         void get_residuals(Eigen::VectorXd &X);
