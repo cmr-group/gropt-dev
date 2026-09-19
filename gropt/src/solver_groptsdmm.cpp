@@ -21,6 +21,19 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         gparams->prepare();
     }
 
+    // Only ILS_CG applies the equality projection; other inner solvers see projected constraints only
+    // through the outer re-projection. Checked before the warm start is consumed.
+    if (gparams->eq_proj.active && gparams->ils_method != CG) {
+        const char *ils_name = (gparams->ils_method == NLCG) ? "NLCG" : "BiCGstabl";
+        if (!reproject_iterate) {
+            throw std::invalid_argument(std::string(ils_name) +
+                                        " does not apply the equality projection; with reproject_iterate=false "
+                                        "the projected constraints would be ignored. Use CG.");
+        }
+        spdlog::warn("{} does not apply the equality projection; projected constraints are only enforced by "
+                     "reproject_iterate (slower). Use CG.", ils_name);
+    }
+
     // Per-solve outputs and gates start fresh, so a reused solver or gparams carries nothing over.
     best_warmstart = WarmStart{};
     debug_solver = DebugSolver{};
@@ -28,7 +41,6 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         o->obj_gate = 1.0;
     }
 
-    // Resolve the starting primal.
     Eigen::VectorXd X0_init = resolve_initial_primal();
     init_workspaces(X0_init);
 
@@ -42,19 +54,6 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         gparams->eq_proj.project_affine(X); // start on the equality-feasible subspace (free DOFs only)
     }
     Eigen::VectorXd Xhat;
-
-    // Only ILS_CG applies the equality projection; other inner solvers see projected constraints only
-    // through the outer re-projection.
-    if (gparams->eq_proj.active && gparams->ils_method != CG) {
-        const char *ils_name = (gparams->ils_method == NLCG) ? "NLCG" : "BiCGstabl";
-        if (!reproject_iterate) {
-            throw std::invalid_argument(std::string(ils_name) +
-                                        " does not apply the equality projection; with reproject_iterate=false "
-                                        "the projected constraints would be ignored. Use CG.");
-        }
-        spdlog::warn("{} does not apply the equality projection; projected constraints are only enforced by "
-                     "reproject_iterate (slower). Use CG.", ils_name);
-    }
 
     if (gparams->ils_method == CG) {
         ils_solver = new ILS_CG(*gparams, ils_tol, ils_min_iter, ils_sigma, ils_max_iter, ils_tik_lam);
@@ -73,14 +72,13 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         total_Ax_size += gparams->all_op[i]->Ax_size;
     }
 
-    // Optional low-frequency projection of the iterate (fft_tools). Inactive when cutoff_freq <= 0.
-    LowFreqProjector lowfreq;
+    LowFreqProjector lowfreq; // inactive unless cutoff_freq > 0
     if (cutoff_freq > 0.0) {
         lowfreq.setup(gparams->N, gparams->Naxis, gparams->dt, cutoff_freq, gparams->pdata.fixer,
                       cutoff_trans);
     }
 
-    // Locate a b-value operator (constraint or objective) for per-iteration b-value logging
+    // b-value operator (constraint or objective) for the per-iteration debug history
     Op_BValue *bval_op = nullptr;
     if (extra_debug) {
         for (auto &op : gparams->all_op) {
@@ -104,7 +102,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     std::unique_ptr<StepMonitor> step_monitor;
     if (tr_enable) {
         step_monitor = make_step_monitor(tr_monitor, tr_tol, tr_bump);
-        if (!step_monitor) {
+        if (!step_monitor && tr_monitor != "none") {
             spdlog::warn("Unknown tr_monitor '{}'; trust region disabled.", tr_monitor);
         }
     }
@@ -115,11 +113,9 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         spdlog::trace("Starting GroptSDMM iteration {:d} SolverGroptSDMM::solve", iiter);
 
         if (iiter > 0) {
-            // Relinearize iterate-dependent equality rows at the current X.
             if (gparams->eq_proj_dynamic) {
                 gparams->build_eq_proj(X);
             }
-            // Objective gate: scale the objective pull by exp(-violation / obj_gate_scale).
             if (obj_gate_enable) {
                 double viol = 0.0;
                 for (auto &op : gparams->all_op) {
@@ -169,12 +165,10 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             break;
         }
 
-        // Update all constraints (do prox operations)
-        update(Xhat);
+        update(Xhat); // ADMM z/y updates (prox)
 
         X = gamma_x * Xhat + (1 - gamma_x) * X;
 
-        // Re-project the over-relaxed iterate onto the equality surface.
         if (reproject_iterate && gparams->eq_proj.active) {
             gparams->eq_proj.project_affine(X);
         }
@@ -289,7 +283,6 @@ void SolverGroptSDMM::init_workspaces(const Eigen::VectorXd &X0_init) {
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
 
-        // Initial ADMM weight, scaled by the operator's problem-specific weight_mod.
         sdmm_ws[i].weight = 1.0 * op->weight_mod;
 
         sdmm_ws[i].init(op->Ax_size);
@@ -317,7 +310,6 @@ void SolverGroptSDMM::init_workspaces(const Eigen::VectorXd &X0_init) {
     // A loaded warm start applies to this solve only.
     warmstart = WarmStart{};
 
-    // Populate the base-class ws pointers into the typed SDMM workspaces.
     ws.resize(sdmm_ws.size());
     for (int i = 0; i < sdmm_ws.size(); i++) {
         ws[i] = &sdmm_ws[i];
@@ -354,8 +346,7 @@ void SolverGroptSDMM::record_debug(Eigen::VectorXd &X, Op_BValue *bval_op) {
         row_start += op->Ax_size;
     }
 
-    // Objective vs constraint pull, both in normalized x-space: the RHS pull the next inner solve gets
-    // from linearized objectives (incl. normalize_obj and obj_gate) vs ||Σ Aᵀy||.
+    // Linearized-objective RHS pull at X (with normalize_obj and the current obj_gate) vs ||Σ Aᵀy||.
     Eigen::VectorXd obj_pull = Eigen::VectorXd::Zero(X.size());
     for (auto &obj : gparams->all_obj) {
         obj->add_obj_rhs(X, obj_pull, gparams->normalize_obj);
@@ -439,6 +430,7 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X) {
         double max_feas = 0.0;
         int max_index = -1;
         for (int i = 0; i < gparams->all_op.size(); i++) {
+            if (gparams->all_op[i]->use_projection) continue; // ADMM weight unused
             if (std::accumulate(gparams->all_op[i]->hist_feas.end() - grw_min_infeasible,
                                 gparams->all_op[i]->hist_feas.end(), 0) == 0) {
                 if (gparams->all_op[i]->hist_r_feas.back() > max_feas) {

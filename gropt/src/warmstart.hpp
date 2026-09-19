@@ -85,9 +85,7 @@ inline Eigen::VectorXd ws_resize_blocks(const Eigen::VectorXd &v, const std::vec
     return out;
 }
 
-// Resize a captured dual onto the target operator's blocks and rescale by spec_norm_new / spec_norm_old:
-// y lives in the spec_norm-normalized Ax-space and spec_norm depends on dt (and N), so this keeps the
-// physical dual y / spec_norm unchanged.
+// Resize y onto blocks_tgt and rescale by spec_norm_new / st.spec_norm (y is in normalized Ax-space).
 inline Eigen::VectorXd ws_resize_dual(const OpWarmState &st, const std::vector<int> &blocks_tgt,
                                       double spec_norm_new) {
     Eigen::VectorXd y = ws_resize_blocks(st.y, st.blocks, blocks_tgt);

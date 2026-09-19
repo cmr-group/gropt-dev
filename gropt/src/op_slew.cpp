@@ -99,13 +99,13 @@ void Op_Slew::prox(Eigen::VectorXd &X) {
 
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                val += X(i_ax * N + i) * X(i_ax * N + i);
+                val += X(i_ax * (N - 1) + i) * X(i_ax * (N - 1) + i);
             }
             val = sqrt(val);
 
             if (val > upper_bound) {
                 for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                    X(i_ax * N + i) *= (upper_bound / val);
+                    X(i_ax * (N - 1) + i) *= (upper_bound / val);
                 }
             }
         }
@@ -160,7 +160,7 @@ void Op_Slew::check(Eigen::VectorXd &X) {
 
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
-                val += X(i_ax * N + i) * X(i_ax * N + i);
+                val += X(i_ax * (N - 1) + i) * X(i_ax * (N - 1) + i);
             }
             val = sqrt(val);
 

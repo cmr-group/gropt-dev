@@ -17,14 +17,14 @@
 
 namespace Gropt {
 
-struct WorkspaceSolver; // Forward declaration
+struct WorkspaceSolver;
 
 class Operator
 {
   public:
     std::string name;
 
-    // Stable per-operator identifier, assigned in GroptParams::prepare() as "<name>#<occurrence>"
+    // Warm-start key "<name>#<occurrence>", assigned in GroptParams::prepare()
     std::string unique_name;
 
     const ProblemData *pdata;
@@ -102,13 +102,13 @@ class Operator
     // Used by LinearizationErrorMonitor to reject steps that leave a nonlinear op's valid region.
     virtual double linearization_error(const Eigen::VectorXd &x_new) { return 0.0; }
 
-    // Worst-sample true (nonlinear) constraint overage at x_new: max over rows of the amount above the limit,
-    // 0 when feasible. Default 0; only Op_SAFE implements it. Used by FeasibilityMonitor and the objective gate.
+    // Worst-sample true (nonlinear) constraint overage at x_new, 0 when feasible; only Op_SAFE implements it.
+    // Used by FeasibilityMonitor and the objective gate.
     virtual double constraint_violation(const Eigen::VectorXd &x_new) { return 0.0; }
     void print_details();
 
-    // EqualityProjection: append this op's equality row(s) and target(s), linearized at x0 if nonlinear.
-    // Operators not using projection append nothing.
+    // EqualityProjection: append this op's equality row(s) and target(s), linearized at x0 if nonlinear;
+    // nothing unless use_projection.
     virtual void append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vector<double> &targets,
                                 const Eigen::VectorXd &x0) const {}
     // True if the appended rows depend on x0 (projector is rebuilt each outer iteration).

@@ -33,7 +33,6 @@ void LowFreqProjector::setup(int N, int Naxis, double dt, double cutoff_hz, cons
         return; // disabled / nothing to transform
     }
 
-    // Free mask from fixer; all samples are free if its size doesn't match.
     const bool have_fixer = (fixer.size() == static_cast<Eigen::Index>(N_) * Naxis_);
     auto is_free = [&](int a, int local) -> bool {
         if (!have_fixer) return true;
@@ -49,7 +48,6 @@ void LowFreqProjector::setup(int N, int Naxis, double dt, double cutoff_hz, cons
             while (local < N_ && is_free(a, local)) { ++local; }
             int M = local - start;
 
-            // DST-I bin k has grid frequency (k+1)/(2*(M+1)*dt) Hz; keep k with freq <= cutoff.
             int kc = static_cast<int>(std::floor(cutoff_hz * 2.0 * static_cast<double>(M + 1) * dt)) - 1;
             if (kc < 0) kc = 0;             // keep at least the fundamental half-sine
             if (kc > M - 1) kc = M - 1;     // cutoff at/above this run's Nyquist -> keep everything

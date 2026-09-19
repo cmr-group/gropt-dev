@@ -60,7 +60,7 @@ class Op_SAFE : public Operator {
     // Softabs smoothing of |.| [T/m/s]: |v| -> sqrt(v^2 + eps^2); 0 = exact |.|
     double safe_eps = 0.0;
 
-    // True only during the inner CG: forward() applies the held signs1/2/3 linearly instead of |.|
+    // Set during the inner CG: forward() applies the held signs1/2/3 linearly instead of |.|
     bool freeze_signs = false;
 
     Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod);
@@ -72,7 +72,7 @@ class Op_SAFE : public Operator {
     virtual void prox(Eigen::VectorXd &X);
     virtual void check(Eigen::VectorXd &X);
 
-    // Freeze the |.| linearization at X for the inner CG (recapture signs once, then hold), and restore.
+    // Hold the |.| signs captured at X during the inner CG
     virtual void freeze_linearization(Eigen::VectorXd &X) override;
     virtual void unfreeze_linearization() override { freeze_signs = false; }
     virtual double linearization_error(const Eigen::VectorXd &x_new) override;

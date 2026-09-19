@@ -165,7 +165,7 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
         if (!isnan(pdata.set_vals(i))) {
             pdata.X0(i) = pdata.set_vals(i);
         } else {
-            pdata.X0(i) = 1e-2; // Initial value for non-fixed points
+            pdata.X0(i) = 1e-2;
         }
     }
     pdata.X0.array() *= pdata.inv_vec.array();
@@ -217,7 +217,7 @@ int GroptParams::diff_init_preencode(double _dt, double _TE, double _T_90, doubl
         if (!isnan(pdata.set_vals(i))) {
             pdata.X0(i) = pdata.set_vals(i);
         } else {
-            pdata.X0(i) = 1e-2; // Initial value for non-fixed points
+            pdata.X0(i) = 1e-2;
         }
     }
 
@@ -271,7 +271,7 @@ void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, doubl
         if (!isnan(pdata.set_vals(i))) {
             pdata.X0(i) = pdata.set_vals(i);
         } else {
-            pdata.X0(i) = 1e-2; // Initial value for non-fixed points
+            pdata.X0(i) = 1e-2;
         }
     }
 
@@ -337,17 +337,16 @@ void GroptParams::prepare() {
         all_obj[i]->init();
     }
 
-    // unique_name = "<name>#<occurrence>" (e.g. Moment#0, Moment#1) matches operators across solves for
-    // warm starting; rebuilding the problem in the same order reproduces the names.
+    // unique_name matches operators across solves for warm starting; rebuilding the problem in the same
+    // order reproduces the names.
     {
-        std::map<std::string, int> name_counts;
-        for (auto &op : all_op) {
-            op->unique_name = op->name + "#" + std::to_string(name_counts[op->name]++);
+        const std::vector<std::string> keys = get_op_keys();
+        for (size_t i = 0; i < all_op.size(); i++) {
+            all_op[i]->unique_name = keys[i];
         }
     }
 
-    // Build the equality projector from operators with use_projection. If any of their rows depend on the
-    // iterate (eq_rows_vary), the solver rebuilds it every outer iteration.
+    // Equality projector for use_projection ops; dynamic if any op's rows depend on the iterate.
     {
         bool any_proj = false;
         eq_proj_dynamic = false;
@@ -370,6 +369,16 @@ void GroptParams::prepare() {
     spdlog::trace("GroptParams::prepare() end");
 }
 
+std::vector<std::string> GroptParams::get_op_keys() const {
+    std::map<std::string, int> name_counts;
+    std::vector<std::string> keys;
+    keys.reserve(all_op.size());
+    for (const auto &op : all_op) {
+        keys.push_back(op->name + "#" + std::to_string(name_counts[op->name]++));
+    }
+    return keys;
+}
+
 void GroptParams::add_gmax(double gmax, bool rot_variant, double weight_mod) {
     all_op.push_back(std::make_unique<Op_Gradient>(pdata, gmax, rot_variant, weight_mod));
 }
@@ -387,7 +396,6 @@ void GroptParams::add_smax_vec(const Eigen::VectorXd &smax_vec, bool rot_variant
 }
 
 void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
-    // Stack every operator's linear-equality rows (linearized at x0) and build the projector.
     std::vector<Eigen::VectorXd> rows;
     std::vector<double> targets;
     for (auto &op : all_op) {
@@ -491,7 +499,7 @@ void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop
         op->linearize_obj = linearize;    // -||A x||^2 is concave: linearize into the RHS (DCA)
         all_obj.push_back(std::move(op)); // maximized via obj_weight = -weight_mod
     } else {
-        all_op.push_back(std::move(op)); // enforce b-value as a constraint
+        all_op.push_back(std::move(op));
     }
 }
 

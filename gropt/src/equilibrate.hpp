@@ -7,7 +7,7 @@
 
 namespace Gropt {
 
-class Operator; // Forward declaration
+class Operator;
 
 enum class NormType { L2, Inf };
 

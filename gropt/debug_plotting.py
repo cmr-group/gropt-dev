@@ -1,8 +1,8 @@
 """Interactive / diagnostic plots for the gropt solver's debug history.
 
-Everything here consumes the dict returned by ``solver.get_debug()`` (populated
-only when ``solver.extra_debug = True`` before ``solve()``). Plotting backends
-(matplotlib, plotly, ipywidgets) are imported lazily, so they stay optional.
+All functions take the dict from ``solver.get_debug()``, populated only when
+``solver.extra_debug = True`` before ``solve()``. Plotting backends are imported
+lazily, so they stay optional.
 
 Typical use in a notebook::
 
@@ -178,10 +178,9 @@ def scrub_hist_X(debug, Naxis=1, dt=None, show_slew=True, subsample=1):
 def scrub_hist_X_widget(debug, Naxis=1, dt=None, show_slew=True, continuous=True, width=1000):
     """Kernel-backed plotly FigureWidget scrubber over hist_X, for long runs.
 
-    Unlike :func:`scrub_hist_X`, which embeds every frame in the cell output,
-    this keeps the history in Python and each slider step patches only the
-    current frame's data (``fig.batch_update()``), so the per-step cost does not
-    grow with the number of iterations.
+    Unlike :func:`scrub_hist_X`, the history stays in Python and each slider
+    step patches only the current frame, so output size and per-step cost do
+    not grow with the number of iterations.
 
     Parameters
     ----------
@@ -257,7 +256,7 @@ def scrub_hist_X_widget(debug, Naxis=1, dt=None, show_slew=True, continuous=True
 
     def on_change(change):
         i = change["new"]
-        with fig.batch_update():  # patch only this frame's data
+        with fig.batch_update():
             for j in range(Naxis):
                 fig.data[j].y = g[i, j]
             if slew:
@@ -272,9 +271,8 @@ def scrub_hist_X_widget(debug, Naxis=1, dt=None, show_slew=True, continuous=True
 def scrub_hist_X_mpl(debug, Naxis=1, dt=None, show_slew=True):
     """Matplotlib scrubber over hist_X (inline backend + ipywidgets).
 
-    Redraws each frame from scratch on the inline backend, so it does not need
-    ``%matplotlib widget`` (ipympl). Less smooth than :func:`scrub_hist_X`, but
-    needs only ``matplotlib`` and ``ipywidgets``.
+    Redraws each frame from scratch, so it does not need ``%matplotlib widget``
+    (ipympl). Less smooth than :func:`scrub_hist_X`, but needs no plotly.
 
     Parameters
     ----------

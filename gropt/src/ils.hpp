@@ -19,7 +19,7 @@ class IndirectLinearSolver
         std::chrono::steady_clock::time_point start_time;
         std::chrono::steady_clock::time_point stop_time;
         std::chrono::duration<double, std::micro> elapsed_us;
-        // Per-solve histories; hist_n_iter[0] is a -1 placeholder.
+        // Per-solve histories; only hist_n_iter has a leading -1 placeholder.
         std::vector<int> hist_n_iter;
         std::vector<double> hist_rnorm0;  // initial residual ||b - A x0||
         std::vector<double> hist_rnorm;  // final residual

@@ -91,8 +91,7 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
 }
 
 WarmStart Solver::capture_warmstart(const Eigen::VectorXd &X) {
-    // Snapshot X and each operator's y1, weight and gamma, keyed by unique_name with its Ax-block layout.
-    // z is not stored; it is regenerated as A*X on load.
+    // Stores y1 (not z, which is regenerated as A*X on load), keyed by unique_name with its Ax-block layout.
     WarmStart w;
     if (gparams == nullptr) return w;
     w.active = true;

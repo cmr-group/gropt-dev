@@ -4,9 +4,8 @@
 //   gropt recipes.json             -> the first recipe in that library file
 //   gropt recipes.json best_pns_1  -> that named recipe
 //
-// A Problem (timing, hardware limits, which constraints exist) is fixed below; a Recipe (weights, x0
-// seed, solver settings) is overlaid from JSON or default_recipe(). The JSON format is the one written
-// by gropt.diffusion_recipes.save_recipe.
+// The Problem (timing, limits, constraints) is fixed below; the Recipe (weights, x0 seed, solver settings)
+// comes from a gropt.diffusion_recipes.save_recipe JSON or default_recipe().
 #include <cmath>
 #include <fstream>
 #include <stdexcept>
@@ -41,8 +40,8 @@ std::vector<std::vector<double>> to_rows(const std::vector<Eigen::VectorXd> &v) 
 
 void save_debug(Solver &solver) {  // needs solver.extra_debug = true to have populated history
     H5Easy::File f("debug_output.h5", H5Easy::File::Overwrite);
-    H5Easy::dump(f, "/hist_x", to_rows(solver.debug_solver.hist_X));  // 2D dataset (iters x N)
-    H5Easy::dump(f, "/hist_cg_iter", solver.debug_solver.hist_cg_iter);  // std::vector<int>
+    H5Easy::dump(f, "/hist_x", to_rows(solver.debug_solver.hist_X));
+    H5Easy::dump(f, "/hist_cg_iter", solver.debug_solver.hist_cg_iter);
     spdlog::info("wrote debug_output.h5");
 }
 #endif
@@ -50,7 +49,7 @@ void save_debug(Solver &solver) {  // needs solver.extra_debug = true to have po
 // ===================================================================================================
 // SAFE (PNS / cardiac) coefficient tables
 // ===================================================================================================
-// One SAFE table: 8 vectors of length 3 (axes x,y,z). tau in seconds.
+// One entry per axis (x, y, z); tau [s].
 struct SafeCoeffs {
     Eigen::VectorXd tau1{3}, tau2{3}, tau3{3}, a1{3}, a2{3}, a3{3}, stim_limit{3}, g_scale{3};
 };

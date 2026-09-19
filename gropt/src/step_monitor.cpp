@@ -36,8 +36,7 @@ StepDecision FeasibilityMonitor::check(GroptParams &gp, const Eigen::VectorXd &x
         v_old += op->constraint_violation(x_old);
         v_new += op->constraint_violation(x_new);
     }
-    // Accept unless the violation grew past max(previous, tol); catches both the objective creeping past a
-    // constraint and outright blow-ups.
+    // Catches both the objective creeping past a constraint and outright blow-ups.
     if (v_new <= std::max(v_old, tol)) {
         return {true, 1.0, v_new};
     }

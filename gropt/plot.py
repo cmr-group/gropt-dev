@@ -116,7 +116,7 @@ def get_bval(g, dt, inv_vec=None, TE=0, start_idx=0):
         tINV = int(np.floor(TE / dt / 2.0))
         inv_vec[tINV:] = -1
 
-    GAMMA = 42.58e3
+    GAMMA = 42.58e3  # 42.58e6 Hz/T scaled by 1e-3 so b comes out in s/mm^2
 
     Gt = 0
     bval = 0
@@ -159,7 +159,6 @@ def plot_diff(cfg, res, cols=2, figsize=None, dpi=80, savename=None, highlight_r
     tINV = start_idx + int(np.floor(cfg.TE / dt / 2.0))
     inv_vec[tINV:] = -1
 
-    # Which panels to draw
     to_plot = ['gradient', 'slew', 'moments']
 
     stim = []
@@ -335,8 +334,8 @@ def plot_waves(
         ``gropt.get_random_safe_params()``), ``MMT`` (default 4), and RF timing (``T_pre``, ``T_90``,
         ``T_180``).
     highlight_rf : bool, optional
-        Shade the 90/180 RF windows. Requires ``mode='diff'``, ``TE > 0``, and ``T_90`` and ``T_180``
-        in ``params``.
+        Shade the 90/180 RF windows. Only applies with ``mode='diff'``, ``TE > 0``, and ``T_90`` /
+        ``T_180`` in ``params``.
     figsize, dpi, savename : optional
         Passed through to matplotlib; ``savename`` saves and closes instead of showing.
     """
@@ -388,8 +387,10 @@ def plot_waves(
         figsize= (N_cols * 5.0, N_rows * 3.0)
     f, axarr = plt.subplots(N_rows, N_cols, squeeze=False, figsize=figsize, layout='tight', dpi = dpi)
 
-    # Diffusion Title String
-    # ======================================
+    # RF windows [s] for shading; stay 0 (no shading) unless set below
+    t_90_start = t_90_end = t_180_start = t_180_end = 0.0
+
+    # diffusion title
     if mode == 'diff':
         label = ''
 
@@ -397,14 +398,13 @@ def plot_waves(
             label += f'TE: {1000 * TE:.2f} ms  ---  '
 
         bval = get_bval(g, dt, inv_vec, start_idx=start_idx)
-        label += f'b-value: {bval:.2f} $mm^2/s$  ---  '
+        label += f'b-value: {bval:.2f} $s/mm^2$  ---  '
 
         c_ratio = get_concomitant(g, dt, inv_vec, start_idx=start_idx)
         label += f'concomitant ratio: {c_ratio:.2f}'
 
         f.suptitle(label)
 
-        # RF windows [s], used for shading
         if TE > 0 and 'T_180' in params:
             if 'T_pre' in params:
                 t_start = params['T_pre']

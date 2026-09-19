@@ -16,7 +16,7 @@
 namespace Gropt
 {
 
-    class Op_BValue; // forward decl (record_debug reads the achieved b-value)
+    class Op_BValue;
 
     class SolverGroptSDMM : public Solver
     {
@@ -39,19 +39,18 @@ namespace Gropt
         int grw_min_infeasible = 20;
         int grw_interval = 20;
         double grw_mod = 2.0;
-        // true: rescale all constraint weights after each bump to keep their geometric mean fixed.
-        // false (default): only raise the worst one; more aggressive, can drown out the objective.
+        // Rescale all constraint weights after each bump to keep their geometric mean fixed; false raises
+        // just the worst one (more aggressive, can drown out the objective).
         bool grw_balanced = false;
 
         // Re-project the over-relaxed iterate onto the equality surface every outer iteration.
         bool reproject_iterate = true;
 
-        // Low-frequency projection (fft_tools): each outer iteration, low-pass the iterate at cutoff_freq [Hz]
-        // with a per-free-run DST-I to suppress high-frequency oscillation. <= 0 disables.
+        // Low-pass the iterate at cutoff_freq [Hz] each outer iteration (per-free-run DST-I, fft_tools) to
+        // suppress high-frequency oscillation; <= 0 disables.
         double cutoff_freq = -1.0;
-        int cutoff_iter = -1;
-        // Raised-cosine roll-off width as a fraction of the cutoff bin; 0 = brick wall. Wider suppresses more
-        // near-cutoff oscillation but strips harmonics that keep plateaus flat, so ripple can go either way.
+        int cutoff_iter = -1; // apply only while iiter < cutoff_iter (< 0 = always)
+        // Raised-cosine roll-off width, fraction of the cutoff bin (0 = brick wall).
         double cutoff_trans = 0.0;
 
         // Trust-region step control (default off): when the StepMonitor rejects an inner-CG step, re-solve
@@ -63,9 +62,7 @@ namespace Gropt
         double tr_decay = 0.5;    // sigma relaxation toward ils_sigma on an accepted step
         std::string tr_monitor = "linearization_error";
 
-        // Feasibility-gated objective (default off): each outer iteration the objective pull is scaled by
-        // exp(-violation / obj_gate_scale), violation = sum of Operator::constraint_violation over all_op.
-        // Only Op_SAFE implements constraint_violation, so the gate currently reacts to PNS/CNS only.
+        // Scale the objective pull by exp(-Σ constraint_violation / obj_gate_scale); only Op_SAFE reports violation.
         bool obj_gate_enable = false;
         double obj_gate_scale = 0.05;
 

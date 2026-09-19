@@ -37,8 +37,7 @@ void Op_Concomitant::append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vec
                                     const Eigen::VectorXd &x0) const {
     if (!use_projection) return;
 
-    // Linearize c = pos - target*neg at x0: c(x0) + a·(x - x0) = 0 with a = grad c(x0), and since c is
-    // quadratic a·x0 = 2 c(x0), so the row is a·x = c(x0).
+    // c is quadratic, so a·x0 = 2 c(x0) and the linearization c(x0) + a·(x - x0) = 0 becomes a·x = c(x0).
     Eigen::VectorXd a = Eigen::VectorXd::Zero(x0.size());
     double pos = 0.0;
     double neg = 0.0;

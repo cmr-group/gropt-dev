@@ -26,16 +26,12 @@ NB_MODULE(gropt_wrapper, m) {
     m.def("set_log_level", [](int level) {
       spdlog::set_level(static_cast<spdlog::level::level_enum>(level));
     }, "level"_a,
-R"doc(Set the log level for the C++ gropt library.
-
-Uses spdlog/Python logging convention: lower = more verbose.
-
-Level mapping: 0=Trace, 1=Debug, 2=Info, 3=Warning, 4=Error, 5=Critical, 6=Off.
+R"doc(Set the log level for the C++ gropt library (lower = more verbose).
 
 Parameters
 ----------
 level : int
-    Log level (0–6).)doc");
+    0=Trace, 1=Debug, 2=Info, 3=Warning, 4=Error, 5=Critical, 6=Off.)doc");
 
     m.def("set_log_callback", [](nb::callable cb) {
         auto sink = std::make_shared<spdlog::sinks::callback_sink_mt>(
@@ -103,10 +99,7 @@ bvalue : float
     // GroptParams
     // -------------------------------------------------------
     nb::class_<Gropt::GroptParams>(m, "GroptParams",
-R"doc(Problem definition for GrOpt gradient optimization.
-
-This class holds the waveform dimensions, constraints, and objectives
-that define a gradient optimization problem.)doc"
+R"doc(Problem definition: waveform layout, constraints, and objectives.)doc"
     )
         .def(nb::init<>())
 
@@ -122,29 +115,24 @@ that define a gradient optimization problem.)doc"
         .def_prop_rw("dt",
             [](Gropt::GroptParams &self) { return self.dt; },
             [](Gropt::GroptParams &self, double val) { self.dt = val; },
-            "Raster time in seconds.")
+            "Raster time [s].")
         .def_rw("normalize_obj", &Gropt::GroptParams::normalize_obj,
-            "If True, normalize the pull of each linearized objective (e.g. add_bvalue with "
-            "as_objective=True) to a unit direction, so its magnitude is set by the objective weight "
-            "(weight_mod) instead of growing with ||AᵀA x||. The weight then acts as a step-size "
-            "knob. Default False.")
+            "If True, scale each linearized objective's pull (e.g. add_bvalue with as_objective=True) "
+            "to unit norm times its weight, so weight_mod acts as a step size. Default False.")
 
         .def_rw("eq_proj_solver", &Gropt::GroptParams::eq_proj_solver,
-            "Linear solver for the equality projection used by project=True constraints. "
-            "EqProjSolver.LDLT (default) is fast and precise but fails on singular or collinear rows. "
-            "EqProjSolver.COD is a rank-revealing decomposition that handles near-collinear rows "
-            "(e.g. several eddy time constants).")
+            "Factorization for the project=True equality projection. EqProjSolver.LDLT (default): fast, "
+            "but fails on singular or collinear rows. EqProjSolver.COD: rank-revealing, handles "
+            "near-collinear rows (e.g. several eddy time constants).")
 
         .def_rw("eq_proj_rcond", &Gropt::GroptParams::eq_proj_rcond,
             "Rank tolerance for EqProjSolver.COD: singular values below eq_proj_rcond times the largest "
             "are dropped; <= 0 uses Eigen's default. Ignored by LDLT. Default 1e-10.")
 
         .def_rw("safe_eps", &Gropt::GroptParams::safe_eps,
-            "Smoothing [T/m/s] for the |.| in SAFE (PNS) operators: |v| -> sqrt(v^2 + eps^2), which "
-            "makes their linearization continuous where the filtered slew crosses zero. 0 (default) = "
-            "exact abs. Slightly conservative, since sqrt(v^2 + eps^2) >= |v|. Copied into each SAFE "
-            "operator by add_SAFE/add_SAFE_vec, so set it first. A few percent of smax is a reasonable "
-            "start (e.g. 1-5 for smax = 200).")
+            "Softabs smoothing [T/m/s] for SAFE |.|: sqrt(v^2 + eps^2), slightly conservative; "
+            "0 = exact (default). Set before add_SAFE/add_SAFE_vec; try ~1% of smax (e.g. 1-5 for "
+            "smax = 200).")
 
         // vec_init_simple
         .def("vec_init_simple", &Gropt::GroptParams::vec_init_simple,
@@ -157,9 +145,9 @@ last_val (all other points free), and sets X0 to 0.01 at the free points.
 Parameters
 ----------
 N : int, optional
-    Number of points in a single axis. Negative values use existing value.
+    Number of points per axis; <= 0 keeps the current value.
 Naxis : int, optional
-    Number of axes. Negative values use existing value.
+    Number of axes; <= 0 keeps the current value.
 first_val : float, optional
     Fixed value for the first point [T/m].
 last_val : float, optional
@@ -169,66 +157,63 @@ last_val : float, optional
         // diff_init
         .def("diff_init", &Gropt::GroptParams::diff_init,
             "dt"_a = 400e-6, "TE"_a = 80e-3, "T_90"_a = 3e-3, "T_180"_a = 5e-3, "T_readout"_a = 16e-3,
-R"doc(Initialize diffusion sequence parameters.
+R"doc(Initialize a single-axis spin-echo diffusion layout (N, inv_vec, fixed RF blocks, X0).
 
 Parameters
 ----------
 dt : float, optional
-    Raster time in seconds.
+    Raster time [s].
 TE : float, optional
-    Echo time in seconds.
+    Echo time [s].
 T_90 : float, optional
-    Duration of excitation RF pulse in seconds (time from excitation,
-    so half of full RF pulse duration).
+    Excitation RF time after t = 0 [s] (half the full pulse duration).
 T_180 : float, optional
-    Duration of refocusing RF pulse in seconds.
+    Refocusing RF pulse duration [s], centered at TE/2.
 T_readout : float, optional
-    Time to TE of the readout in seconds.)doc"
+    Readout time before TE [s]; the waveform ends at TE - T_readout.)doc"
         )
 
         // diff_init_deadtime
         .def("diff_init_deadtime", &Gropt::GroptParams::diff_init_deadtime,
             "dt"_a = 400e-6, "TE"_a = 80e-3, "T_90"_a = 3e-3, "T_180"_a = 5e-3, "T_readout"_a = 16e-3,
-R"doc(Initialize diffusion sequence parameters with dead time for "conventional" waveforms.
+R"doc(Like diff_init, with dead time for "conventional" waveforms.
 
-Like diff_init, but the part of the pre-180 period that exceeds the post-180
-period is fixed to zero (dead time), so both sides have the same free duration.
+The part of the pre-180 period that exceeds the post-180 period is fixed to
+zero, so both sides have the same free duration.
 
 Parameters
 ----------
 dt : float, optional
-    Raster time in seconds.
+    Raster time [s].
 TE : float, optional
-    Echo time in seconds.
+    Echo time [s].
 T_90 : float, optional
-    Duration of excitation RF pulse in seconds (time from excitation,
-    so half of full RF pulse duration).
+    Excitation RF time after t = 0 [s] (half the full pulse duration).
 T_180 : float, optional
-    Duration of refocusing RF pulse in seconds.
+    Refocusing RF pulse duration [s], centered at TE/2.
 T_readout : float, optional
-    Time to TE of the readout in seconds.)doc"
+    Readout time before TE [s]; the waveform ends at TE - T_readout.)doc"
         )
 
         // diff_init_preencode
         .def("diff_init_preencode", &Gropt::GroptParams::diff_init_preencode,
             "dt"_a = 400e-6, "TE"_a = 80e-3, "T_90"_a = 3e-3, "T_180"_a = 5e-3, "T_readout"_a = 16e-3, "T_pre"_a = 0.0,
-R"doc(Initialize diffusion sequence parameters with a pre-encoding period.
+R"doc(Like diff_init, with a free pre-encoding period prepended.
 
 Parameters
 ----------
 dt : float, optional
-    Raster time in seconds.
+    Raster time [s].
 TE : float, optional
-    Echo time in seconds.
+    Echo time [s].
 T_90 : float, optional
-    Duration of excitation RF pulse in seconds (time from excitation,
-    so half of full RF pulse duration).
+    Excitation RF time after t = 0 [s] (half the full pulse duration).
 T_180 : float, optional
-    Duration of refocusing RF pulse in seconds.
+    Refocusing RF pulse duration [s], centered at TE/2.
 T_readout : float, optional
-    Time to TE of the readout in seconds.
+    Readout time before TE [s]; the waveform ends at TE - T_readout.
 T_pre : float, optional
-    Duration of the pre-encoding period in seconds.
+    Duration of the pre-encoding period [s].
 
 Returns
 -------
@@ -242,12 +227,12 @@ int
             Eigen::Map<const Eigen::VectorXd> x(X0.data(), X0.shape(0));
             self.setvec_X0(Eigen::VectorXd(x), 1, set_others);
         }, "X0"_a, "set_others"_a = true,
-R"doc(Set the initial waveform guess (1D).
+R"doc(Set the initial waveform guess (1D: single axis).
 
 Parameters
 ----------
 X0 : np.ndarray
-    Initial guess for the waveform (warm start) [T/m].
+    Initial guess [T/m], length N. Sets Naxis = 1.
 set_others : bool, optional
     If True, reset inv_vec to +1 and fix each axis's first and last points to
     their X0 values (all others free). Use False to keep a layout from diff_init.)doc"
@@ -264,7 +249,7 @@ R"doc(Set the initial waveform guess (2D: Naxis x N).
 Parameters
 ----------
 X0 : np.ndarray
-    Initial guess for the waveform (warm start) [T/m]. Shape (Naxis, N).
+    Initial guess [T/m], shape (Naxis, N).
 set_others : bool, optional
     If True, reset inv_vec to +1 and fix each axis's first and last points to
     their X0 values (all others free). Use False to keep a layout from diff_init.)doc"
@@ -276,19 +261,15 @@ set_others : bool, optional
             Eigen::Map<const Eigen::VectorXd> v(set_vals.data(), set_vals.shape(0));
             self.setvec_set_vals(Eigen::VectorXd(v), 1);
         }, "set_vals"_a,
-R"doc(Manually set the set_vals vector (1D), and update fixer from its NaN pattern.
+R"doc(Set the fixed-value vector set_vals (1D: single axis) and rebuild the fixer mask.
 
-NaN entries mark a point as free, finite entries lock the waveform to that value
-at that index. The fixer mask is rebuilt automatically (1.0 = free, 0.0 = fixed),
-and X0 is updated at the fixed positions to match.
-
-inv_vec is not changed; call vec_init_simple() (or one of the diff_init
-variants) first if you need it allocated.
+X0 is set to the fixed values at fixed points. inv_vec is not changed; call
+vec_init_simple() or a diff_init variant first if it is not allocated.
 
 Parameters
 ----------
 set_vals : np.ndarray
-    1D array of length N. NaN = free, finite value = fixed.)doc"
+    Length N; sets Naxis = 1. NaN = free, finite value = fixed to that value.)doc"
         )
 
         .def("setvec_set_vals", [](Gropt::GroptParams &self,
@@ -297,16 +278,14 @@ set_vals : np.ndarray
             Eigen::Map<const Eigen::VectorXd> flat(set_vals.data(), set_vals.size());
             self.setvec_set_vals(Eigen::VectorXd(flat), Naxis);
         }, "set_vals"_a,
-R"doc(Manually set the set_vals vector (2D: Naxis x N), and update fixer from its NaN pattern.
+R"doc(Set the fixed-value vector set_vals (2D: Naxis x N) and rebuild the fixer mask.
 
-NaN entries mark a point as free, finite entries lock the waveform to that value
-at that index. The fixer mask is rebuilt automatically, and X0 is updated at the
-fixed positions to match.
+X0 is set to the fixed values at fixed points. inv_vec is not changed.
 
 Parameters
 ----------
 set_vals : np.ndarray
-    2D array of shape (Naxis, N). NaN = free, finite value = fixed.)doc"
+    Shape (Naxis, N). NaN = free, finite value = fixed to that value.)doc"
         )
 
         // getvec_set_vals / getvec_fixer / getvec_inv_vec / getvec_X0 — flat 1D copies
@@ -329,7 +308,7 @@ R"doc(Return a copy of the current initial-guess X0 (flat, length Naxis*N).)doc"
 R"doc(Set the inner (indirect) linear solver.
 
 Only CG applies the equality projection used by project=True constraints; with
-NLCG or BiCGstabl those constraints are enforced only by reproject_iterate.
+NLCG or BiCGstabl they are enforced only by reproject_iterate (slower).
 
 Parameters
 ----------
@@ -362,11 +341,9 @@ Parameters
 ----------
 gmax_vec : np.ndarray
     Gradient amplitude limit at each location [T/m]. Length N is broadcast
-    across all axes; length Naxis*N sets a per-axis limit. Only supported
-    with rot_variant=True.
+    across all axes; length Naxis*N sets a per-axis limit.
 rot_variant : bool, optional
-    Must be True. A vector limit on the gradient magnitude across axes is
-    not supported.
+    Must be True; a rotationally invariant vector limit is not supported.
 weight_mod : float, optional
     Weighting factor for this constraint.)doc"
         )
@@ -376,41 +353,30 @@ weight_mod : float, optional
         .def("add_concomitant", &Gropt::GroptParams::add_concomitant,
             "start_idx"_a = 0, "rot_variant"_a = true, "weight_mod"_a = 1.0, "tol0"_a = 0.1,
             "target"_a = 1.0, "project"_a = false,
-R"doc(Add a concomitant constraint.
+R"doc(Add a concomitant (pre/post-180 energy balance) constraint.
 
-Balances the gradient energy integral (sum of g^2 * dt) before and after the
-180: constrains the ratio pos/neg to `target` (default 1 = balanced) within tol0.
-This is a nonconvex quadratic constraint: by default a soft ADMM constraint, or
-with project=True a relinearized equality projection.
-
-The prox is the true Euclidean projection onto the feasible band: if the ratio
-is inside the band it is left alone; otherwise the pre/post blocks are scaled by
-minimal displacement onto the nearest boundary cone (reduces to the arithmetic
-mean of the two block norms for exact equality).
+Constrains the ratio pos/neg of the gradient energy sum(g^2 * dt) before (pos)
+and after (neg) the 180 to target +/- tol0. The constraint is nonconvex: a soft
+ADMM constraint by default, or a relinearized equality projection with
+project=True. The prox is the exact projection onto the ratio band.
 
 Parameters
 ----------
 start_idx : int, optional
     Index where the pre/post energy sums start (0 = beginning).
 rot_variant : bool, optional
-    Currently ignored; the energy balance is always computed across all axes.
+    Ignored; the balance is always computed across all axes.
 weight_mod : float, optional
     Weighting factor for this constraint.
 tol0 : float, optional
-    Fractional tolerance on the pre/post energy ratio (feasible when
-    |pos/neg - target| <= tol0). The prox aims for a cushioned (tighter) band so
-    the solver reaches tol0 with margin. The dt in the energy integral cancels
-    in this ratio for uniform dt.
+    Tolerance on the ratio: feasible when |pos/neg - target| <= tol0.
 target : float, optional
-    Target pre/post energy ratio pos/neg (default 1.0 = balanced). The prox aims
-    for pos/neg = target +/- tol; the projection enforces the linearized
-    pos - target*neg = 0.
+    Target ratio pos/neg (default 1.0 = balanced). With project=True the
+    linearized pos - target*neg = 0 is enforced.
 project : bool, optional
-    If True, enforce the constraint via the equality null-space projection
-    instead of as a soft ADMM constraint. The nonconvex energy balance is
-    linearized at the current iterate each outer iteration (SQP) and projected
-    jointly with any projected moments, so the prox is not used. weight_mod is
-    then irrelevant and tol0 only sets the feasibility check.)doc"
+    If True, enforce the linearized (SQP) balance via the equality projection
+    each outer iteration; weight_mod is unused and tol0 only sets the
+    feasibility check.)doc"
         )
 
         // add_smax
@@ -438,11 +404,9 @@ Parameters
 ----------
 smax_vec : np.ndarray
     Slew-rate limit at each location [T/m/s]. Length (N-1) is broadcast
-    across all axes; length Naxis*(N-1) sets a per-axis limit. Only
-    supported with rot_variant=True.
+    across all axes; length Naxis*(N-1) sets a per-axis limit.
 rot_variant : bool, optional
-    Must be True. A vector limit on the slew magnitude across axes is
-    not supported.
+    Must be True; a rotationally invariant vector limit is not supported.
 weight_mod : float, optional
     Weighting factor for this constraint.)doc"
         )
@@ -461,27 +425,27 @@ order : int, optional
 target : float, optional
     Target moment value, in `units`.
 tol : float, optional
-    Tolerance in M0 units (`units` at order 0). Order k uses tol * ||A_k|| / ||A_0||,
-    the ratio of the moment row norms over the window, unless absolute_tol=True. With
-    project=True the moment is projected onto the target and tol only sets the
-    feasibility check.
+    Tolerance in `units` at order 0. For order k it is scaled by ||A_k|| / ||A_0||
+    (moment-row norms over the window) unless absolute_tol=True. With
+    project=True it only sets the feasibility check.
 units : str, optional
-    Units: 'mT*ms/m', 'T*s/m', 'rad*s/m', or 's/m'.
+    'mT*ms/m', 'T*s/m', 'rad*s/m', or 's/m'.
 axis : int, optional
-    Axis for moment calculation.
+    Axis index.
 start_idx : int, optional
     Starting index (-1 = beginning).
 stop_idx : int, optional
     Stopping index (-1 = end).
 ref_idx : int, optional
-    Reference index (t=0 for moment calculations).
+    Index taken as t = 0 for the moment.
 weight_mod : float, optional
     Weighting factor for this constraint.
 project : bool, optional
-    Enforce the moment via exact null-space projection instead of an ADMM penalty.
+    If True, enforce the moment exactly by null-space projection instead of an
+    ADMM penalty.
 absolute_tol : bool, optional
-    If True, tol is an absolute bound in this order's own units (e.g. for a
-    nonzero M2 target). Default False (tol scaled from M0 as described above).)doc"
+    If True, tol is in this order's own units instead of scaled from M0 (e.g.
+    for a nonzero M2 target). Default False.)doc"
         )
 
         // add_SAFE
@@ -580,29 +544,25 @@ weight_mod : float, optional
             }
             self.add_eddy(lam, tol, weight_mod, project);
         }, "lam"_a, "tol"_a = .0001, "weight_mod"_a = 1.0, "project"_a = false,
-R"doc(Add an eddy current constraint (residual eddy current at the end of the waveform).
+R"doc(Add an eddy-current constraint on the residual eddy term at the end of the waveform.
 
-The target is always 0. With project=False (default) it is a soft box constraint
-|eddy| <= tol per time constant; with project=True the eddy term is held at 0 by
-the null-space equality projection (like add_moment) inside the CG step instead
-of an ADMM penalty.
+The target is 0: a soft box |eddy| <= tol per time constant by default, or held
+at 0 by the equality projection (like add_moment) with project=True.
 
 Parameters
 ----------
 lam : float or np.ndarray
-    Time constant(s) for eddy currents [seconds]. A single float is treated
-    as a one-element array. One row is added per (axis, time constant).
+    Time constant(s) [s]. One row is added per (axis, time constant).
 tol : float, optional
     Box half-width on the residual eddy term. With project=True it only sets the
     feasibility check.
 weight_mod : float, optional
-    Weighting factor for this constraint (constraint form only).
+    Weighting factor for this constraint (project=False only).
 project : bool, optional
-    If True, enforce eddy == 0 by null-space projection instead of the soft box
-    constraint. Keep the number of time constants small, since many projected
-    equalities (plus moments/concomitant) can over-constrain the free points.
-    Close time constants give nearly collinear rows; use
-    eq_proj_solver = EqProjSolver.COD in that case.)doc"
+    If True, enforce eddy == 0 by null-space projection. Keep the number of time
+    constants small, since many projected equalities (plus moments/concomitant)
+    can over-constrain the free points. Close time constants give nearly
+    collinear rows; use eq_proj_solver = EqProjSolver.COD in that case.)doc"
         )
 
         // add_bvalue
@@ -649,11 +609,9 @@ max_scale : float, optional
 as_objective : bool, optional
     If True, maximize the b-value as an objective instead of constraining it.
 linearize : bool, optional
-    Objective only. If True (default), the objective enters as a
-    linearized gradient in the RHS (convex-concave/DCA), keeping the CG
-    matrix positive-definite (recommended). If False, it enters as
-    curvature in the LHS; this is experimental and can make the CG system
-    indefinite, so watch for CG breakdown.)doc"
+    Objective only. True (default, recommended): linearized into the RHS
+    (DCA), keeping the CG system positive-definite. False (experimental):
+    enters as curvature in the LHS, which can make the CG system indefinite.)doc"
         )
 
         // add_diff_basin
@@ -668,10 +626,8 @@ Requires the mean gradient in a short window on each side of the 180 to satisfy
 
 with eps = eps_factor * gmax. The 180 is located from the inv_vec sign flip, and
 each window takes round(window_time / dt) free samples on its side, skipping the
-fixed RF block. This selects which sign pattern b-value maximization converges
-to and breaks its +/- symmetry. Keep eps_factor small so the constraint is
-inactive at the optimum and does not bias the result. Enforced as a soft ADMM
-constraint.
+fixed RF block. Use it to pick which sign pattern b-value maximization converges
+to. Keep eps_factor small so the constraint is inactive at the optimum.
 
 Parameters
 ----------
@@ -699,19 +655,17 @@ any X0 seed orientation consistent with that.)doc"
             "tv_lam"_a = 0.0, "weight_mod"_a = 1.0, "order"_a = 1,
 R"doc(Add a total-variation (L1) penalty on a finite difference of the gradient.
 
-Minimizes tv_lam * ||D g||_1, where D g is the physical slew [T/m/s] (order 1)
-or jerk [T/m/s^2] (order 2). This is a penalty, not a constraint: it never
-affects feasibility and is not used to select the returned iterate, so in a
-problem with no other objective the result depends on min_iter.
-
-Because the penalty is in physical units, useful tv_lam values are small and
-depend on dt (e.g. ~1e-9 to 1e-6 for order 2 at dt = 400 us against a b-value
-objective). Above that range the solution saturates at the minimum-TV waveform.
+Minimizes tv_lam * ||D g||_1, where D g is the slew [T/m/s] (order 1) or jerk
+[T/m/s^2] (order 2). It is a penalty, not a constraint: it never affects
+feasibility or the choice of returned iterate, so with no other objective the
+result depends on min_iter. tv_lam is in physical units, so useful values are
+small and dt-dependent (e.g. 1e-9 to 1e-6 for order 2 at 400 us against a
+b-value objective; larger values saturate at the minimum-TV waveform).
 
 Parameters
 ----------
 tv_lam : float, optional
-    Penalty weight on ||D g||_1 in physical units; must be > 0 to have effect.
+    Penalty weight; must be > 0 to have effect.
 weight_mod : float, optional
     Initial ADMM weight (rho). Affects convergence, not the penalty strength.
 order : int, optional
@@ -733,25 +687,22 @@ weight_mod : float, optional
 
         // prepare
         .def("prepare", &Gropt::GroptParams::prepare,
-R"doc(Prepare the problem for solving.
+R"doc(Initialize all operators for the current layout.
 
-Allocates vectors and sets up initial optimization variables.
-Automatically called by solve() if not already done.)doc"
+solve() calls this automatically if N changed or operators were added since
+the last prepare().)doc"
         )
 
         // print_op_details
         .def("print_op_details", &Gropt::GroptParams::print_op_details,
-R"doc(Print details of all operators.
-
-Prints each constraint and objective operator's type and parameters.)doc"
+R"doc(Log each constraint and objective operator's type and parameters (at Info level).)doc"
         )
 
         
         // reset_op_weights
         .def("reset_op_weights", &Gropt::GroptParams::reset_op_weights,
-R"doc(Reset the spectral-norm estimates of all operators to 1.0.
+R"doc(Set spec_norm and spec_norm2 to 1.0 on every constraint and objective operator.
 
-Sets spec_norm and spec_norm2 to 1.0 on every operator in all_op and all_obj.
 weight_mod is not changed.)doc"
         )
 
@@ -765,24 +716,14 @@ weight_mod is not changed.)doc"
         },
 R"doc(Return the constraint-operator names, in all_op order.
 
-The order matches the per-operator index in the solver debug
-histories (hist_weight, hist_gamma, hist_r_feas, hist_feas,
-hist_con_pull_op), so the returned list can be used directly as plot
-labels. hist_r_prim and hist_r_dual skip operators with project=True.)doc"
+This is the per-operator order of the Solver.get_debug() histories, so the list
+can be used directly as plot labels.)doc"
         )
 
-        .def("get_op_keys", [](Gropt::GroptParams &self) {
-            if (self.needs_prepare()) self.prepare(); // unique_name is assigned in prepare()
-            std::vector<std::string> keys;
-            for (auto &op : self.all_op) {
-                keys.push_back(op->unique_name);
-            }
-            return keys;
-        },
+        .def("get_op_keys", &Gropt::GroptParams::get_op_keys,
 R"doc(Return each constraint operator's unique key ("<name>#<occurrence>"), in all_op order.
 
-These are the keys warm-start snapshots use to match operators between solves.
-Calls prepare() first if needed.)doc"
+These are the keys warm-start snapshots use to match operators between solves.)doc"
         );
     
     
@@ -845,8 +786,8 @@ Calls prepare() first if needed.)doc"
         },
 R"doc(Return the debug histories of the last solve() as a dict.
 
-Only populated when extra_debug=True before solve(). History lists have one
-entry per outer iteration unless noted. Per-operator lists are ordered like
+Only populated when extra_debug=True before solve(). Lists have one entry per
+outer iteration unless noted. Per-operator lists are ordered like
 GroptParams.get_op_names(), except hist_r_prim and hist_r_dual, which skip
 operators with project=True.
 
@@ -872,7 +813,8 @@ dict with keys:
     hist_cg_iter, hist_cg_rnorm0, hist_cg_rnorm, hist_cg_bnorm0
         inner-solver diagnostics, one entry per inner solve (trust-region
         re-solves add entries): iterations taken, initial/final residual norm,
-        and ||b||. hist_cg_iter[0] is a -1 placeholder for iteration 0.
+        and ||b||. Only hist_cg_iter has a leading -1 placeholder, so
+        hist_cg_iter[i+1] pairs with hist_cg_rnorm[i].
     hist_obj_pull, hist_con_pull
         objective-vs-constraint balance: norm of the linearized-objective RHS
         pull and of the total constraint pull ||Σ Aᵀy||.
@@ -906,8 +848,7 @@ R"doc(Capture a warm-start snapshot from the last solve().
 
 Returns the state at the returned (best-feasible) iterate, or at the final
 iterate if none was feasible, as a plain, picklable dict. Pass it to
-set_warmstart() before the next solve(). The consensus z is not stored; it is
-regenerated as z = A x on load.
+set_warmstart() before the next solve().
 
 Returns
 -------
@@ -946,16 +887,14 @@ dict with keys:
         }, "warmstart"_a,
 R"doc(Load a warm-start snapshot (from get_warmstart()) for the next solve().
 
-The snapshot applies to the next solve() only; later solves start cold (from
-X0) unless this is called again.
+Applies to the next solve() only; later solves start cold from X0.
 
-The next solve() seeds the primal and each operator's dual, weight, and gamma
-from the snapshot, resizing across a grid change: free runs of the waveform are
-resampled, fixed runs come from the new set_vals, and each operator's dual is
-resampled block by block. Operators are matched by key (see get_op_keys()); an
-operator with no match (e.g. a newly added constraint) starts cold, so build the
-new GroptParams in the same operator order. If Naxis or the number of free runs
-per axis differs, the snapshot is ignored with a warning.
+Seeds the primal and each operator's dual, weight, and gamma. Across a grid
+change, free runs of the waveform and each dual block are resampled, and fixed
+runs come from the new set_vals. Operators are matched by key (see
+get_op_keys()), so add them in the same order; unmatched operators (e.g. a newly
+added constraint) start cold. If Naxis or the number of free runs per axis
+differs, the snapshot is ignored with a warning.
 
 Parameters
 ----------
@@ -983,9 +922,9 @@ gamma_x : float, optional
 max_feval : int, optional
     Maximum total inner (CG) iterations over the whole solve.
 obj_patience : int, optional
-    For objective problems, stop after this many feasible iterations with no
-    objective improvement (returns the best feasible iterate). Ignored when
-    there is no objective (returns on the first feasible iterate).)doc"
+    Objective problems: stop after this many feasible iterations with no
+    objective improvement and return the best feasible iterate. Without an
+    objective the first feasible iterate is returned.)doc"
         )
 
         .def("set_ils_params", &Gropt::Solver::set_ils_params,
@@ -1033,28 +972,22 @@ ils_tik_lam : float, optional
         .def_rw("grw_interval", &Gropt::SolverGroptSDMM::grw_interval, "grw: reweighting interval (iterations).")
         .def_rw("grw_mod", &Gropt::SolverGroptSDMM::grw_mod, "grw: multiplicative weight-bump factor.")
         .def_rw("grw_balanced", &Gropt::SolverGroptSDMM::grw_balanced,
-            "grw: if True, after bumping the worst constraint by grw_mod, divide every ADMM constraint "
-            "weight by grw_mod^(1/K) (K = number of ADMM constraints) so their geometric mean stays "
-            "fixed and the overall constraint scale relative to the objective is preserved. Default "
-            "False (only the worst constraint is raised).")
+            "grw: after a bump, divide all ADMM constraint weights by grw_mod^(1/K) (K = number of ADMM "
+            "constraints) to keep their geometric mean fixed. Default False.")
         .def_rw("reproject_iterate", &Gropt::SolverGroptSDMM::reproject_iterate,
-            "Re-project the over-relaxed iterate onto the equality (moment/eddy/concomitant) surface each "
-            "outer iteration (default True). False lets the iterate drift off that surface between inner "
-            "solves, which usually converges worse.")
+            "Re-project the over-relaxed iterate onto the equality constraints each outer iteration "
+            "(default True). NLCG/BiCGstabl require it when any constraint uses project=True.")
         .def_rw("cutoff_freq", &Gropt::SolverGroptSDMM::cutoff_freq,
-            "Low-frequency projection cutoff [Hz]; <= 0 disables. Each outer iteration the iterate is "
-            "low-passed at cutoff_freq with a per-free-run DST-I to suppress high-frequency oscillation.")
+            "Low-pass cutoff [Hz] applied to the iterate each outer iteration (per-free-run DST-I, see "
+            "low_freq_project) to suppress high-frequency oscillation; <= 0 disables (default).")
         .def_rw("cutoff_iter", &Gropt::SolverGroptSDMM::cutoff_iter,
             "Outer iteration at which the cutoff_freq projection stops; < 0 = project on every iteration.")
         .def_rw("cutoff_trans", &Gropt::SolverGroptSDMM::cutoff_trans,
-            "Raised-cosine roll-off width of the low-pass, as a fraction of the cutoff bin; 0 = brick wall "
-            "(default). A wider roll-off suppresses more near-cutoff oscillation but also strips harmonics "
-            "that keep plateaus flat; the net effect on plateau ripple depends on the waveform.")
+            "Raised-cosine roll-off width as a fraction of the cutoff bin; 0 = brick wall (default). "
+            "See low_freq_project.")
         .def_rw("tr_enable", &Gropt::SolverGroptSDMM::tr_enable,
-            "Trust-region step control (default False). After each inner solve, the tr_monitor signal "
-            "checks whether the linearized model held over the step; if not, the step is re-solved from "
-            "the current iterate with a larger proximal sigma. Keeps large objective steps from "
-            "outrunning the nonlinear SAFE linearization.")
+            "Trust-region step control (default False): re-solve a step with a larger proximal sigma "
+            "when tr_monitor rejects it.")
         .def_rw("tr_tol", &Gropt::SolverGroptSDMM::tr_tol,
             "Trust-region reject threshold; <= 0 uses the monitor default (0.2 for "
             "'linearization_error', 0.02 for 'feasibility', 0.5 for 'rel_step'). For "
@@ -1069,14 +1002,15 @@ ils_tik_lam : float, optional
             "Signal that drives the trust region: 'linearization_error' (default; relative error of the "
             "frozen SAFE linearization), 'feasibility' (reject if the SAFE violation grows past "
             "max(previous, tr_tol)), or 'rel_step' (||dx||/||x||). Only SAFE operators report the first "
-            "two signals. Any other value disables the trust region with a warning.")
+            "two signals. 'none' disables the trust region; any other value also disables it, with a "
+            "warning.")
         .def_rw("obj_gate_enable", &Gropt::SolverGroptSDMM::obj_gate_enable,
-            "Feasibility-gated objective (default False). Scales the objective pull by "
-            "exp(-violation/obj_gate_scale), so the objective acts only near feasibility. Currently only "
-            "SAFE (PNS/CNS) constraints report a violation; other constraints do not gate.")
+            "Feasibility-gated objective (default False): scale the objective pull by "
+            "exp(-violation/obj_gate_scale) so the objective acts only near feasibility. Only SAFE "
+            "(PNS/CNS) constraints report a violation.")
         .def_rw("obj_gate_scale", &Gropt::SolverGroptSDMM::obj_gate_scale,
-            "How sharply the objective gate opens as the constraint violation shrinks (in constraint "
-            "units, e.g. ~0.05 of the SAFE limit). Smaller = stay gated closer to exact feasibility.")
+            "Violation scale of the objective gate, in SAFE units (fraction of the stimulation limit; "
+            "default 0.05). Smaller keeps the objective gated until closer to feasibility.")
 
         .def("set_sdmm_params", &Gropt::SolverGroptSDMM::set_sdmm_params,
             "rw_interval"_a = 8, "rw_e_corr"_a = 0.4, "rw_eps"_a = 1e-36,
@@ -1171,9 +1105,8 @@ SolveResult
        "ils_sigma"_a = 1e-4, "ils_tik_lam"_a = 0.0,
 R"doc(Solve a GrOpt problem with a new SolverGroptSDMM.
 
-Convenience wrapper that creates a SolverGroptSDMM with the given settings and
-solves. For other options (reweighting, trust region, warm starts, debug
-histories), create a SolverGroptSDMM and set its properties directly.
+For other options (reweighting, trust region, warm starts, debug histories),
+create a SolverGroptSDMM and set its properties directly.
 
 Parameters
 ----------
@@ -1439,15 +1372,16 @@ np.ndarray
 
     m.def("test_eigen_assertions", &Gropt::test_eigen_assertions,
         "test_type"_a,
-R"doc(Test that assertions are running in Eigen. 
+R"doc(Trigger a deliberate Eigen error, to check whether Eigen assertions are compiled in.
 
-Each test is a different assertion that should be triggered in Eigen.  All tests are
-expected to pass in normal execution.
+Assertions are enabled by building with GROPT_EIGEN_ASSERTIONS=ON; tests 1 and 3
+then trip an Eigen assertion, which aborts the process.
 
 Parameters
 ----------
 test_type : int
-    The type of assertion test to run, (1, 2, or 3).)doc"
+    1 = out-of-bounds read, 2 = raise RuntimeError unless new matrices are
+    NaN-initialized (also set by GROPT_EIGEN_ASSERTIONS), 3 = size mismatch.)doc"
     );
 
     

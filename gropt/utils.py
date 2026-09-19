@@ -4,8 +4,7 @@ import atexit
 import logging
 from . import gropt_wrapper
 
-# Maps spdlog levels (0–5) to Python logging levels.
-# spdlog: 0=trace, 1=debug, 2=info, 3=warn, 4=err, 5=critical
+# spdlog level (index) -> Python logging level
 _SPDLOG_TO_PYTHON = [
     logging.DEBUG,    # 0: trace
     logging.DEBUG,    # 1: debug
@@ -60,7 +59,7 @@ def setup_logging(level: int = 2, to_python: bool | None = None) -> None:
                     msg,
                 )
             )
-            # Release the Python callback before interpreter shutdown (avoids a segfault at exit).
+            # release the Python callback before interpreter shutdown, or exit segfaults
             atexit.register(gropt_wrapper.clear_log_callback)
 
     gropt_wrapper.set_log_level(level)

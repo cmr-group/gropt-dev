@@ -46,7 +46,6 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
     double rnorm = r.norm();
     double rnorm0 = rnorm;
     double bnorm0 = b.norm();
-    // Warm-start-relative reduction floored by a ||b||-relative absolute tolerance.
     double stop_thresh = std::max(tol * rnorm0, tol_abs_rel * bnorm0);
 
     r_shadow = r;  // This could be random too.
@@ -132,7 +131,7 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
 
-    hist_n_iter.push_back(std::min(ii + 1, n_iter)); // ii == n_iter when the loop ran out without breaking
+    hist_n_iter.push_back(std::min(ii + 1, n_iter)); // iterations done
     hist_rnorm0.push_back(rnorm0);
     hist_rnorm.push_back(rs[0].norm());
     hist_bnorm0.push_back(b.norm());

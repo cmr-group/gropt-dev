@@ -96,8 +96,7 @@ void Op_DiffBasin::prox(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm; // -> physical mean-gradient units
 
-    // One-sided (half-space) projection: pre >= +eps always; post <= -eps (opposite/flip, default) or
-    // post >= +eps (same_sign). Only a side that actually has a window (norm > 0) is enforced.
+    // Half-space projection; a side with an empty window is not enforced
     if (a_pre.squaredNorm() > 0.0 && X(0) < eps) X(0) = eps;
     if (a_post.squaredNorm() > 0.0) {
         if (same_sign) {

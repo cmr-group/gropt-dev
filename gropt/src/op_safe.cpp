@@ -109,7 +109,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
         }
     }
 
-    // stim2 = abs(dX/dt)   (softabs + smooth sign when safe_eps>0)
+    // stim2 = abs(dX/dt)
     for (int i = 0; i < stim1.size(); i++) {
         double v = stim2(i);
         if (freeze_signs) {
@@ -143,11 +143,11 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
         }
     }
 
-    // stim3 = abs(tau_filter_3(dX/dt))   (softabs + smooth sign when safe_eps>0)
+    // stim3 = abs(tau_filter_3(dX/dt))
     for (int i = 0; i < stim3.size(); i++) {
         double v = stim3(i);
         if (freeze_signs) {
-            stim3(i) = signs3(i) * v; // frozen linearization: held sign, no recapture
+            stim3(i) = signs3(i) * v; // frozen linearization
         } else if (safe_eps > 0.0) {
             double sa = sqrt(v * v + safe_eps * safe_eps);
             signs3(i) = v / sa;
@@ -158,7 +158,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
         }
     }
 
-    // The return vector is [stim1; stim2; stim3] scaled by a, stim_limit, g_scale
+    // Per axis j: out = [a1 stim1; a2 stim2; a3 stim3] * g_scale / stim_limit (n_terms blocks of N)
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
             out(j * n_terms * N + i) =
@@ -261,7 +261,7 @@ void Op_SAFE::prox(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
-    // This just sums the three terms [stim1, stim2, stim3], it is not the cross axis sum.
+    // Sum the n_terms per axis (not across axes)
     x_temp.setZero();
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
@@ -355,7 +355,7 @@ double Op_SAFE::linearization_error(const Eigen::VectorXd &x_new) {
     freeze_signs = true;
     forward_op(xc, pred); // frozen-linear prediction
     freeze_signs = false;
-    forward_op(xc, act);  // true nonlinear SAFE (recaptures signs)
+    forward_op(xc, act);  // true nonlinear SAFE
     signs1 = s1;
     signs2 = s2;
     signs3 = s3;
@@ -365,8 +365,7 @@ double Op_SAFE::linearization_error(const Eigen::VectorXd &x_new) {
 }
 
 double Op_SAFE::constraint_violation(const Eigen::VectorXd &x_new) {
-    // Worst-sample true SAFE overage, max over samples of (|SAFE(x)| - limit), in SAFE units like check().
-    // Leaves the frozen signs and freeze_signs unchanged.
+    // max over samples of (|SAFE(x)| - limit), in check()'s units; leaves the frozen-sign state unchanged.
     Eigen::VectorXd xc = x_new;
     Eigen::VectorXd out(Ax_size);
     const bool saved = freeze_signs;

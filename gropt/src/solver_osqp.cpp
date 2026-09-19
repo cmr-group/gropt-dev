@@ -16,14 +16,18 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
         gparams->prepare();
     }
 
-    // Initialize per-operator OSQP workspaces
+    // Per-solve state starts fresh (the objective gate may be left over from an SDMM solve).
+    debug_solver = DebugSolver{};
+    for (auto &o : gparams->all_obj) {
+        o->obj_gate = 1.0;
+    }
+
     osqp_ws.resize(gparams->all_op.size());
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
 
-        // Set initial weight based on operator type
+        // OSQP initial weights (1e4 table kept intentionally for this path)
         osqp_ws[i].weight = 1.0;
-        // Slew, moment, b-value, SAFE, and TV operators start at 1e4
         if (op->name == "Slew" || op->name == "Moment" || op->name == "b-value" || op->name == "SAFE" ||
             op->name == "TotalVariation") {
             osqp_ws[i].weight = 1e4;
@@ -34,7 +38,6 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
         osqp_ws[i].prep(*op, gparams->pdata.X0);
     }
 
-    // Populate base class ws pointers
     ws.resize(osqp_ws.size());
     for (int i = 0; i < osqp_ws.size(); i++) {
         ws[i] = &osqp_ws[i];
@@ -81,8 +84,7 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
             break;
         };
 
-        // Update all constraints (do prox operations)
-        update(Xhat);
+        update(Xhat); // ADMM z/y updates (prox)
 
         X = gamma_x * Xhat + (1 - gamma_x) * X;
 
@@ -93,7 +95,7 @@ SolveResult SolverOSQP::solve(GroptParams &_gparams) {
             break;
         }
 
-        total_feval += ils_solver->hist_n_iter.back();
+        if (iiter > 0) total_feval += ils_solver->hist_n_iter.back(); // no inner solve at iteration 0
         if (total_feval > max_feval) {
             spdlog::info("Maximum function evaluations reached");
             break;
@@ -168,7 +170,7 @@ void SolverOSQP::update(Eigen::VectorXd &X) {
 
 void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
 
-    //  Get dimensions (shouldn't be needed every iteration)
+    // TODO: dimensions don't change; compute once per solve
     int N_rows = 0;
     for (int i = 0; i < gparams->all_op.size(); i++) {
         N_rows += gparams->all_op[i]->Ax_size;
@@ -217,7 +219,6 @@ void SolverOSQP::get_residuals(Eigen::VectorXd &X) {
         std::vector<double> weight_vec;
         std::vector<double> gamma_vec;
         for (int i = 0; i < gparams->all_op.size(); i++) {
-            Operator *op = gparams->all_op[i].get();
             WorkspaceOSQP &w = osqp_ws[i];
             weight_vec.push_back(w.weight);
             gamma_vec.push_back(w.gamma);

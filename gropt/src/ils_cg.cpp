@@ -25,8 +25,6 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
 
     double rnorm0;
     double bnorm0;
-    double tol0;
-    double res;
 
     double alpha;
     double beta;
@@ -39,7 +37,6 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
         gparams->eq_proj.project_affine(x); // feasible start for the equality constraints
     }
     Eigen::VectorXd x_out = x;
-    double r_min = std::numeric_limits<double>::max();
 
     b.setZero();
     get_rhs(x0, b);
@@ -54,7 +51,7 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     }
     rnorm0 = r.norm();
     bnorm0 = b.norm();
-    // Relative to the warm-start residual (tightens as ADMM converges), floored by tol_abs_rel*||b||.
+    // Relative to the warm-start residual, so it tightens as ADMM converges.
     double stop_thresh = std::max(tol * rnorm0, tol_abs_rel * bnorm0);
 
     p = r;
@@ -93,7 +90,7 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
 
-    hist_n_iter.push_back(std::min(ii + 1, n_iter)); // ii == n_iter when the loop ran out without breaking
+    hist_n_iter.push_back(std::min(ii + 1, n_iter)); // iterations done
     hist_rnorm0.push_back(rnorm0);
     hist_rnorm.push_back(r.norm());
     hist_bnorm0.push_back(bnorm0);

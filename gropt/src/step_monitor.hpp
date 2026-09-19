@@ -2,9 +2,8 @@
 #define STEP_MONITOR_H
 
 /**
- * Trust-region step-acceptance strategies for the SDMM solver. A StepMonitor accepts or rejects the inner
- * solve's candidate iterate; on reject the solver re-solves from the previous iterate with a larger
- * proximal sigma.
+ * Trust-region step acceptance for the SDMM solver: on reject, the solver re-solves from the previous
+ * iterate with a larger proximal sigma.
  */
 
 #include <memory>
@@ -14,9 +13,8 @@
 
 namespace Gropt {
 
-class GroptParams; // forward decl (check() reads gp.all_op)
+class GroptParams;
 
-// Outcome of a step-acceptance test.
 struct StepDecision {
     bool accept = true;       // accept the CG step, or reject and re-solve with a larger sigma
     double sigma_scale = 1.0; // multiply the proximal sigma by this on reject (>1); ignored on accept
@@ -64,9 +62,8 @@ class FeasibilityMonitor : public StepMonitor {
     const char *name() const override { return "feasibility"; }
 };
 
-// Monitor by name ("linearization_error" | "rel_step" | "feasibility"); nullptr for "none"/unknown
-// (trust region off). tol / bump apply only when > 0, otherwise the per-monitor defaults are kept
-// (tol: 0.2 linearization_error, 0.5 rel_step, 0.02 feasibility).
+// Monitor by name ("linearization_error" | "rel_step" | "feasibility"); nullptr for "none"/unknown.
+// tol/bump override the defaults only when > 0.
 std::unique_ptr<StepMonitor> make_step_monitor(const std::string &name, double tol, double bump);
 
 } // namespace Gropt

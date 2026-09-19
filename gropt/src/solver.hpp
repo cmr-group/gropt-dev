@@ -14,9 +14,9 @@
 
 namespace Gropt {
 
-class GroptParams; // Forward declaration of GroptParams class
+class GroptParams;
 
-// Per-iteration solver traces, filled only when Solver::extra_debug is true.
+// Per-iteration solver traces, filled when Solver::extra_debug is true (best_feasible_iter always).
 struct DebugSolver {
     std::vector<Eigen::VectorXd> hist_X;
     std::vector<Eigen::VectorXd> hist_Ax;
@@ -31,26 +31,21 @@ struct DebugSolver {
     //   dual   = ||rho * A^T (z - z_prev)||  (stationarity)
     std::vector<std::vector<double>> hist_r_prim;
     std::vector<std::vector<double>> hist_r_dual;
-    // Per-operator feasibility per iteration:
-    //   r_feas = relative distance of A x from the feasible set
-    //   feas   = binary feasible flag (1/0)
+    // Per-operator, per iteration: relative distance of A x from the feasible set, and 1/0 feasible flag.
     std::vector<std::vector<double>> hist_r_feas;
     std::vector<std::vector<int>> hist_feas;
     // 1 if all operators were feasible this iteration, else 0.
     std::vector<int> hist_all_feas;
-    // Achieved b-value per iteration. Empty if no b-value operator is present.
+    // b-value per iteration; empty without a b-value operator.
     std::vector<double> hist_bvalue;
     // Outer iteration of the returned (best feasible) iterate, or -1 if none was feasible.
     int best_feasible_iter = -1;
-    // Inner linear-solver diagnostics, one entry per inner solve (hist_cg_iter[0] is a -1 placeholder):
-    //   n_iter = iterations the inner solver took
-    //   rnorm0 = initial residual ||b - A x0|| (warm-start residual)
-    //   rnorm  = final residual at the inner-solver stop
-    //   bnorm0 = ||b|| (RHS norm)
+    // Inner linear-solver diagnostics, one entry per inner solve. Only hist_cg_iter has a leading -1
+    // placeholder, so hist_cg_iter[i+1] pairs with hist_cg_rnorm[i].
     std::vector<int> hist_cg_iter;
-    std::vector<double> hist_cg_rnorm0;
-    std::vector<double> hist_cg_rnorm;
-    std::vector<double> hist_cg_bnorm0;
+    std::vector<double> hist_cg_rnorm0; // initial residual ||b - A x0||
+    std::vector<double> hist_cg_rnorm;  // final residual
+    std::vector<double> hist_cg_bnorm0; // ||b||
     // Objective vs constraint pull on the x-update RHS, per outer iteration:
     std::vector<double> hist_obj_pull;                 // ||g_obj||  linearized objective pull
     std::vector<double> hist_con_pull;                 // ||Σ Aᵀy||  total constraint pull
@@ -90,7 +85,7 @@ class Solver {
     int iiter = 0;
 
     Solver() = default;
-    virtual ~Solver() = default; // deleted through Solver* when the solver type is chosen at runtime
+    virtual ~Solver() = default;
 
     virtual SolveResult solve(GroptParams &_gparams);
     virtual int logger(Eigen::VectorXd &X);

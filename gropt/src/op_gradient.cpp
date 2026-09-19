@@ -79,7 +79,7 @@ void Op_Gradient::prox(Eigen::VectorXd &X) {
             X(i) = X(i) < lower_bound ? lower_bound : X(i);
             X(i) = X(i) > upper_bound ? upper_bound : X(i);
 
-            // This is specific to the Op_Gradient operator
+            // pin fixed samples to set_vals
             if (!isnan(pdata->set_vals(i))) {
                 X(i) = pdata->set_vals(i);
             }
@@ -129,7 +129,7 @@ void Op_Gradient::check(Eigen::VectorXd &X) {
             double lower_bound = target - tol_i;
             double upper_bound = target + tol_i;
 
-            if ((X(i) < lower_bound) || (X(i) > upper_bound) && isnan(pdata->set_vals(i))) {
+            if (((X(i) < lower_bound) || (X(i) > upper_bound)) && isnan(pdata->set_vals(i))) {
                 is_feas = 0;
             }
         }

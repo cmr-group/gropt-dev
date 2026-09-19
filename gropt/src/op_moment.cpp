@@ -53,7 +53,7 @@ void Op_Moment::init() {
 
     A.setZero(1, pdata->Naxis * pdata->N);
 
-    // If start and stop indices are not set, constraint covers the whole axis
+    // start/stop <= 0: whole axis
     int i_start;
     if (start_idx <= 0) {
         i_start = moment_axis * pdata->N;
@@ -102,7 +102,7 @@ void Op_Moment::init() {
 void Op_Moment::append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vector<double> &targets,
                                const Eigen::VectorXd &x0) const {
     if (!use_projection) return;
-    rows.push_back(A.row(0).transpose()); // constant linear moment functional (independent of x0)
+    rows.push_back(A.row(0).transpose());
     targets.push_back(target);
 }
 

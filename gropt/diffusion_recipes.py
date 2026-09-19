@@ -12,8 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-# DiffParams fields that define the problem and are excluded from recipes; all other DiffParams fields
-# are solve knobs and are saved automatically.
+# DiffParams fields that define the problem; every other field is a solve knob saved in recipes.
 PROBLEM_FIELDS = {
     "TE", "T_90", "T_180", "T_readout", "T_pre", "dt", "diff_mode",                      # layout
     "gmax", "smax",                                                                      # hardware limits
@@ -113,10 +112,9 @@ def list_recipes(path):
 
 # Warmstarts: per-solve snapshots (pickle) for hot-starting a nearby problem.
 def save_warmstart(folder, name, result):
-    """Save one solve's converged warmstart snapshot as its own file.
+    """Pickle one solve's warmstart snapshot to ``{folder}/{name}.warmstart.pkl``.
 
-    The snapshot (duals, primal, and adapted weights) is pickled to
-    ``{folder}/{name}.warmstart.pkl``.
+    The snapshot holds the primal, duals, and adapted weights.
 
     Parameters
     ----------

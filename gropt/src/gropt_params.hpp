@@ -19,17 +19,15 @@ enum ILSMethod {
 };
 
 // Linear solver for the equality projection (project=true constraints):
-//   EQ_LDLT: LDLT of the unit-row Gram Mhat Mhatᵀ. Fast and exact when well conditioned; fails on
-//            singular or collinear rows.
-//   EQ_COD:  complete-orthogonal decomposition of Mhat itself (condition number not squared). Rank-
-//            revealing, so near-collinear rows (e.g. several eddy time constants) still give an
-//            idempotent projector.
+//   EQ_LDLT: LDLT of the unit-row Gram Mhat Mhatᵀ; fast, but fails on singular or collinear rows.
+//   EQ_COD:  complete-orthogonal decomposition of Mhat (condition number not squared); rank-revealing, so
+//            near-collinear rows (e.g. several eddy time constants) still give an idempotent projector.
 enum EqProjSolver {
     EQ_LDLT,
     EQ_COD,
 };
 
-class Operator; // Forward declaration of Operator class
+class Operator;
 
 struct SolveResult {
     Eigen::VectorXd X;      // solution waveform (SDMM: best feasible iterate, else the last one)
@@ -67,7 +65,6 @@ struct EqualityProjection {
         t = t_in;
         Eigen::MatrixXd Mtil = M_in * fixer.asDiagonal();
 
-        // Row-scale to unit norm (Mhat).
         Eigen::VectorXd rownorm = Mtil.rowwise().norm();
         inv_rownorm.setZero(rownorm.size());
         Mhat = Mtil;
@@ -112,8 +109,8 @@ struct EqualityProjection {
         active = (M.rows() > 0);
     }
 
-    // ILS_CG calls project_affine once at the start of each inner solve and project_dir on the residual
-    // and every A*p, so a feasible start plus null-space updates keeps x feasible throughout CG.
+    // ILS_CG calls project_affine at the start of each inner solve and project_dir on the residual and
+    // every A*p, so x stays feasible throughout CG.
 
     // Move x onto {M x = t}: subtract the min-norm free-DOF correction Δ with Mhat Δ = D^-1 (M x - t).
     void project_affine(Eigen::VectorXd &x) const {
@@ -142,7 +139,7 @@ class GroptParams {
   public:
     ProblemData pdata;
 
-    // Convenience accessors that forward to pdata
+    // References into pdata
     double &dt = pdata.dt;
     int &N = pdata.N;
     int &Naxis = pdata.Naxis;
@@ -159,8 +156,7 @@ class GroptParams {
     // Scale linearized (DCA) objective pulls to magnitude |obj_weight|, independent of ||AᵀA x||.
     bool normalize_obj = false;
 
-    // Softabs smoothing of SAFE's |.| in slew units (T/m/s); 0 = exact |.|. Copied into each Op_SAFE
-    // by add_SAFE, so set it first. See Op_SAFE::safe_eps.
+    // SAFE softabs smoothing [T/m/s] (see Op_SAFE::safe_eps); copied into each Op_SAFE by add_SAFE, so set it first.
     double safe_eps = 0.0;
 
     // Equality projector for project=true constraints, built in prepare(). eq_proj_dynamic: some projected
@@ -203,6 +199,9 @@ class GroptParams {
     bool needs_prepare() const {
         return op_prep_status != N || op_prep_count != all_op.size() + all_obj.size();
     }
+    // Warm-start key ("<name>#<occurrence>") of each constraint operator, in all_op order. prepare() copies
+    // these into Operator::unique_name; this call does not prepare.
+    std::vector<std::string> get_op_keys() const;
 
     void set_ils_solver(std::string ils_method);
 
@@ -246,8 +245,7 @@ class GroptParams {
     double get_output_bvalue(const Eigen::VectorXd &X);
 
   private:
-    // Rebuilds pdata.fixer from the NaN pattern of pdata.set_vals:
-    // 1.0 where free (NaN), 0.0 where fixed (finite).
+    // pdata.fixer from set_vals: 1.0 where free (NaN), 0.0 where fixed.
     void rebuild_fixer_from_set_vals();
 };
 
