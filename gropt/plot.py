@@ -1,9 +1,32 @@
+"""Matplotlib plots and waveform metrics (moments, b-value, concomitant ratio) for gradient waveforms."""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import gropt
 
 
 def get_moments(g, dt, inv_vec=None, start_idx=0, scale_to_one=True):
+    """Cumulative gradient moments M0..M9 of a single-axis waveform.
+
+    Parameters
+    ----------
+    g : ndarray
+        Gradient waveform [T/m]. For multi-axis (2-D) input only the first axis is used.
+    dt : float
+        Raster time [s].
+    inv_vec : ndarray, optional
+        Per-sample sign (+1/-1) applied to ``g``, e.g. to account for a refocusing pulse.
+    start_idx : int, optional
+        Samples before this index are excluded from the integrals.
+    scale_to_one : bool, optional
+        If True, normalize each moment curve by its maximum absolute value.
+
+    Returns
+    -------
+    list of ndarray
+        Ten cumulative moment curves (orders 0-9), each the length of ``g``. Order m integrates
+        ``g * t**m`` with t measured from sample 0.
+    """
     if g.squeeze().ndim == 2:
         g = g[0]  # TODO: 3-axis case, right now just assumes 1 axis
 
@@ -30,6 +53,27 @@ def get_moments(g, dt, inv_vec=None, start_idx=0, scale_to_one=True):
 
 
 def get_concomitant(g, dt, inv_vec, start_idx=0):
+    """Concomitant-field imbalance of a spin-echo waveform.
+
+    Ratio of the integrated ``g**2`` over samples with ``inv_vec > 0`` and ``inv_vec < 0`` (before and
+    after the refocusing pulse), from ``start_idx`` on.
+
+    Parameters
+    ----------
+    g : ndarray
+        1-D gradient waveform [T/m].
+    dt : float
+        Raster time [s].
+    inv_vec : ndarray
+        Per-sample sign (+1/-1) of the refocusing layout.
+    start_idx : int, optional
+        Samples before this index are ignored.
+
+    Returns
+    -------
+    float
+        The larger of the two ratios, so always >= 1; 1 means balanced.
+    """
     g_start = g[start_idx:]
     inv_vec_start = inv_vec[start_idx:]
     pos = np.sum(dt * g_start[inv_vec_start > 0] ** 2.0)
@@ -43,6 +87,27 @@ def get_concomitant(g, dt, inv_vec, start_idx=0):
 
 
 def get_bval(g, dt, inv_vec=None, TE=0, start_idx=0):
+    """b-value of a single-axis diffusion waveform.
+
+    Parameters
+    ----------
+    g : ndarray
+        Gradient waveform [T/m]. For multi-axis (2-D) input only the first axis is used.
+    dt : float
+        Raster time [s].
+    inv_vec : ndarray, optional
+        Per-sample sign (+1/-1) for the refocusing pulse. If None, the sign flips to -1 at sample
+        ``floor(TE / dt / 2)``.
+    TE : float, optional
+        Echo time [s]; only used to build the default ``inv_vec``.
+    start_idx : int, optional
+        Samples before this index are excluded.
+
+    Returns
+    -------
+    float
+        b-value [s/mm^2].
+    """
     if g.squeeze().ndim == 2:
         g = g[0]  # TODO: 3-axis case, right now just assumes 1 axis
 
@@ -114,7 +179,7 @@ def plot_diff(cfg, res, cols=2, figsize=None, dpi=80, savename=None, highlight_r
     if eddy_lam.size > 0:
         to_plot.append('eddy')
 
-    # RF span locations (always defined -> no NameError regardless of mode/timing)
+    # RF windows [s], used for shading
     t_start = cfg.T_pre or 0.0
     t_inv = t_start + cfg.TE / 2.0
     t_90_start = t_start
@@ -233,7 +298,48 @@ def plot_waves(
     dpi = 80,
     savename = None,
 ):
+    """Plot gradient, slew, moment, and optional SAFE and eddy panels for a waveform.
 
+    Zero/None arguments fall back to the matching ``params`` key where one exists. For results from
+    ``gropt.diffusion.solve`` see :func:`plot_diff`.
+
+    Parameters
+    ----------
+    g : ndarray
+        1-D gradient waveform [T/m].
+    dt : float
+        Raster time [s].
+    inv_vec : ndarray, optional
+        Per-sample refocusing sign (+1/-1); by default flips at ``start_idx + floor(TE / dt / 2)``.
+    TE : float, optional
+        Echo time [s].
+    gmax, smax : float, optional
+        Limit lines [T/m] and [T/m/s].
+    start_idx : int, optional
+        First sample included in the moment, b-value, and concomitant calculations.
+    eddy_lam : float or array_like, optional
+        Eddy time constant(s) [s] marked on the eddy spectrum; any value > 0 adds the eddy panel.
+    plot_eddy, plot_pns, plot_cns : bool, optional
+        Force the eddy / PNS / CNS panels.
+    stim_vec : ndarray, optional
+        Extra curve drawn on the SAFE panel.
+    pns_lim, cns_lim : float, optional
+        Stimulation limits; > 0 adds the PNS / CNS curve and limit line (1.0 if the panel is forced).
+    N_cols : int, optional
+        Number of subplot columns.
+    mode : str, optional
+        ``'diff'`` adds a TE / b-value / concomitant-ratio title and computes the RF windows.
+    params : dict, optional
+        Fallback values (``start_idx``, ``eddy_lam``, ``stim_vec``, ``pns_lim``, ``cns_lim``, ``gmax``,
+        ``smax``), SAFE parameters (``pns_params``, ``cns_params``; default
+        ``gropt.get_random_safe_params()``), ``MMT`` (default 4), and RF timing (``T_pre``, ``T_90``,
+        ``T_180``).
+    highlight_rf : bool, optional
+        Shade the 90/180 RF windows. Requires ``mode='diff'``, ``TE > 0``, and ``T_90`` and ``T_180``
+        in ``params``.
+    figsize, dpi, savename : optional
+        Passed through to matplotlib; ``savename`` saves and closes instead of showing.
+    """
     if start_idx == 0:
         start_idx = params.get('start_idx', 0)
     if np.isscalar(eddy_lam) and eddy_lam == 0:
@@ -298,7 +404,7 @@ def plot_waves(
 
         f.suptitle(label)
 
-        # Get the span locations for plotting 0's
+        # RF windows [s], used for shading
         if TE > 0 and 'T_180' in params:
             if 'T_pre' in params:
                 t_start = params['T_pre']

@@ -17,8 +17,11 @@
 
 #include "Eigen/Dense"
 #include "op_bvalue.hpp"
+#include "op_diffbasin.hpp"
+#include "op_eddy.hpp"
 #include "op_gradient.hpp"
 #include "op_slew.hpp"
+#include "op_tv.hpp"
 #include "problem_data.hpp"
 
 #include <cmath>
@@ -193,6 +196,25 @@ int run_op_transpose_tests() {
                                            BVALUE_MODE_MINVAL,
                                            /*max_scale=*/1.01);
     };
+    auto make_tv1 = [](ProblemData &p) {
+        return std::make_unique<Op_TV>(p, /*tv_lam=*/1.0, /*weight_mod=*/1.0, /*order=*/1);
+    };
+    auto make_tv2 = [](ProblemData &p) {
+        return std::make_unique<Op_TV>(p, /*tv_lam=*/1.0, /*weight_mod=*/1.0, /*order=*/2);
+    };
+    auto make_eddy = [](ProblemData &p) {
+        Eigen::VectorXd lam(2);
+        lam << 1e-4, 4e-4; // two time constants, to exercise the per-axis/per-lambda row layout
+        return std::make_unique<Op_Eddy>(p, lam, /*tol=*/1e-4, /*weight_mod=*/1.0);
+    };
+    // DiffBasin needs a 180: flip inv_vec on the second half of each axis.
+    auto make_basin = [](ProblemData &p) {
+        for (int j = 0; j < p.Naxis; j++) {
+            p.inv_vec.segment(j * p.N + p.N / 2, p.N - p.N / 2).setConstant(-1.0);
+        }
+        return std::make_unique<Op_DiffBasin>(p, /*window_time=*/5 * p.dt, /*eps_factor=*/0.07,
+                                              /*gmax=*/0.04, /*weight_mod=*/1.0);
+    };
 
     std::printf("\n=== A. Raw forward/transpose ===\n");
     failures += sweep_raw("Op_Gradient", [](ProblemData &p) {
@@ -202,6 +224,10 @@ int run_op_transpose_tests() {
         return std::make_unique<Op_Slew>(p, /*smax=*/200.0, /*rot_variant=*/true, /*weight_mod=*/1.0);
     });
     failures += sweep_raw("Op_BValue", make_bvalue);
+    failures += sweep_raw("Op_TV(1)", make_tv1);
+    failures += sweep_raw("Op_TV(2)", make_tv2);
+    failures += sweep_raw("Op_Eddy", make_eddy);
+    failures += sweep_raw("Op_DiffBasin", make_basin);
 
     std::printf("\n=== B+C. forward_op / transpose_op variants ===\n");
     failures += sweep_op_variants("Op_Gradient", [](ProblemData &p) {
@@ -211,6 +237,10 @@ int run_op_transpose_tests() {
         return std::make_unique<Op_Slew>(p, /*smax=*/200.0, /*rot_variant=*/true, /*weight_mod=*/1.0);
     });
     failures += sweep_op_variants("Op_BValue", make_bvalue);
+    failures += sweep_op_variants("Op_TV(1)", make_tv1);
+    failures += sweep_op_variants("Op_TV(2)", make_tv2);
+    failures += sweep_op_variants("Op_Eddy", make_eddy);
+    failures += sweep_op_variants("Op_DiffBasin", make_basin);
 
     return failures;
 }

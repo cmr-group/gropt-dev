@@ -10,45 +10,12 @@ execute_process(
 list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 find_package(nanobind CONFIG REQUIRED)
 
-# C++ core source list -- shared single source of truth with the standalone build (gropt/src).
-set(GROPT_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/gropt/src")
-include(${GROPT_SRC_DIR}/sources.cmake)   # -> GROPT_CORE_SOURCES
-
-add_library(gropt_core STATIC ${GROPT_CORE_SOURCES})
-set_target_properties(gropt_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(gropt_core PUBLIC
-    ${GROPT_SRC_DIR}
-    ${GROPT_SRC_DIR}/external
-)
-target_compile_definitions(gropt_core PUBLIC FMT_UNICODE=0)
-
-# PocketFFT (used only by fft_tools.cpp) tuning: single-threaded (our transforms are one small 1D
-# DCT per call -- the thread pool is pure overhead), and cache the plan so the same-N DCT done every
-# outer iteration doesn't rebuild its twiddles. On GCC/Clang PocketFFT auto-vectorizes to whatever
-# SIMD the target ISA enables (SSE2 baseline on x86-64; add -mavx2 -mfma, or /arch:AVX2 for MSVC, if
-# you are willing to require AVX2); on MSVC it falls back to scalar + the auto-vectorizer.
-target_compile_definitions(gropt_core PRIVATE POCKETFFT_NO_MULTITHREADING POCKETFFT_CACHE_SIZE=8)
-
-# Parallel compilation: the Visual Studio generator compiles a project's source files SERIALLY by
-# default; /MP fans them across all cores (big win on a full rebuild). (Ninja parallelizes on its own.)
-target_compile_options(gropt_core PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>)
+include(${CMAKE_CURRENT_SOURCE_DIR}/gropt/src/gropt_core.cmake)   # -> gropt_core (shared with gropt/src)
 
 nanobind_add_module(gropt_wrapper
     gropt/gropt_wrapper/gropt_wrapper.cpp
 )
 target_link_libraries(gropt_wrapper PRIVATE gropt_core)
-
-# Eigen assertion control: ON = keep assertions + NaN-init for testing,
-#                          OFF = disable assertions for distribution wheels
-option(GROPT_EIGEN_ASSERTIONS "Enable Eigen runtime assertions (for testing)" OFF)
-if(GROPT_EIGEN_ASSERTIONS)
-    target_compile_options(gropt_core PRIVATE
-        $<IF:$<CXX_COMPILER_ID:MSVC>,/UNDEBUG,-UNDEBUG>
-    )
-    target_compile_definitions(gropt_core PRIVATE EIGEN_INITIALIZE_MATRICES_BY_NAN)
-else()
-    target_compile_definitions(gropt_core PRIVATE EIGEN_NO_DEBUG)
-endif()
 
 option(GROPT_BUILD_TESTS "Build C++ tests" OFF)
 if(GROPT_BUILD_TESTS)

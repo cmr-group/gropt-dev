@@ -132,7 +132,7 @@ Eigen::VectorXd ILS_BiCGstabl::solve(Eigen::VectorXd &x_in)
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
 
-    hist_n_iter.push_back(ii+1);
+    hist_n_iter.push_back(std::min(ii + 1, n_iter)); // ii == n_iter when the loop ran out without breaking
     hist_rnorm0.push_back(rnorm0);
     hist_rnorm.push_back(rs[0].norm());
     hist_bnorm0.push_back(b.norm());

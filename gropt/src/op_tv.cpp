@@ -22,20 +22,15 @@ void Op_TV::init()
     tol = (1.0-cushion) * tol0;
 
     if (order == 2) {
-        // Second difference (jerk), stencil [1,-2,1]/dt^2: ||stencil|| = 4 -> operator norm 4/dt^2.
+        // Second difference (jerk), stencil [1,-2,1]/dt^2: sum|stencil| = 4 -> ||A|| <= 4/dt^2
         spec_norm2 = 16.0 / (pdata->dt*pdata->dt*pdata->dt*pdata->dt);
         Ax_size = pdata->Naxis * (pdata->N-2);
     } else {
-        // First difference (slew), stencil [-1,1]/dt: ||stencil|| = 2 -> operator norm 2/dt.
+        // First difference (slew), stencil [-1,1]/dt: sum|stencil| = 2 -> ||A|| <= 2/dt
         spec_norm2 = 4.0/pdata->dt/pdata->dt;
         Ax_size = pdata->Naxis * (pdata->N-1);
     }
     spec_norm = sqrt(spec_norm2);
-
-    if (do_init_weights) {
-        obj_weight = 1.0;
-        obj_weight *= weight_mod;
-    }
 
     Operator::init();
 }
@@ -63,8 +58,7 @@ void Op_TV::forward(Eigen::VectorXd &X, Eigen::VectorXd &out)
 void Op_TV::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out)
 {
     if (order == 2) {
-        // Adjoint of the second-difference operator. Row i (i in 0..N-3) has [1,-2,1]/dt^2 at
-        // columns i,i+1,i+2; so out_j gets X_j - 2 X_{j-1} + X_{j-2} over the valid row range.
+        // Adjoint of the second difference: out_j = X_j - 2 X_{j-1} + X_{j-2} over valid rows 0..N-3
         double idt2 = 1.0 / (pdata->dt*pdata->dt);
         int M = N - 2; // rows per axis
         for (int i_ax = 0; i_ax < Naxis; i_ax++) {
@@ -93,8 +87,7 @@ void Op_TV::prox(Eigen::VectorXd &X)
 {
     spdlog::trace("Starting Op_TV::prox");
 
-    // Prox of the L1 PENALTY  f(u) = tv_lam * ||u||_1  on the physical slew (order 1) / jerk
-    // (order 2)
+    // Soft-threshold: prox of tv_lam * ||u||_1 on the physical slew (order 1) or jerk (order 2)
     double thresh = tv_lam * spec_norm2 / admm_weight;
 
     if (do_equil) {
@@ -123,8 +116,7 @@ void Op_TV::check(Eigen::VectorXd &X)
 {
     int is_feas = 1;
 
-    // As of right now we will assume that the TV operator is always feasible
-    // This isn't necessarily the case, we should have an option to check feasibility (TODO)
+    // TV is a penalty, not a constraint, so it is always reported feasible
 
     hist_feas.push_back(is_feas);
 }

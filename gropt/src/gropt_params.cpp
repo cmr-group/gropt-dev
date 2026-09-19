@@ -43,15 +43,16 @@ void GroptParams::vec_init_simple(int _N, int _Naxis, double first_val, double l
 
     pdata.set_vals.setZero(N * Naxis);
     pdata.set_vals.array() *= NAN;
-    pdata.set_vals(0) = first_val;
-    pdata.set_vals(N - 1) = last_val;
-
-    rebuild_fixer_from_set_vals();
-
     pdata.X0.setOnes(N * Naxis);
     pdata.X0 *= .01;
-    pdata.X0(0) = first_val;
-    pdata.X0(N - 1) = last_val;
+    for (int ax = 0; ax < Naxis; ax++) { // fix the first/last sample of every axis
+        pdata.set_vals(ax * N) = first_val;
+        pdata.set_vals(ax * N + N - 1) = last_val;
+        pdata.X0(ax * N) = first_val;
+        pdata.X0(ax * N + N - 1) = last_val;
+    }
+
+    rebuild_fixer_from_set_vals();
 
     vec_init_status = N;
 }
@@ -294,6 +295,7 @@ void GroptParams::set_ils_solver(std::string _ils_method) {
 }
 
 void GroptParams::vec_reduce_simple(int N_reduce) {
+    const int N_old = N;
     N -= N_reduce;
     Ntot = N * Naxis;
 
@@ -302,8 +304,10 @@ void GroptParams::vec_reduce_simple(int N_reduce) {
     Eigen::VectorXd set_vals_new;
     set_vals_new.setZero(N * Naxis);
     set_vals_new.array() *= NAN;
-    set_vals_new(0) = pdata.set_vals(0);
-    set_vals_new(N - 1) = pdata.set_vals(pdata.set_vals.size() - 1);
+    for (int ax = 0; ax < Naxis; ax++) { // keep each axis's first/last set value
+        set_vals_new(ax * N) = pdata.set_vals(ax * N_old);
+        set_vals_new(ax * N + N - 1) = pdata.set_vals(ax * N_old + N_old - 1);
+    }
 
     pdata.set_vals = set_vals_new;
     rebuild_fixer_from_set_vals();
@@ -333,9 +337,8 @@ void GroptParams::prepare() {
         all_obj[i]->init();
     }
 
-    // Assign each operator a stable unique_name "<name>#<occurrence>" so duplicate-named operators
-    // stay distinguishable (e.g. Moment#0, Moment#1). Used to match operators across solves for
-    // warm starting (see warmstart.hpp); rebuilding the problem in the same order reproduces them.
+    // unique_name = "<name>#<occurrence>" (e.g. Moment#0, Moment#1) matches operators across solves for
+    // warm starting; rebuilding the problem in the same order reproduces the names.
     {
         std::map<std::string, int> name_counts;
         for (auto &op : all_op) {
@@ -343,13 +346,11 @@ void GroptParams::prepare() {
         }
     }
 
-    // Build the exact equality projector from any operators flagged use_projection (moments with
-    // project=true, etc.). Each contributes its linear-equality
-    // rows via append_eq_rows. If any participating operator's rows depend on the iterate
-    // (eq_rows_vary -> relinearized), the solver rebuilds the projector each outer iteration.
+    // Build the equality projector from operators with use_projection. If any of their rows depend on the
+    // iterate (eq_rows_vary), the solver rebuilds it every outer iteration.
     {
-        bool any_proj = false;  // Are any projections on
-        eq_proj_dynamic = false;  // Do the rows change
+        bool any_proj = false;
+        eq_proj_dynamic = false;
         for (auto &op : all_op) {
             if (op->use_projection) {
                 any_proj = true;
@@ -357,13 +358,14 @@ void GroptParams::prepare() {
             }
         }
         if (any_proj) {
-            build_eq_proj(pdata.X0, true); // initial build (logs rank/conditioning)
+            build_eq_proj(pdata.X0, true); // initial build, logs conditioning
         } else {
             eq_proj.active = false;
         }
     }
 
     op_prep_status = N;
+    op_prep_count = all_op.size() + all_obj.size();
 
     spdlog::trace("GroptParams::prepare() end");
 }
@@ -385,7 +387,7 @@ void GroptParams::add_smax_vec(const Eigen::VectorXd &smax_vec, bool rot_variant
 }
 
 void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
-    // Collect linear-equality rows from every operator (linearized at x0), stack, and build.
+    // Stack every operator's linear-equality rows (linearized at x0) and build the projector.
     std::vector<Eigen::VectorXd> rows;
     std::vector<double> targets;
     for (auto &op : all_op) {
@@ -394,7 +396,7 @@ void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
 
     int k = static_cast<int>(rows.size());
     if (k == 0) {
-        eq_proj.active = false; // nothing to project this iteration (e.g. degenerate linearization)
+        eq_proj.active = false; // no rows (e.g. degenerate linearization)
         return;
     }
 
@@ -407,33 +409,29 @@ void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
     eq_proj.build(M, t, pdata.fixer, eq_proj_solver, eq_proj_rcond);
 
     if (do_log) {
-        if (!eq_proj.rank_ok) {
-            // TODO: This is wrong to some degree, it often works just fine when this ewrror is triggered.
-            spdlog::warn("Equality projection: the free (non-fixed) DOFs cannot independently control the "
-                          "{} projected row(s) -- nearly linearly dependent (scale-invariant cond = {:.2e}). "
-                          "Free more of the waveform or reduce projected constraints.",
-                          k, eq_proj.cond);
-        } else {
-            spdlog::info("Equality projection active: {} row(s), independence cond = {:.2e}", k, eq_proj.cond);
+        spdlog::debug("Equality projection active: {} row(s), Gram cond = {:.2e}", k, eq_proj.cond);
+        if (eq_proj.n_uncontrolled > 0) {
+            spdlog::warn("Equality projection: {} of {} projected row(s) touch no free samples and cannot be "
+                         "enforced.", eq_proj.n_uncontrolled, k);
+        }
+        if (eq_proj.ill_conditioned && eq_proj_solver == EQ_LDLT) {
+            if (eq_proj.cond > 0.0) {
+                spdlog::warn("Equality projection: the {} projected rows are ill-conditioned (Gram cond = "
+                             "{:.2e}); the LDLT solve may lose accuracy. Set eq_proj_solver = COD.", k,
+                             eq_proj.cond);
+            } else {
+                spdlog::warn("Equality projection: the {} projected rows are numerically singular; the LDLT "
+                             "solve may lose accuracy. Set eq_proj_solver = COD.", k);
+            }
         }
     }
 }
 
 void GroptParams::add_concomitant(int start_idx, bool rot_variant, double weight_mod, double tol0,
-                                  double target, bool fix_gamma, double gamma_fix, bool project,
-                                  bool as_objective) {
+                                  double target, bool project) {
     auto op = std::make_unique<Op_Concomitant>(pdata, start_idx, rot_variant, weight_mod, tol0, target);
-    op->fix_gamma = fix_gamma;
-    op->gamma_fix = gamma_fix;
-    if (as_objective) {  // TODO: probably get rid of this, it didn't really help anything, though may be a good demo pathway for other operators
-        // Augmented-Lagrangian objective: drives c(x)=0 from the all_obj path (CG LHS/RHS + scalar
-        // dual). Not the optimization target, so it must not corrupt best-feasible scoring.
-        op->is_score_obj = false;
-        all_obj.push_back(std::move(op));
-    } else {
-        op->use_projection = project; // project=true: exact relinearized equality projection; else
-        all_op.push_back(std::move(op)); // soft ADMM box/band constraint (prox)
-    }
+    op->use_projection = project; // relinearized equality projection instead of the ADMM band
+    all_op.push_back(std::move(op));
 }
 
 void GroptParams::add_moment(double order, double target, double tol0, std::string units, int moment_axis,
@@ -441,8 +439,8 @@ void GroptParams::add_moment(double order, double target, double tol0, std::stri
                              bool absolute_tol) {
     auto op = std::make_unique<Op_Moment>(pdata, order, target, tol0, units, moment_axis, start_idx0, stop_idx0,
                                           ref_idx0, weight_mod);
-    op->use_projection = project;      // exact null-space projection instead of ADMM penalty
-    op->absolute_tol = absolute_tol;   // tol is an absolute per-order bound vs the default M0-anchored scaling
+    op->use_projection = project;      // exact equality projection instead of ADMM
+    op->absolute_tol = absolute_tol;   // tol in this order's units instead of scaled from the M0 tol
     all_op.push_back(std::move(op));
 }
 
@@ -490,8 +488,8 @@ void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop
     auto op = std::make_unique<Op_BValue>(pdata, target, tol, start_idx0, stop_idx0, weight_mod,
                                           static_cast<BVALUE_MODE>(mode), max_scale);
     if (as_objective) {
-        op->linearize_obj = linearize;    // concave maximization -> linearize to RHS (DCA) by default
-        all_obj.push_back(std::move(op)); // maximize b-value via the objective path (obj_weight = -1)
+        op->linearize_obj = linearize;    // -||A x||^2 is concave: linearize into the RHS (DCA)
+        all_obj.push_back(std::move(op)); // maximized via obj_weight = -weight_mod
     } else {
         all_op.push_back(std::move(op)); // enforce b-value as a constraint
     }
@@ -499,7 +497,7 @@ void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop
 
 void GroptParams::add_eddy(const Eigen::VectorXd &lam, double tol, double weight_mod, bool project) {
     auto op = std::make_unique<Op_Eddy>(pdata, lam, tol, weight_mod);
-    op->use_projection = project; // exact null-space projection (eddy current == 0) instead of box ADMM
+    op->use_projection = project; // exact projection onto eddy == 0 instead of the ADMM box
     all_op.push_back(std::move(op));
 }
 
@@ -548,6 +546,9 @@ Eigen::VectorXd linear_interpolate(const Eigen::VectorXd &in, int out_size) {
     int in_size = in.size();
     if (out_size >= in_size) {
         return in;
+    }
+    if (out_size <= 1) { // the endpoint map below divides by out_size - 1
+        return (out_size == 1) ? Eigen::VectorXd::Constant(1, in(in_size / 2)) : Eigen::VectorXd();
     }
 
     Eigen::VectorXd out(out_size);

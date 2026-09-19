@@ -227,4 +227,3 @@ __marimo__/
 
 # standalone C++ build dir
 build-cpp/
-debug_output.h5

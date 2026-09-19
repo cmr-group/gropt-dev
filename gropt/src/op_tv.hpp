@@ -1,6 +1,10 @@
 #ifndef OP_TV_H
 #define OP_TV_H
 
+/**
+ * Total-variation penalty tv_lam * ||D^order g||_1: the L1 norm of the slew (order 1) or jerk (order 2).
+ */
+
 #include <iostream>
 #include <string>
 #include <math.h>

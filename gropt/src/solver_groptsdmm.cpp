@@ -1,3 +1,6 @@
+#include <cmath>
+#include <stdexcept>
+
 #include "spdlog/spdlog.h"
 
 #include "ils.hpp"
@@ -13,17 +16,23 @@ namespace Gropt {
 SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     spdlog::trace("Starting SolverGroptSDMM::solve");
     gparams = &_gparams;
-    if (gparams->op_prep_status != gparams->N) {
+    if (gparams->needs_prepare()) {
         spdlog::info("Operators do not seem prepared, calling prepare()");
         gparams->prepare();
+    }
+
+    // Per-solve outputs and gates start fresh, so a reused solver or gparams carries nothing over.
+    best_warmstart = WarmStart{};
+    debug_solver = DebugSolver{};
+    for (auto &o : gparams->all_obj) {
+        o->obj_gate = 1.0;
     }
 
     // Resolve the starting primal.
     Eigen::VectorXd X0_init = resolve_initial_primal();
     init_workspaces(X0_init);
 
-    // Relinearize iterate-dependent equality rows (e.g. a projected concomitant) at the ACTUAL
-    // starting iterate.
+    // Relinearize iterate-dependent equality rows (e.g. projected concomitant) at the starting iterate.
     if (gparams->eq_proj_dynamic) {
         gparams->build_eq_proj(X0_init);
     }
@@ -34,8 +43,18 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     }
     Eigen::VectorXd Xhat;
 
-    Px.setZero(X.size());
-    r_dual.setZero(X.size());
+    // Only ILS_CG applies the equality projection; other inner solvers see projected constraints only
+    // through the outer re-projection.
+    if (gparams->eq_proj.active && gparams->ils_method != CG) {
+        const char *ils_name = (gparams->ils_method == NLCG) ? "NLCG" : "BiCGstabl";
+        if (!reproject_iterate) {
+            throw std::invalid_argument(std::string(ils_name) +
+                                        " does not apply the equality projection; with reproject_iterate=false "
+                                        "the projected constraints would be ignored. Use CG.");
+        }
+        spdlog::warn("{} does not apply the equality projection; projected constraints are only enforced by "
+                     "reproject_iterate (slower). Use CG.", ils_name);
+    }
 
     if (gparams->ils_method == CG) {
         ils_solver = new ILS_CG(*gparams, ils_tol, ils_min_iter, ils_sigma, ils_max_iter, ils_tik_lam);
@@ -48,13 +67,11 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         return SolveResult{};
     }
     ils_solver->set_workspace(ws);
-    ils_solver->collect_debug = extra_debug; // gate the extra per-CG-iter curvature computation
 
     total_Ax_size = 0;
     for (int i = 0; i < gparams->all_op.size(); i++) {
         total_Ax_size += gparams->all_op[i]->Ax_size;
     }
-    r_primal.setZero(total_Ax_size);
 
     // Optional low-frequency projection of the iterate (fft_tools). Inactive when cutoff_freq <= 0.
     LowFreqProjector lowfreq;
@@ -74,28 +91,22 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         }
     }
 
-    // The scoring objective: the optimization TARGET used for best-feasible selection (e.g. b-value
-    // max). Objective-path constraint penalties (concomitant augmented Lagrangian) set is_score_obj
-    // = false and are skipped here
-    Operator *score_obj = nullptr;
-    for (auto &o : gparams->all_obj) {
-        if (o->is_score_obj) {
-            score_obj = o.get();
-            break;
-        }
-    }
+    // The first objective (e.g. b-value max) scores feasible iterates for best-feasible selection.
+    Operator *score_obj = gparams->all_obj.empty() ? nullptr : gparams->all_obj.front().get();
 
-    // Best feasible solution. For a single scoring objective, keep the feasible iterate that is best
-    // in the direction set by the SIGN of obj_weight (<0 maximize ||A x||^2, >0 minimize).
+    // Best feasible iterate; obj_weight < 0 maximizes ||A x||^2, > 0 minimizes it.
     Eigen::VectorXd best_X;
     double best_score = 0.0; // dir * ||A_obj x||^2 of the best feasible iterate (lower = better)
     bool has_best = false;
     int iters_since_improve = 0;
 
-    // Trust-region step control (optional): build the selected StepMonitor and track a per-solve
-    // proximal sigma that ramps up on rejected steps and relaxes back toward ils_sigma on accepted ones.
+    // Trust region: the proximal sigma grows on rejected steps and decays back toward ils_sigma.
+    std::unique_ptr<StepMonitor> step_monitor;
     if (tr_enable) {
         step_monitor = make_step_monitor(tr_monitor, tr_tol, tr_bump);
+        if (!step_monitor) {
+            spdlog::warn("Unknown tr_monitor '{}'; trust region disabled.", tr_monitor);
+        }
     }
     double tr_sigma = ils_sigma;
 
@@ -104,19 +115,11 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
         spdlog::trace("Starting GroptSDMM iteration {:d} SolverGroptSDMM::solve", iiter);
 
         if (iiter > 0) {
-            // Relinearize iterate-dependent equality rows (e.g. concomitant) at the current X and
-            // rebuild the projector before the solve; the CG solve then projects onto the new subspace.
+            // Relinearize iterate-dependent equality rows at the current X.
             if (gparams->eq_proj_dynamic) {
                 gparams->build_eq_proj(X);
             }
-            // Refresh augmented-Lagrangian objective state (freeze linearization, advance dual) at X.
-            for (auto &o : gparams->all_obj) {
-                o->update_obj_state(X);
-            }
-            // Feasibility-gated objective: scale the objective pull by exp(-total_violation/scale) -- ~0
-            // while a constraint is violated (let the clamps shape a feasible waveform, no cold overshoot),
-            // ->1 once feasible (climb to the max). Keeps the objective from launching past the constraints
-            // before they engage. Off (gate=1) when obj_gate_enable is false.
+            // Objective gate: scale the objective pull by exp(-violation / obj_gate_scale).
             if (obj_gate_enable) {
                 double viol = 0.0;
                 for (auto &op : gparams->all_op) {
@@ -128,29 +131,33 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
                 }
             }
 
-            // Freeze nonlinear-constraint linearizations.
+            // Inner solve with nonlinear operators linearized (frozen) at X.
             if (step_monitor) {
-                // Trust region: solve, test whether the (nonlinear) model held over the step; if it was
-                // outrun, re-solve from X with a larger proximal sigma. Accept relaxes sigma back down.
+                // Re-solve from X with a larger sigma until the monitor accepts (or tr_max_reject).
                 int nrej = 0;
                 while (true) {
                     for (auto &op : gparams->all_op) op->freeze_linearization(X);
                     ils_solver->sigma = tr_sigma;
                     Xhat = ils_solver->solve(X);
+                    total_feval += ils_solver->hist_n_iter.back(); // every re-solve counts toward max_feval
                     StepDecision d = step_monitor->check(*gparams, X, Xhat, tr_sigma);
                     for (auto &op : gparams->all_op) op->unfreeze_linearization();
                     if (d.accept) {
                         tr_sigma = std::max(ils_sigma, tr_sigma * tr_decay);
                         break;
                     }
+                    spdlog::debug("iter {:d}: {} rejected step (signal {:.3e}, tol {:.3e}), sigma {:.2e}", iiter,
+                                  step_monitor->name(), d.signal, step_monitor->tol, tr_sigma);
                     if (++nrej > tr_max_reject) {
+                        spdlog::debug("iter {:d}: {} rejects exceeded, taking the damped step", iiter, nrej);
                         break; // give up: take the (most-damped) step rather than stall
                     }
                     tr_sigma *= d.sigma_scale;
                 }
-            } else {  // Normal solve: freeze linearizations, solve, unfreeze. No trust-region test.
+            } else {
                 for (auto &op : gparams->all_op) op->freeze_linearization(X);
                 Xhat = ils_solver->solve(X);
+                total_feval += ils_solver->hist_n_iter.back();
                 for (auto &op : gparams->all_op) op->unfreeze_linearization();
             }
         } else {
@@ -167,14 +174,12 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 
         X = gamma_x * Xhat + (1 - gamma_x) * X;
 
-        // Re-project the OVER-RELAXED iterate onto the equality surface.
+        // Re-project the over-relaxed iterate onto the equality surface.
         if (reproject_iterate && gparams->eq_proj.active) {
             gparams->eq_proj.project_affine(X);
         }
 
-        // Low-pass the iterate to suppress high-frequency oscillation. Applied until cutoff_iter
-        // (< 0 = every iteration). No-op when cutoff_freq <= 0. The low-pass changes the moments, so
-        // re-project onto the equality set.
+        // Low-pass the iterate until cutoff_iter (< 0 = always); re-project, since it changes the moments.
         if (lowfreq.active() && (cutoff_iter < 0 || iiter < cutoff_iter)) {
             lowfreq.project(X);
             if (gparams->eq_proj.active) {
@@ -193,47 +198,40 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             debug_solver.hist_all_feas.push_back(all_feasible);
         }
         if (all_feasible && (iiter > min_iter)) {
-            if (score_obj == nullptr) {
-                // No scoring objective (none, or only constraint-penalty objectives): first feasible.
+            auto save_best = [&]() {
                 best_X = X;
                 best_warmstart = capture_warmstart(X); // consistent feasible snapshot for warm starts
                 has_best = true;
                 debug_solver.best_feasible_iter = iiter;
+            };
+            if (score_obj == nullptr) {
+                save_best(); // no objective: return the first feasible iterate
                 break;
             }
-            // Scoring objective: score = (sign of obj_weight) * ||A_obj x||^2 (lower = better).
-            Operator *obj = score_obj;
-            obj->Ax_temp.setZero();
-            obj->forward_op(X, obj->Ax_temp);
-            double dir = (obj->obj_weight < 0.0) ? -1.0 : 1.0; // -1 maximize, +1 minimize
-            double score = dir * obj->Ax_temp.squaredNorm();
+            // score = (sign of obj_weight) * ||A_obj x||^2, lower = better
+            score_obj->Ax_temp.setZero();
+            score_obj->forward_op(X, score_obj->Ax_temp);
+            const double dir = (score_obj->obj_weight < 0.0) ? -1.0 : 1.0; // -1 maximize, +1 minimize
+            const double score = dir * score_obj->Ax_temp.squaredNorm();
+            const bool significant = !has_best || (score < best_score - obj_rtol * std::abs(best_score));
             if (!has_best || score < best_score) {
-                double margin = obj_rtol * (best_score < 0.0 ? -best_score : best_score);
-                bool significant = !has_best || (score < best_score - margin);
-                best_X = X;
-                best_warmstart = capture_warmstart(X); // consistent feasible snapshot for warm starts
+                save_best();
                 best_score = score;
-                has_best = true;
-                debug_solver.best_feasible_iter = iiter;
-                if (significant) {
-                    iters_since_improve = 0;
-                } else if (++iters_since_improve >= obj_patience) {
-                    break;
-                }
+            }
+            if (significant) {
+                iters_since_improve = 0;
             } else if (++iters_since_improve >= obj_patience) {
                 break;
             }
         }
 
-        total_feval += ils_solver->hist_n_iter.back();
         if (total_feval > max_feval) {
             spdlog::info("Maximum function evaluations reached");
             break;
         }
     }
 
-    // If no feasible iterate was ever found, fall back to snapshotting the final state so
-    // get_warmstart() still returns something usable (flagged by the caller as infeasible-sourced).
+    // No feasible iterate: snapshot the final state so get_warmstart() still returns something usable.
     if (!best_warmstart.active) {
         best_warmstart = capture_warmstart(X);
     }
@@ -248,16 +246,12 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     result.dt = gparams->dt;
     final_log(result.X, result);
 
-    // Copy the inner-solver histories out before the solver is freed (generic to the
-    // IndirectLinearSolver base, so this keeps working if the ILS method is changed).
+    // Copy the inner-solver histories before ils_solver is freed.
     if (extra_debug) {
         debug_solver.hist_cg_iter = ils_solver->hist_n_iter;
         debug_solver.hist_cg_rnorm0 = ils_solver->hist_rnorm0;
         debug_solver.hist_cg_rnorm = ils_solver->hist_rnorm;
         debug_solver.hist_cg_bnorm0 = ils_solver->hist_bnorm0;
-        debug_solver.hist_cg_neg_curv = ils_solver->hist_neg_curv;
-        debug_solver.hist_cg_min_curv = ils_solver->hist_min_curv;
-        debug_solver.hist_cg_max_curv = ils_solver->hist_max_curv;
     }
 
     delete ils_solver;
@@ -269,20 +263,20 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 // --- solve() helpers ----------------------------------------------------------------------------- //
 
 Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
-    // With a warm start, resize the snapshot's waveform onto this problem's grid: free segments
-    // interpolate, fixed segments come from set_vals (see warmstart.hpp). Fall back to the cold X0 if
-    // the snapshot is incompatible (different Naxis or a different free/fixed segment topology -- a
-    // structural change, not a resize).
+    // Warm start: resize the snapshot waveform onto this grid (see warmstart.hpp). Start cold if its
+    // axes or free/fixed layout don't match.
     Eigen::VectorXd X0_init = gparams->pdata.X0;
     if (warmstart.active) {
-        bool compatible = (warmstart.Naxis == gparams->Naxis) &&
-                          (ws_free_run_count(warmstart.fixer, warmstart.Naxis) ==
-                           ws_free_run_count(gparams->pdata.fixer, gparams->Naxis));
+        bool compatible = (warmstart.Naxis == gparams->Naxis) && (warmstart.Naxis > 0) &&
+                          (warmstart.X.size() == warmstart.fixer.size()) &&
+                          (warmstart.fixer.size() % warmstart.Naxis == 0) &&
+                          (ws_free_run_counts(warmstart.fixer, warmstart.Naxis) ==
+                           ws_free_run_counts(gparams->pdata.fixer, gparams->Naxis));
         if (compatible) {
             X0_init = ws_resize_waveform(warmstart.X, warmstart.fixer, gparams->pdata.fixer,
                                          gparams->pdata.set_vals, gparams->Naxis);
         } else {
-            spdlog::warn("Warm start incompatible (Naxis or free-segment count mismatch); "
+            spdlog::warn("Warm start incompatible (Naxis, size, or free-segment count mismatch); "
                          "ignoring it and starting cold.");
             warmstart.active = false;
         }
@@ -291,40 +285,36 @@ Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
 }
 
 void SolverGroptSDMM::init_workspaces(const Eigen::VectorXd &X0_init) {
-    sdmm_ws.resize(gparams->all_op.size());
+    sdmm_ws.assign(gparams->all_op.size(), WorkspaceSDMM{}); // fresh: no gamma/flags from a prior solve
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
 
         // Initial ADMM weight, scaled by the operator's problem-specific weight_mod.
         sdmm_ws[i].weight = 1.0 * op->weight_mod;
 
-        // Pin the relaxation gamma for operators that ask for it (e.g. nonconvex prox), so the
-        // reweighter's over-relaxation can't destabilize them. The weight still adapts independently.
-        if (op->fix_gamma) {
-            sdmm_ws[i].gamma = op->gamma_fix;
-            sdmm_ws[i].do_gamma = false;
-        }
-
         sdmm_ws[i].init(op->Ax_size);
-        sdmm_ws[i].prep(*op, X0_init); // z = A*X0_init  (regenerated from the primal, cold or warm)
+        sdmm_ws[i].prep(*op, X0_init); // z = A*X0_init (also for warm starts)
 
-        // Warm-start dual injection: match by unique_name, resize the dual y onto this operator's
-        // grid, and seed its penalty/relaxation. An unmatched operator (e.g. a newly added
-        // constraint) stays cold (y = 0) so the early iterations discover it -- a constraint-space
-        // homotopy. The reweighter re-adapts the seeded weight from here.
+        // Warm start: seed y, weight and gamma from the snapshot operator with the same unique_name;
+        // unmatched operators start cold.
         if (warmstart.active) {
             const OpWarmState *st = warmstart.find(op->unique_name);
             if (st != nullptr) {
-                sdmm_ws[i].y0 = ws_resize_dual(*st, op->Ax_block_lengths(), op->spec_norm);
-                sdmm_ws[i].y1 = sdmm_ws[i].y0;
-                sdmm_ws[i].weight = st->weight;
-                if (!op->fix_gamma) sdmm_ws[i].gamma = st->gamma;
+                Eigen::VectorXd y_warm = ws_resize_dual(*st, op->Ax_block_lengths(), op->spec_norm);
+                if (y_warm.size() == op->Ax_size) {
+                    sdmm_ws[i].y0 = y_warm;
+                    sdmm_ws[i].y1 = y_warm;
+                    sdmm_ws[i].weight = st->weight;
+                    sdmm_ws[i].gamma = st->gamma;
+                } else {
+                    spdlog::warn("Warm start for '{}' has an incompatible dual layout; starting it cold.",
+                                 op->unique_name);
+                }
             }
         }
     }
 
-    // One-shot: the loaded warm start applies to exactly this solve. Reset it so a later solve() on
-    // the same solver is cold.
+    // A loaded warm start applies to this solve only.
     warmstart = WarmStart{};
 
     // Populate the base-class ws pointers into the typed SDMM workspaces.
@@ -364,18 +354,11 @@ void SolverGroptSDMM::record_debug(Eigen::VectorXd &X, Op_BValue *bval_op) {
         row_start += op->Ax_size;
     }
 
-    // --- Balance diagnostics: objective (DCA/RHS) pull vs constraint pulls ---
-    // ||g_obj|| = ||Σ_obj -obj_weight·AᵀA·X||, the frozen pull add_obj_rhs injects into the
-    // x-subproblem RHS each solve. Compared against ||Σ Aᵀy|| (total constraint pull). Both are in
-    // normalized x-space (forward_op/transpose_op already divide by spec_norm), so the ratio is
-    // apples-to-apples.
+    // Objective vs constraint pull, both in normalized x-space: the RHS pull the next inner solve gets
+    // from linearized objectives (incl. normalize_obj and obj_gate) vs ||Σ Aᵀy||.
     Eigen::VectorXd obj_pull = Eigen::VectorXd::Zero(X.size());
     for (auto &obj : gparams->all_obj) {
-        obj->Ax_temp.setZero();
-        obj->x_temp.setZero();
-        obj->forward_op(X, obj->Ax_temp);
-        obj->transpose_op(obj->Ax_temp, obj->x_temp);
-        obj_pull.array() += -obj->obj_weight * obj->x_temp.array();
+        obj->add_obj_rhs(X, obj_pull, gparams->normalize_obj);
     }
     debug_solver.hist_obj_pull.push_back(obj_pull.norm());
     debug_solver.hist_con_pull.push_back(Aty.norm());
@@ -405,18 +388,18 @@ void SolverGroptSDMM::update(Eigen::VectorXd &X) {
 
     for (int i = 0; i < gparams->all_op.size(); i++) {
         Operator *op = gparams->all_op[i].get();
-        if (op->use_projection) continue; // moments handled by null-space projection, not ADMM
+        if (op->use_projection) continue; // enforced by the equality projection, not ADMM
         WorkspaceSDMM &w = sdmm_ws[i];
 
-        // s = Ax
+        // s = A x
         op->forward_op(X, w.s1);
 
-        // z = prox(as + 1-a)z0 + p^-1y0)
+        // z = prox(gamma*s + (1-gamma)*z0 + y0/rho)
         w.z1 = w.gamma * w.s1 + (1 - w.gamma) * w.z0 + w.y0 / w.weight;
-        op->admm_weight = w.weight; // expose rho to penalty proxes (Op_TV divides by it); box proxes ignore
+        op->admm_weight = w.weight; // penalty proxes (Op_TV) need rho; constraint proxes ignore it
         op->prox(w.z1);
 
-        // y = y0 + p*(as + (1-a)z0 - z1)
+        // y = y0 + rho*(gamma*s + (1-gamma)*z0 - z1)
         w.y1 = w.y0 + w.weight * (w.gamma * w.s1 + (1 - w.gamma) * w.z0 - w.z1);
 
         // Boyd ADMM diagnostic residuals.
@@ -427,7 +410,7 @@ void SolverGroptSDMM::update(Eigen::VectorXd &X) {
             dbg_r_dual.push_back(w.weight * op->x_temp.norm());
         }
 
-        if ((w.do_rw) && (iiter > rw_interval) && (iiter % rw_interval == 0)) {
+        if (bb_enable && w.do_rw && (iiter > rw_interval) && (iiter % rw_interval == 0)) {
             w.reweight(rw_eps, rw_e_corr, rw_scalelim);
         }
 
@@ -452,7 +435,7 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X) {
         op->check(op->Ax_temp);
     }
 
-    if (iiter > 2 * grw_min_infeasible && iiter % grw_interval == 0) {
+    if (grw_enable && iiter > 2 * grw_min_infeasible && iiter % grw_interval == 0) {
         double max_feas = 0.0;
         int max_index = -1;
         for (int i = 0; i < gparams->all_op.size(); i++) {
@@ -467,9 +450,7 @@ void SolverGroptSDMM::get_residuals(Eigen::VectorXd &X) {
         if (max_index >= 0) {
             sdmm_ws[max_index].weight *= grw_mod;
             if (grw_balanced && grw_mod > 0.0) {
-                // Rebalance instead of ratchet: restore the geometric mean of the ACTIVE (non-projected)
-                // constraint weights so the *grw_mod bump only shifts emphasis to the worst without
-                // growing the total constraint scale.
+                // Keep the geometric mean of the ADMM (non-projected) constraint weights fixed.
                 int K = 0;
                 for (auto &op : gparams->all_op) {
                     if (!op->use_projection) K++;

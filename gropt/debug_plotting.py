@@ -2,13 +2,12 @@
 
 Everything here consumes the dict returned by ``solver.get_debug()`` (populated
 only when ``solver.extra_debug = True`` before ``solve()``). Plotting backends
-(matplotlib / plotly / ipywidgets) are imported lazily inside each function so
-that ``import gropt`` stays light and these heavy deps stay optional.
+(matplotlib, plotly, ipywidgets) are imported lazily, so they stay optional.
 
 Typical use in a notebook::
 
     solver.extra_debug = True
-    result = gropt.solve(gparams, solver)
+    result = solver.solve(gparams)
     dbg = solver.get_debug()
 
     from gropt import debug_plotting as dbp
@@ -52,7 +51,7 @@ def _op_label(i, op_names):
 
 
 def _reshape_hist_X(debug, Naxis):
-    """hist_X (list of flat vectors) -> (n_iter, Naxis, N) array. Raises if empty."""
+    """hist_X (list of flat vectors) -> ((n_iter, Naxis, N) array, n_iter, N). Raises if empty."""
     hX = debug.get("hist_X", [])
     if hX is None or len(hX) == 0:
         raise ValueError("hist_X is empty -- set solver.extra_debug = True before solve()")
@@ -67,9 +66,9 @@ def _reshape_hist_X(debug, Naxis):
 def scrub_hist_X(debug, Naxis=1, dt=None, show_slew=True, subsample=1):
     """Interactive plotly slider over the gradient-waveform history (hist_X).
 
-    All frames are embedded client-side, so the slider is pure JS -- no kernel
-    round-trip per frame. This is the one to use in VS Code notebooks: it won't
-    lag, freeze, or disturb your matplotlib figures.
+    All frames are embedded in the figure, so scrubbing runs in the browser with
+    no kernel round-trip. The output grows with the number of frames; for long
+    runs use :func:`scrub_hist_X_widget` or ``subsample``.
 
     Parameters
     ----------
@@ -83,21 +82,16 @@ def scrub_hist_X(debug, Naxis=1, dt=None, show_slew=True, subsample=1):
     show_slew : bool
         Show the slew (first-difference) panel below the gradient panel.
     subsample : int
-        Keep every ``subsample``-th iteration. Increase to shrink the notebook
-        output for very long runs (all frames are serialized into the cell).
+        Keep every ``subsample``-th iteration, to shrink the cell output.
 
     Returns
     -------
     plotly.graph_objects.Figure
-        The figure. Call this as the last expression in a cell so the notebook
-        auto-displays it once (it does NOT call fig.show(), which double-renders
-        in VS Code).
+        The figure (not shown); display it as the last expression in a cell.
 
     Notes
     -----
-    Requires ``plotly`` (and ``nbformat`` for the VS Code renderer)::
-
-        pixi add --feature dev plotly nbformat
+    Needs ``plotly``; notebook rendering also needs ``nbformat``.
     """
     try:
         import plotly.graph_objects as go
@@ -182,30 +176,32 @@ def scrub_hist_X(debug, Naxis=1, dt=None, show_slew=True, subsample=1):
 
 
 def scrub_hist_X_widget(debug, Naxis=1, dt=None, show_slew=True, continuous=True, width=1000):
-    """Kernel-backed plotly FigureWidget scrubber -- the one to use for LONG runs.
+    """Kernel-backed plotly FigureWidget scrubber over hist_X, for long runs.
 
-    Unlike :func:`scrub_hist_X` (which embeds every frame in the cell output and
-    bogs down past a few hundred iterations), this keeps the history in Python and
-    the slider patches only the *current* frame's data via ``fig.batch_update()``.
-    So its cost is O(1) per step regardless of the number of iterations, and it
-    stays smooth while you scrub. Returns an ipywidgets VBox -- display it as the
-    last expression in a cell.
+    Unlike :func:`scrub_hist_X`, which embeds every frame in the cell output,
+    this keeps the history in Python and each slider step patches only the
+    current frame's data (``fig.batch_update()``), so the per-step cost does not
+    grow with the number of iterations.
 
     Parameters
     ----------
     debug, Naxis, dt, show_slew
         As in :func:`scrub_hist_X`.
     continuous : bool
-        If True (default) the plot updates live while you drag. Set False if a
-        very large N makes dragging laggy (then it updates on release).
+        If True (default), update while dragging; if False, update on release
+        (use when dragging lags for large N).
     width : int
         Figure width in px; the slider is stretched to match it.
 
+    Returns
+    -------
+    ipywidgets.VBox
+        Slider above the figure; display it as the last expression in a cell.
+
     Notes
     -----
-    Needs ``plotly`` + ``ipywidgets``. FigureWidget rendering in VS Code can be
-    finicky; if it shows blank, that's the widget stack, not this code -- say so
-    and I'll give you a bqplot/fastplotlib version instead.
+    Needs ``plotly`` and ``ipywidgets`` (plus ``anywidget`` for plotly >= 6).
+    FigureWidget rendering in VS Code can be unreliable.
     """
     try:
         import plotly.graph_objects as go
@@ -261,7 +257,7 @@ def scrub_hist_X_widget(debug, Naxis=1, dt=None, show_slew=True, continuous=True
 
     def on_change(change):
         i = change["new"]
-        with fig.batch_update():  # patch only this frame's data -- nothing is embedded/re-rendered wholesale
+        with fig.batch_update():  # patch only this frame's data
             for j in range(Naxis):
                 fig.data[j].y = g[i, j]
             if slew:
@@ -274,12 +270,16 @@ def scrub_hist_X_widget(debug, Naxis=1, dt=None, show_slew=True, continuous=True
 
 
 def scrub_hist_X_mpl(debug, Naxis=1, dt=None, show_slew=True):
-    """Matplotlib fallback scrubber over hist_X (inline backend + ipywidgets).
+    """Matplotlib scrubber over hist_X (inline backend + ipywidgets).
 
-    Redraws each frame from scratch on the default inline backend, so it never
-    corrupts other figures the way ``%matplotlib widget`` (ipympl) can. Slightly
-    less smooth than :func:`scrub_hist_X` (plotly) but has no extra deps beyond
-    matplotlib + ipywidgets.
+    Redraws each frame from scratch on the inline backend, so it does not need
+    ``%matplotlib widget`` (ipympl). Less smooth than :func:`scrub_hist_X`, but
+    needs only ``matplotlib`` and ``ipywidgets``.
+
+    Parameters
+    ----------
+    debug, Naxis, dt, show_slew
+        As in :func:`scrub_hist_X`.
     """
     try:
         import matplotlib.pyplot as plt
@@ -357,6 +357,13 @@ def plot_convergence(debug, op_names=None, figsize=(12, 9)):
     op_names : list[str] or None
         Optional operator names for the per-operator panels (order must match
         the solver's operator order). Falls back to ``op0, op1, ...``.
+    figsize : tuple
+        Matplotlib figure size.
+
+    Returns
+    -------
+    matplotlib.figure.Figure or None
+        The figure, or None if no history is populated.
     """
     try:
         import matplotlib.pyplot as plt
@@ -377,7 +384,7 @@ def plot_convergence(debug, op_names=None, figsize=(12, 9)):
     obj_pull = _as1d(debug.get("hist_obj_pull"))
     con_pull = _as1d(debug.get("hist_con_pull"))
 
-    # Each panel is (condition, draw_fn). Only those with data are laid out.
+    # Draw functions, one per populated history.
     panels = []
 
     if bval is not None:

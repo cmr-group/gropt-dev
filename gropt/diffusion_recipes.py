@@ -1,3 +1,10 @@
+"""Save and load diffusion solve recipes and warm-start snapshots.
+
+A recipe is the solve configuration: every ``SolverCfg`` field plus the ``DiffParams`` fields not in
+``PROBLEM_FIELDS``. Recipes are stored by name in a JSON library file. A warmstart is the solver snapshot
+from one solve, pickled to its own ``{name}.warmstart.pkl`` file.
+"""
+
 import json
 import pickle
 from dataclasses import fields, replace
@@ -5,8 +12,8 @@ from pathlib import Path
 
 import numpy as np
 
-# ── DiffParams fields that DEFINE the problem (the optimum) -> NOT part of a solve recipe. Everything
-#    else in DiffParams is a solve knob and is captured automatically, so new knobs need no edits here.
+# DiffParams fields that define the problem and are excluded from recipes; all other DiffParams fields
+# are solve knobs and are saved automatically.
 PROBLEM_FIELDS = {
     "TE", "T_90", "T_180", "T_readout", "T_pre", "dt", "diff_mode",                      # layout
     "gmax", "smax",                                                                      # hardware limits
@@ -18,14 +25,14 @@ PROBLEM_FIELDS = {
 def _recipe_fields(cfg):
     return [f.name for f in fields(cfg) if f.name not in PROBLEM_FIELDS]
 
-def _native(o):   # random_cfgs emits np.float64/np.int64 -> plain python for JSON + clean round-trip
+def _native(o):   # numpy scalars -> plain Python for JSON
     if isinstance(o, np.integer):  return int(o)
     if isinstance(o, np.floating): return float(o)
     if isinstance(o, np.bool_):    return bool(o)
     raise TypeError(f"not JSON-serializable: {type(o)}")
 
 
-# ── RECIPE = static "how to solve" config. JSON, portable/cross-language, reusable across problems. ───
+# Recipes: solve settings in a JSON library, reusable across problems.
 def save_recipe(path, name, cfg, scfg, *, description=""):
     """Add or overwrite a named recipe in a JSON library file.
 
@@ -104,8 +111,7 @@ def list_recipes(path):
     return {k: v.get("description", "") for k, v in json.loads(Path(path).read_text()).items()}
 
 
-# ── WARMSTART = dynamic solve state (a converged snapshot to hot-start a nearby problem). Separate
-#    binary file, per-solve, pairs with a recipe of the same name. ──────────────────────────────────
+# Warmstarts: per-solve snapshots (pickle) for hot-starting a nearby problem.
 def save_warmstart(folder, name, result):
     """Save one solve's converged warmstart snapshot as its own file.
 
@@ -129,7 +135,7 @@ def save_warmstart(folder, name, result):
     Raises
     ------
     ValueError
-        If ``result`` has no ``"warmstart"`` (e.g. a minimized result).
+        If ``result`` has no ``"warmstart"`` (e.g. a failed solve or a stripped result).
     """
     ws = result.get("warmstart")
     if ws is None:

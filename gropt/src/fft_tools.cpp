@@ -3,7 +3,7 @@
 #include <cmath>
 #include <utility>
 
-// Some settings for better small waveform processing, and parallelization is usually at a higher level.
+// Short waveforms: single-threaded (parallelism lives at a higher level) with a small plan cache.
 #ifndef POCKETFFT_NO_MULTITHREADING
 #define POCKETFFT_NO_MULTITHREADING
 #endif
@@ -33,15 +33,14 @@ void LowFreqProjector::setup(int N, int Naxis, double dt, double cutoff_hz, cons
         return; // disabled / nothing to transform
     }
 
-    // Free-mask: use the supplied fixer; if it doesn't match the problem size, treat all samples free.
+    // Free mask from fixer; all samples are free if its size doesn't match.
     const bool have_fixer = (fixer.size() == static_cast<Eigen::Index>(N_) * Naxis_);
     auto is_free = [&](int a, int local) -> bool {
         if (!have_fixer) return true;
         return fixer(static_cast<Eigen::Index>(a) * N_ + local) > 0.5;
     };
 
-    // Split each axis into maximal runs of free samples; each run is a Dirichlet segment (fixed zeros
-    // flank it), band-limited independently by a DST-I.
+    // Split each axis into maximal free runs; each is low-passed independently.
     for (int a = 0; a < Naxis_; ++a) {
         int local = 0;
         while (local < N_) {
@@ -59,14 +58,12 @@ void LowFreqProjector::setup(int N, int Naxis, double dt, double cutoff_hz, cons
             r.off = a * N_ + start;
             r.M = M;
             r.k_cut = kc;
-            // Identity round-trip: pocketfft's DST-I follows FFTW's RODFT00 (an extra factor of 2 vs the
-            // textbook sine matrix S, whose S*S = (M+1)/2 * I), so DST-I applied twice = 2*(M+1) * I.
-            // fct = 1/sqrt(2*(M+1)) on BOTH the forward and inverse then round-trips to exactly identity.
+            // pocketfft's DST-I (FFTW RODFT00) applied twice is 2*(M+1)*I; fct on both passes makes it
+            // self-inverse.
             r.fct = 1.0 / std::sqrt(2.0 * static_cast<double>(M + 1));
 
-            // Raised-cosine spectral window over k = 0..kc: 1 up to kpass, cosine-taper to 0 at kc. A
-            // smooth (Gibbs-free) roll-off instead of a brick wall, which rings on plateaus. A wider
-            // transition (larger trans_frac) rings less but rounds the passband more.
+            // Raised-cosine window (1 up to kpass, 0 at kc) to reduce brick-wall ringing on plateaus; a
+            // wider taper rings less but rounds the passband more.
             r.win.assign(kc + 1, 1.0);
             int trans = static_cast<int>(std::lround((trans_frac > 0.0 ? trans_frac : 0.0) * (kc + 1)));
             if (trans > 0 && kc > 0) {
@@ -97,7 +94,7 @@ void LowFreqProjector::project(Eigen::VectorXd &x) const {
         double *seg = x.data() + r.off;
         // forward DST-I seg -> coef_
         pocketfft::dst(shape_, stride_, stride_, axes_, 1, seg, coef_.data(), r.fct, false);
-        // soft low-pass: raised-cosine roll-off up to the cutoff bin, zero above it
+        // apply the window up to k_cut, zero above it
         for (int k = 0; k <= r.k_cut; ++k) {
             coef_[k] *= r.win[k];
         }

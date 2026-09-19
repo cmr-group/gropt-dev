@@ -1,14 +1,12 @@
-// demo_diffusion.cpp -- diffusion solve driven by a RECIPE, the C++ mirror of gropt/diffusion.py.
+// demo_diffusion.cpp -- recipe-driven diffusion solve; the C++ counterpart of gropt/diffusion.py.
 //
-//   gropt                          -> the built-in default recipe (best_pns_1 from the random sweep)
+//   gropt                          -> the built-in default recipe
 //   gropt recipes.json             -> the first recipe in that library file
 //   gropt recipes.json best_pns_1  -> that named recipe
 //
-// The split matches diffusion_recipes.py: a PROBLEM (timing, hardware limits, which constraints exist --
-// what the optimum IS) is hardcoded below, and a RECIPE (weights, x0 seed, solver knobs -- HOW to solve)
-// is overlaid on top, either from JSON or from default_recipe(). Every field the Python
-// DiffParams/SolverCfg sweep varies is a recipe field here, so a recipes.json written by
-// gropt.diffusion_recipes.save_recipe loads with no translation.
+// A Problem (timing, hardware limits, which constraints exist) is fixed below; a Recipe (weights, x0
+// seed, solver settings) is overlaid from JSON or default_recipe(). The JSON format is the one written
+// by gropt.diffusion_recipes.save_recipe.
 #include <cmath>
 #include <fstream>
 #include <stdexcept>
@@ -33,8 +31,7 @@ using namespace Gropt;
 namespace {
 
 #ifdef GROPT_HDF5
-// std::vector<Eigen::VectorXd> -> vector<vector<double>> (iters x N) -- a native H5Easy type, so no
-// Eigen serialization support is needed. All rows are length N, so it dumps as a rectangular 2D dataset.
+// Equal-length rows, so H5Easy writes an (iters x N) 2D dataset without Eigen support.
 std::vector<std::vector<double>> to_rows(const std::vector<Eigen::VectorXd> &v) {
     std::vector<std::vector<double>> out;
     out.reserve(v.size());
@@ -45,7 +42,7 @@ std::vector<std::vector<double>> to_rows(const std::vector<Eigen::VectorXd> &v) 
 void save_debug(Solver &solver) {  // needs solver.extra_debug = true to have populated history
     H5Easy::File f("debug_output.h5", H5Easy::File::Overwrite);
     H5Easy::dump(f, "/hist_x", to_rows(solver.debug_solver.hist_X));  // 2D dataset (iters x N)
-    H5Easy::dump(f, "/hist_cg_iter", solver.hist_cg_iter);            // std::vector<int>
+    H5Easy::dump(f, "/hist_cg_iter", solver.debug_solver.hist_cg_iter);  // std::vector<int>
     spdlog::info("wrote debug_output.h5");
 }
 #endif
@@ -58,9 +55,8 @@ struct SafeCoeffs {
     Eigen::VectorXd tau1{3}, tau2{3}, tau3{3}, a1{3}, a2{3}, a3{3}, stim_limit{3}, g_scale{3};
 };
 
-// These are gropt.readasc.get_random_safe_params(42) verbatim -- the SAFE source the Python sweep that
-// produced the recipes ran against (SafeSource(kind="random", seed=42), the DiffParams default), so the
-// tuned weights here mean what they meant there. Swap in a real scanner table for real work.
+// gropt.readasc.get_random_safe_params(42), the DiffParams default, so Python-tuned recipes carry over.
+// Use a real scanner table (e.g. from an .asc file) for real work.
 SafeCoeffs pns_table() {
     SafeCoeffs s;
     s.tau1 << 0.86e-3, 0.93e-3, 0.78e-3;
@@ -88,8 +84,7 @@ SafeCoeffs cns_table() {
 }
 
 // ===================================================================================================
-// PROBLEM -- what the optimum is. Mirrors diffusion_recipes.PROBLEM_FIELDS: never part of a recipe,
-// so the same recipe can be reused across geometries/hardware.
+// Problem: timing, hardware limits and constraints (diffusion_recipes.PROBLEM_FIELDS; never in a recipe)
 // ===================================================================================================
 struct Problem {
     // timing [s]
@@ -122,9 +117,8 @@ struct Problem {
 };
 
 // ===================================================================================================
-// RECIPE -- how to solve. Field-for-field the JSON written by diffusion_recipes.save_recipe: the
-// "diff" block is the non-problem half of DiffParams, the "solver" block is all of SolverCfg. Defaults
-// here match those Python dataclass defaults, so a partial recipe behaves like Python's replace().
+// Recipe: how to solve. Mirrors save_recipe's JSON ("diff" = the non-problem DiffParams fields,
+// "solver" = SolverCfg). Defaults match the Python dataclasses, so missing keys act like replace().
 // ===================================================================================================
 struct Recipe {
     std::string description;
@@ -132,7 +126,7 @@ struct Recipe {
     // --- "diff" block (DiffParams solve knobs) ---
     double w_gmax = 1.0, w_smax = 1.0, w_moment = 1.0;
     double w_pns = 1.0, w_cns = 1.0, w_concomitant = 1.0, w_eddy = 1.0, w_jerk = 1.0, w_bval = 1.0;
-    bool   moment_project = true;
+    bool   moment_project = true, concomitant_project = true, eddy_project = true;
     double safe_eps = 0.0;
     double bval_obj_weight = 1.0;   // obj mode
     double bval_max_scale = 1.02;   // constraint mode
@@ -154,7 +148,7 @@ struct Recipe {
     int    rw_interval = 8;
     double rw_e_corr = 0.2, rw_scalelim = 2.0, rw_eps = 1e-36;
 
-    bool   grw = false;             // global "double the most-infeasible op"
+    bool   grw = true;              // global reweighting: bump the most persistently infeasible op
     int    grw_interval = 20;
     double grw_mod = 2.0;
     bool   grw_balanced = false;
@@ -177,8 +171,7 @@ struct Recipe {
     bool   extra_debug = false;
 };
 
-// The tuned sweep winner (recipes.json "best_pns_1", frac_optimal=0.983), inline so the demo runs
-// with the good settings without a JSON file.
+// A recipe tuned by a random sweep over PNS-limited problems, built in so the demo needs no JSON file.
 Recipe default_recipe() {
     Recipe R;
     R.description = "built-in best_pns_1 (frac_optimal=0.983)";
@@ -222,8 +215,7 @@ Recipe default_recipe() {
 // ===================================================================================================
 // Recipe JSON
 // ===================================================================================================
-// Overlay one JSON block onto R. Unknown keys warn instead of failing, so a recipe written by a newer
-// Python (a knob this build has no setter for) still loads -- but you are told what was dropped.
+// Overlay one JSON block onto R. Unknown keys (e.g. from a newer Python) are skipped with a warning.
 void apply_diff_block(const nlohmann::json &d, Recipe &R) {
     for (const auto &[k, v] : d.items()) {
         try {
@@ -237,6 +229,8 @@ void apply_diff_block(const nlohmann::json &d, Recipe &R) {
             else if (k == "w_jerk")          R.w_jerk = v.get<double>();
             else if (k == "w_bval")          R.w_bval = v.get<double>();
             else if (k == "moment_project")  R.moment_project = v.get<bool>();
+            else if (k == "concomitant_project") R.concomitant_project = v.get<bool>();
+            else if (k == "eddy_project")    R.eddy_project = v.get<bool>();
             else if (k == "safe_eps")        R.safe_eps = v.get<double>();
             else if (k == "bval_obj_weight") R.bval_obj_weight = v.get<double>();
             else if (k == "bval_max_scale")  R.bval_max_scale = v.get<double>();
@@ -295,10 +289,8 @@ void apply_solver_block(const nlohmann::json &d, Recipe &R) {
     }
 }
 
-// Load `name` (empty => the first entry) from a recipe library JSON. Missing keys keep the Recipe
-// default, exactly like Python's replace(base_scfg, **r["solver"]).
-// nlohmann::json keys are sorted, which is also how save_recipe writes them (sort_keys=True), so
-// "the first entry" is both the alphabetically first and the first in a Python-written file.
+// Load `name` from a recipe library JSON; empty => the alphabetically first entry (also the first in a
+// save_recipe file, which sorts keys). Missing keys keep the Recipe defaults.
 Recipe load_recipe(const std::string &path, const std::string &name) {
     std::ifstream f(path);
     if (!f) throw std::runtime_error("could not open recipe file: " + path);
@@ -374,8 +366,8 @@ Eigen::VectorXd build_x0(const GroptParams &gp, const Recipe &R, int MMT, int st
     return x;
 }
 
-// Build the problem into `gp` (an out-param: GroptParams holds references into its own pdata, so it
-// must not be moved/returned by value). Returns start_idx (> 0 only for preencode).
+// Build into `gp` (out-param: GroptParams holds references into its own pdata, so it can't be returned
+// by value). Returns start_idx (> 0 only for preencode).
 int build_gparams(const Problem &P, const Recipe &R, GroptParams &gp) {
     int start_idx = 0;
     if (P.diff_mode == "gropt") {
@@ -405,11 +397,12 @@ int build_gparams(const Problem &P, const Recipe &R, GroptParams &gp) {
         }
     }
 
-    if (P.concomitant) gp.add_concomitant(start_idx, true, R.w_concomitant, 0.1, 1.0, false, 1.0, true);
+    if (P.concomitant)
+        gp.add_concomitant(start_idx, true, R.w_concomitant, 0.1, 1.0, R.concomitant_project);
     if (P.eddy_lam >= 0.0) {
         Eigen::VectorXd lam(1);
         lam(0) = P.eddy_lam;
-        gp.add_eddy(lam, 1e-4, R.w_eddy, true);
+        gp.add_eddy(lam, 1e-4, R.w_eddy, R.eddy_project);
     }
     if (P.jerk_lam > 0.0) gp.add_TV(P.jerk_lam, R.w_jerk, 2);
     if (P.basin_same_sign >= 0)
@@ -461,16 +454,21 @@ void configure_solver(const Recipe &R, SolverGroptSDMM &solver) {
     solver.obj_gate_enable = R.obj_gate;
     solver.obj_gate_scale = R.obj_gate_scale;
 
+    solver.ils_tol = R.ils_tol;
+    solver.ils_max_iter = R.ils_max_iter;
+    solver.ils_min_iter = R.ils_min_iter;
+    solver.ils_sigma = R.ils_sigma;
+    solver.ils_tik_lam = R.ils_tik_lam;
+
+    solver.bb_enable = R.bb_reweight;
+    solver.rw_interval = R.rw_interval;
+    solver.rw_e_corr = R.rw_e_corr;
+    solver.rw_eps = R.rw_eps;
+    solver.rw_scalelim = R.rw_scalelim;
+    solver.grw_enable = R.grw;
+    solver.grw_interval = R.grw_interval;
+    solver.grw_mod = R.grw_mod;
     solver.grw_balanced = R.grw_balanced;
-
-    solver.set_ils_params(R.ils_tol, R.ils_max_iter, R.ils_min_iter, R.ils_sigma, R.ils_tik_lam);
-
-    // Reweighter gating, same trick as diffusion.py make_solver (there is no do_rw setter):
-    //   BB is gated by `iiter > rw_interval` -> push rw_interval past max_iter to disable it.
-    //   grw multiplies by grw_mod -> grw_mod = 1.0 is a no-op.
-    const int rw_interval = R.bb_reweight ? R.rw_interval : (R.max_iter + 1);
-    const double grw_mod = R.grw ? R.grw_mod : 1.0;
-    solver.set_sdmm_params(rw_interval, R.rw_e_corr, R.rw_eps, R.rw_scalelim, 20, R.grw_interval, grw_mod);
 }
 
 }  // namespace
@@ -485,7 +483,7 @@ void demo_diffusion(const std::string &recipe_path, const std::string &recipe_na
     SolverGroptSDMM solver;
     configure_solver(R, solver);
 
-    #ifdef GROPT_HDF5
+#ifdef GROPT_HDF5
     solver.extra_debug = true;   // capture per-iteration history for save_debug
 #endif
 

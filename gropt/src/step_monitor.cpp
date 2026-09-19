@@ -36,8 +36,8 @@ StepDecision FeasibilityMonitor::check(GroptParams &gp, const Eigen::VectorXd &x
         v_old += op->constraint_violation(x_old);
         v_new += op->constraint_violation(x_new);
     }
-    // Accept iff the worst-sample violation didn't grow past max(previous, feasibility slack). Rejects the
-    // objective creeping past the constraint AND blow-ups (huge violation); the ADMM dual reduces v_old.
+    // Accept unless the violation grew past max(previous, tol); catches both the objective creeping past a
+    // constraint and outright blow-ups.
     if (v_new <= std::max(v_old, tol)) {
         return {true, 1.0, v_new};
     }
@@ -55,7 +55,7 @@ std::unique_ptr<StepMonitor> make_step_monitor(const std::string &name, double t
     } else {
         return nullptr; // "none" / unknown -> trust region disabled
     }
-    if (tol > 0.0) m->tol = tol; // pass tr_tol<=0 to keep the monitor's own default (differs per monitor)
+    if (tol > 0.0) m->tol = tol;
     if (bump > 0.0) m->bump = bump;
     return m;
 }

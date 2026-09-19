@@ -1,3 +1,5 @@
+"""Logging setup and a small demo solve."""
+
 import atexit
 import logging
 from . import gropt_wrapper
@@ -15,7 +17,7 @@ _SPDLOG_TO_PYTHON = [
 
 
 def _in_jupyter() -> bool:
-    """True under a Jupyter/IPython kernel, where the raw C++ stdout is NOT shown in cells."""
+    """Return True under a Jupyter kernel (ZMQInteractiveShell), where C++ stdout is not shown in cells."""
     try:
         from IPython import get_ipython
 
@@ -25,14 +27,11 @@ def _in_jupyter() -> bool:
 
 
 def setup_logging(level: int = 2, to_python: bool | None = None) -> None:
-    """Set the gropt C++ log level, optionally routing messages through Python's ``logging``.
+    """Set the gropt C++ log level, optionally forwarding messages to Python ``logging``.
 
-    In a terminal the C++ logger already writes to stdout/stderr, so only the level matters and this just
-    calls :func:`set_log_level` -- no Python callback, nothing to go wrong at exit. In Jupyter the raw C++
-    stdout is not shown in cells, so messages are instead bridged through Python's ``logging`` (a
-    ``StreamHandler``); that bridge is auto-enabled only when a Jupyter/IPython kernel is detected.
-
-    Call once at the top of your script or notebook; repeat calls just update the level.
+    In Jupyter, C++ log messages are forwarded to Python logging (auto-detected); otherwise only the C++
+    log level is set. Forwarded messages go to the ``gropt`` logger, which gets its own ``StreamHandler``
+    and does not propagate. Call once at the top of a script or notebook; repeat calls only update the level.
 
     Parameters
     ----------
@@ -40,9 +39,8 @@ def setup_logging(level: int = 2, to_python: bool | None = None) -> None:
         spdlog level (lower = more verbose): 0=Trace, 1=Debug, 2=Info, 3=Warning, 4=Error, 5=Critical,
         6=Off. Default is 2 (Info).
     to_python : bool or None
-        Route C++ logs through Python's ``logging`` module. ``None`` (default) auto-detects Jupyter.
-        ``False`` keeps the native stdout/stderr sink -- the right choice in a terminal. ``True`` forces
-        the bridge (needed to see logs in notebook cells).
+        Forward C++ logs to Python ``logging``. ``None`` (default) enables this only in Jupyter; ``False``
+        keeps the native stdout/stderr sink; ``True`` forces forwarding.
     """
     if to_python is None:
         to_python = _in_jupyter()
@@ -62,14 +60,20 @@ def setup_logging(level: int = 2, to_python: bool | None = None) -> None:
                     msg,
                 )
             )
-            # The C++ default logger holds the Python callback above; release it while the interpreter is
-            # still alive, or its destruction during C++ static teardown (after Py_Finalize) segfaults at exit.
+            # Release the Python callback before interpreter shutdown (avoids a segfault at exit).
             atexit.register(gropt_wrapper.clear_log_callback)
 
     gropt_wrapper.set_log_level(level)
 
 
 def demo(plot=False):
+    """Solve a small single-axis problem (gmax, smax, M0 = 2, M1 = M2 = 0) and print a summary.
+
+    Parameters
+    ----------
+    plot : bool
+        If True, plot the resulting waveform with matplotlib.
+    """
     print('Starting demo...', flush=True)
 
     gparams = gropt_wrapper.GroptParams()

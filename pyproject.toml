@@ -35,7 +35,7 @@ environment = { MACOSX_DEPLOYMENT_TARGET = "10.13" }
 channels = ["conda-forge"]
 platforms = ["win-64"]
 
-# This messes up the rebuild commands, dont let pixi handle gropt at all, we will do it manually with pip install -e . in the tasks section.
+# Not a pixi pypi-dependency (breaks the rebuild tasks); the tasks install gropt with `pip install -e .`.
 # [tool.pixi.pypi-dependencies]
 # gropt = { path = ".", editable = true }
 
@@ -66,9 +66,8 @@ rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cm
     "clean-full",
     "touch-wrapper",
 ] }
-# Incremental (assertions ON): NO clean, so .scikit-build is reused and only changed files recompile
-# -- much faster for iterating on a source file or two. Use rebuild-test when you add/remove a source
-# file, change CMakeLists, or the incremental build gets confused.
+# Incremental rebuild (no clean, assertions ON); use rebuild-test after adding/removing sources or
+# editing CMake files.
 rebuild-fast = "python -m pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON"
 test-cpp = "cmake -S . -B build-tests -DGROPT_BUILD_TESTS=ON -DGROPT_EIGEN_ASSERTIONS=ON && cmake --build build-tests --config Release && ctest --test-dir build-tests --output-on-failure -C Release"
 

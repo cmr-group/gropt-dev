@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include "spdlog/spdlog.h"
 
 #include "op_safe.hpp"
@@ -21,6 +23,10 @@ Op_SAFE::Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_
 void Op_SAFE::init() {
     spdlog::trace("Op_SAFE::init  N = {}", pdata->N);
 
+    if (!rot_variant) {
+        throw std::invalid_argument("Op_SAFE: rot_variant=false (rotationally invariant) is not implemented yet");
+    }
+
     safe_params.calc_alphas(pdata->dt);
 
     if ((safe_params.a3[0] == 0) && (safe_params.a3[1] == 0) && (safe_params.a3[2] == 0)) {
@@ -28,7 +34,7 @@ void Op_SAFE::init() {
         spdlog::trace("Op_SAFE::init  n_terms = {}", n_terms);
     }
 
-    // We will ignore this for now and just use stim_thresh_vec directly
+    // target/tol0 are only logged; prox and check use stim_thresh_vec
     target = 0;
     tol0 = stim_thresh;
     tol = (1.0 - cushion) * tol0;
@@ -45,10 +51,6 @@ void Op_SAFE::init() {
 
     Ax_size = n_terms * pdata->Naxis * pdata->N;
 
-    if (do_init_weights) {
-        // weight is set on workspace, not here
-    }
-
     signs1.setZero(pdata->Naxis * pdata->N);
     signs2.setZero(pdata->Naxis * pdata->N);
     signs3.setZero(pdata->Naxis * pdata->N);
@@ -58,8 +60,7 @@ void Op_SAFE::init() {
 
     Operator::init();
 
-    // Analytical spec norm was non-trivial, just do the estimate instead.
-    // TODO: Test the amount here, or work on stopping early in the spec norm code.
+    // No closed form; estimate ||A|| numerically
     spec_norm = estimate_self_spec_norm(30);
     spec_norm2 = spec_norm * spec_norm;
 
@@ -90,7 +91,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     for (int i = 0; i < stim1.size(); i++) {
         double v = stim1(i);
         if (freeze_signs) {
-            stim1(i) = signs1(i) * v; // frozen linearization: apply held sign LINEARLY (no recapture)
+            stim1(i) = signs1(i) * v; // frozen linearization: held sign, no recapture
         } else if (safe_eps > 0.0) {
             double sa = sqrt(v * v + safe_eps * safe_eps);
             signs1(i) = v / sa; // smooth sign in [-1,1], continuous through 0 (= d/dv of softabs)
@@ -112,7 +113,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     for (int i = 0; i < stim1.size(); i++) {
         double v = stim2(i);
         if (freeze_signs) {
-            stim2(i) = signs2(i) * v; // frozen linearization (path 2: sign is applied BEFORE filter2)
+            stim2(i) = signs2(i) * v; // frozen linearization (path 2 applies the sign before filter 2)
         } else if (safe_eps > 0.0) {
             double sa = sqrt(v * v + safe_eps * safe_eps);
             signs2(i) = v / sa;
@@ -146,7 +147,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     for (int i = 0; i < stim3.size(); i++) {
         double v = stim3(i);
         if (freeze_signs) {
-            stim3(i) = signs3(i) * v; // frozen linearization: apply held sign LINEARLY (no recapture)
+            stim3(i) = signs3(i) * v; // frozen linearization: held sign, no recapture
         } else if (safe_eps > 0.0) {
             double sa = sqrt(v * v + safe_eps * safe_eps);
             signs3(i) = v / sa;
@@ -243,7 +244,7 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
         }
     }
 
-    // out = diff(stim1 + stim2 + stim3)/dt
+    // out = diff_T(stim1 + stim2 + stim3)/dt
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N - 1; i++) {
             out(j * N + i) = (out(j * N + i) - out(j * N + i + 1)) / dt;
@@ -273,33 +274,16 @@ void Op_SAFE::prox(Eigen::VectorXd &X) {
         }
     }
 
-    if (rot_variant) {
-        for (int j = 0; j < Naxis; j++) {
-            for (int i = 0; i < N; i++) {
-                double val = abs(x_temp(j * N + i));
-
-                double upper_bound = (1 - cushion) * stim_thresh_vec(j * N + i);
-                if (val > upper_bound) {
-                    X(j * n_terms * N + i) *= (upper_bound / val);
-                    X(j * n_terms * N + i + N) *= (upper_bound / val);
-                    if (n_terms == 3) {
-                        X(j * n_terms * N + i + 2 * N) *= (upper_bound / val);
-                    }
-                }
-            }
-        }
-    } else {
+    for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            double val = 0.0;
-            for (int j = 0; j < Naxis; j++) {
-                val += X(j * N + i) * X(j * N + i);
-            }
-            val = sqrt(val);
-            double upper_bound = (1 - cushion) * stim_thresh_vec(i);
+            double val = abs(x_temp(j * N + i));
 
+            double upper_bound = (1 - cushion) * stim_thresh_vec(j * N + i);
             if (val > upper_bound) {
-                for (int j = 0; j < Naxis; j++) {
-                    X(j * N + i) *= (upper_bound / val);
+                X(j * n_terms * N + i) *= (upper_bound / val);
+                X(j * n_terms * N + i + N) *= (upper_bound / val);
+                if (n_terms == 3) {
+                    X(j * n_terms * N + i + 2 * N) *= (upper_bound / val);
                 }
             }
         }
@@ -333,25 +317,10 @@ void Op_SAFE::check(Eigen::VectorXd &X) {
         }
     }
 
-    if (rot_variant) {
-        for (int j = 0; j < Naxis; j++) {
-            for (int i = 0; i < N; i++) {
-                double val = abs(x_temp(j * N + i));
-                double upper_bound = stim_thresh_vec(j * N + i);
-
-                if (val > upper_bound) {
-                    is_feas = 0;
-                }
-            }
-        }
-    } else {
+    for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
-            double val = 0.0;
-            for (int j = 0; j < Naxis; j++) {
-                val += X(j * N + i) * X(j * N + i);
-            }
-            val = sqrt(val);
-            double upper_bound = stim_thresh_vec(i);
+            double val = abs(x_temp(j * N + i));
+            double upper_bound = stim_thresh_vec(j * N + i);
 
             if (val > upper_bound) {
                 is_feas = 0;
@@ -368,10 +337,8 @@ void Op_SAFE::check(Eigen::VectorXd &X) {
 }
 
 void Op_SAFE::freeze_linearization(Eigen::VectorXd &X) {
-    // Recapture the true |.| signs once at the current outer iterate X (nonlinear forward), then hold
-    // them fixed. During the inner CG, forward() then applies those signs LINEARLY, so the CG's LHS is a
-    // consistent symmetric operator instead of re-capturing signs off every search direction. Restored by
-    // unfreeze_linearization() after the solve, so the prox / feasibility check use the true forward.
+    // Capture the true |.| signs at X, then hold them so the CG sees a fixed linear (symmetric) system;
+    // unfreeze_linearization() restores the true forward for prox and check.
     freeze_signs = false;
     Ax_temp.setZero(Ax_size);
     forward_op(X, Ax_temp);
@@ -379,32 +346,36 @@ void Op_SAFE::freeze_linearization(Eigen::VectorXd &X) {
 }
 
 double Op_SAFE::linearization_error(const Eigen::VectorXd &x_new) {
-    // signs1/2/3 currently hold the linearization frozen at the outer iterate. Compare the FROZEN-LINEAR
-    // forward at x_new (what the CG's clamp assumed) against the TRUE nonlinear forward at x_new. Relative
-    // mismatch = how far the step walked out of the linearization's valid region. NOTE: the true forward
-    // recaptures signs (overwriting the frozen ones), which is fine -- the caller unfreezes / re-freezes
-    // right after. Evaluate the LINEAR prediction FIRST while the frozen signs are still intact.
+    // Relative mismatch between the frozen-linear forward at x_new (what the CG assumed) and the true
+    // nonlinear forward. Leaves the frozen signs and freeze_signs unchanged.
     Eigen::VectorXd xc = x_new;
     Eigen::VectorXd pred(Ax_size), act(Ax_size);
-    bool saved = freeze_signs;
+    const bool saved = freeze_signs;
+    const Eigen::VectorXd s1 = signs1, s2 = signs2, s3 = signs3;
     freeze_signs = true;
-    forward_op(xc, pred); // frozen-linear prediction (signs held at the outer iterate)
+    forward_op(xc, pred); // frozen-linear prediction
     freeze_signs = false;
-    forward_op(xc, act); // true nonlinear SAFE (recaptures signs)
+    forward_op(xc, act);  // true nonlinear SAFE (recaptures signs)
+    signs1 = s1;
+    signs2 = s2;
+    signs3 = s3;
     freeze_signs = saved;
     double an = act.norm();
     return (an > 0.0) ? (act - pred).norm() / an : 0.0;
 }
 
 double Op_SAFE::constraint_violation(const Eigen::VectorXd &x_new) {
-    // WORST-sample TRUE (nonlinear) SAFE overage: max over samples of (|SAFE(x)| - limit), 0 if all
-    // feasible. Scale-free (SAFE units, ~[0,limit]) so a single feasibility slack works across problems.
-    // Uses the raw forward (physical scaled terms, NOT /spec_norm) with the true |.|, matching check().
+    // Worst-sample true SAFE overage, max over samples of (|SAFE(x)| - limit), in SAFE units like check().
+    // Leaves the frozen signs and freeze_signs unchanged.
     Eigen::VectorXd xc = x_new;
     Eigen::VectorXd out(Ax_size);
-    bool saved = freeze_signs;
+    const bool saved = freeze_signs;
+    const Eigen::VectorXd s1 = signs1, s2 = signs2, s3 = signs3;
     freeze_signs = false;
     forward(xc, out);
+    signs1 = s1;
+    signs2 = s2;
+    signs3 = s3;
     freeze_signs = saved;
     double viol = 0.0;
     for (int j = 0; j < Naxis; j++) {

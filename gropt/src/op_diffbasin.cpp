@@ -32,8 +32,7 @@ void Op_DiffBasin::init() {
     int i_flip = 0;
     while (i_flip < Nfull && pdata->inv_vec(i_flip) >= 0) i_flip++;
 
-    // Post window: first w FREE samples at/after the flip. Walking outward and taking only free
-    // samples automatically skips the fixed 180 RF block.
+    // Post window: first w free samples at/after the flip (skips the fixed 180 RF block)
     int n_post = 0;
     for (int i = i_flip; i < Nfull && n_post < w; i++) {
         if (pdata->fixer(i) > 0.0) {
@@ -43,7 +42,7 @@ void Op_DiffBasin::init() {
     }
     if (n_post > 0) a_post /= (double)n_post; // -> mean over the collected free samples
 
-    // Pre window: last w FREE samples before the flip.
+    // Pre window: last w free samples before the flip
     int n_pre = 0;
     for (int i = i_flip - 1; i >= 0 && n_pre < w; i--) {
         if (pdata->fixer(i) > 0.0) {
@@ -61,8 +60,7 @@ void Op_DiffBasin::init() {
 
     eps = eps_factor * gmax;
 
-    // Preconditioner only (the prox un/re-normalizes exactly, so this does not change the physical
-    // threshold): largest row norm of the unit-mean functionals.
+    // Rows have disjoint support, so ||A|| = largest row norm (prox undoes this scaling)
     double n2 = std::max(a_pre.squaredNorm(), a_post.squaredNorm());
     spec_norm2 = (n2 > 0.0) ? n2 : 1.0;
     spec_norm = std::sqrt(spec_norm2);

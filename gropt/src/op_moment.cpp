@@ -1,8 +1,24 @@
+#include <cmath>
+#include <stdexcept>
+#include <string>
+
 #include "spdlog/spdlog.h"
 
 #include "op_moment.hpp"
 
 namespace Gropt {
+
+namespace {
+// Factor converting a moment of this order from `units` to the internal mT*ms^(order+1)/m.
+double units_scale(const std::string &units, double order) {
+    if (units == "mT*ms/m") return 1.0;
+    if (units == "T*s/m") return 1000.0 * pow(1000.0, order + 1);
+    if (units == "rad*s/m") return 1000.0 * pow(1000.0, order + 1) / 4.257638544e7;
+    if (units == "s/m") return 1000.0 * pow(1000.0, order + 1) / 2.675153194e8;
+    spdlog::error("Unsupported units for moment constraint: {}", units);
+    throw std::invalid_argument("Unsupported units for moment constraint");
+}
+} // namespace
 
 Op_Moment::Op_Moment(const ProblemData &_pdata, double _order, double _target, double _tol0, std::string _units,
                      int _moment_axis, int _start_idx0, int _stop_idx0, int _ref_idx0, double _weight_mod)
@@ -11,35 +27,12 @@ Op_Moment::Op_Moment(const ProblemData &_pdata, double _order, double _target, d
     moment_order = _order;
     units = _units;
 
-    double moment_scale = 1.0;
-    if (units == "mT*ms/m") {
-        moment_scale = 1.0;
-    } else if (units == "T*s/m") {
-        moment_scale = 1000.0 * pow(1000.0, moment_order + 1);
-    } else if (units == "rad*s/m") {
-        moment_scale = 1000.0 * pow(1000.0, moment_order + 1) / 4.257638544e7;
-    } else if (units == "s/m") {
-        moment_scale = 1000.0 * pow(1000.0, moment_order + 1) / 2.675153194e8;
-    } else {
-        spdlog::error("Unsupported units for moment constraint: {}", units);
-        throw std::invalid_argument("Unsupported units for moment constraint");
-    }
-
-    // Order-0 units factor, for the M0-anchored tolerance (the default; see init). It uses the ORDER-0
-    // units scale, not this order's, so the anchor doesn't double-scale the order (moment_scale already
-    // carries the per-order factor for the absolute-tol mode and the target).
-    double moment_scale0 = 1.0;
-    if (units == "T*s/m") {
-        moment_scale0 = 1000.0 * 1000.0;
-    } else if (units == "rad*s/m") {
-        moment_scale0 = 1000.0 * 1000.0 / 4.257638544e7;
-    } else if (units == "s/m") {
-        moment_scale0 = 1000.0 * 1000.0 / 2.675153194e8;
-    } // mT*ms/m -> 1.0
+    const double moment_scale = units_scale(units, moment_order);
+    const double moment_scale0 = units_scale(units, 0.0); // order-0 scale for the M0-anchored tolerance
 
     moment_target = _target * moment_scale;
-    moment_tol0 = _tol0 * moment_scale;       // absolute per-order tol (this order's physical units)
-    moment_tol0_m0 = _tol0 * moment_scale0;   // M0-anchored reference (order-0 units; scaled by ||A_k||/||A_0|| in init)
+    moment_tol0 = _tol0 * moment_scale;
+    moment_tol0_m0 = _tol0 * moment_scale0;
     moment_axis = _moment_axis;
 
     start_idx0 = _start_idx0;
@@ -85,13 +78,7 @@ void Op_Moment::init() {
     }
     spec_norm = sqrt(spec_norm2);
 
-    // Two tolerance modes (see absolute_tol):
-    //  - M0-anchored (default): the passed tol is the ORDER-0 tolerance; higher orders scale their bound by
-    //    ||A_k|| / ||A_0|| = spec_norm / spec_norm_0 (||A_0|| = the order-0 row norm over the same window,
-    //    val_0 = 1e6*dt constant).
-    //  - absolute_tol: the passed tol is taken directly in THIS order's physical units (moment_tol0 =
-    //    tol * moment_scale(order)). Use it when you set a nonzero target for a higher order (e.g. a
-    //    specified M2) and want the tolerance to mean an absolute physical bound, not a row-norm-scaled one.
+    // tol0: M0-anchored (scaled by ||A_k||/||A_0|| over the same window) unless absolute_tol
     double base_val = 1000.0 * 1000.0 * pdata->dt; // val at order 0 (t^0 = 1)
     double spec_norm_0 = base_val * sqrt((double)(i_stop - i_start));
 

@@ -33,15 +33,10 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     double gamma;
 
     double pAp;
-    // These were debugging variables that didn't prove particularly useful, could consider removing
-    bool neg_curv = false;
-    double min_curv = 0.0;
-    double max_curv = 0.0;
-    bool curv_init = false;
 
     x = x0;
     if (gparams->eq_proj.active) {
-        gparams->eq_proj.project_affine(x); // enforce equality constraints exactly.
+        gparams->eq_proj.project_affine(x); // feasible start for the equality constraints
     }
     Eigen::VectorXd x_out = x;
     double r_min = std::numeric_limits<double>::max();
@@ -59,8 +54,7 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     }
     rnorm0 = r.norm();
     bnorm0 = b.norm();
-    // Warm-start-relative reduction (auto-tightens as ADMM converges) floored by a ||b||-relative
-    // absolute tolerance (prevents an unreachable target when rnorm0 -> 0).
+    // Relative to the warm-start residual (tightens as ADMM converges), floored by tol_abs_rel*||b||.
     double stop_thresh = std::max(tol * rnorm0, tol_abs_rel * bnorm0);
 
     p = r;
@@ -74,28 +68,9 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
         Ap.setZero();
         get_lhs(p, Ap); // Ap = A*p
         if (gparams->eq_proj.active) {
-            gparams->eq_proj.project_dir(Ap); // projected CG: effective operator is P M P
+            gparams->eq_proj.project_dir(Ap); // projected CG: effective operator is P A P
         }
         pAp = p.dot(Ap);
-        
-        if (pAp <= 0.0) {
-            neg_curv = true; // non-positive curvature: indefinite/singular system
-        }
-
-        if (collect_debug) {  // Ignored if extra_debug is off
-            double pp_curv = p.dot(p); // extra O(N) dot — only when debug logging is on
-            if (pp_curv > 0.0) {
-                double rq = pAp / pp_curv; // Rayleigh quotient = curvature of M along p
-                if (!curv_init) {
-                    min_curv = rq;
-                    max_curv = rq;
-                    curv_init = true;
-                } else {
-                    if (rq < min_curv) min_curv = rq;
-                    if (rq > max_curv) max_curv = rq;
-                }
-            }
-        }
         alpha = gamma / pAp;
 
         x += alpha * p;
@@ -118,15 +93,10 @@ Eigen::VectorXd ILS_CG::solve(Eigen::VectorXd &x0) {
     stop_time = std::chrono::steady_clock::now();
     elapsed_us = stop_time - start_time;
 
-    hist_n_iter.push_back(ii + 1);
+    hist_n_iter.push_back(std::min(ii + 1, n_iter)); // ii == n_iter when the loop ran out without breaking
     hist_rnorm0.push_back(rnorm0);
     hist_rnorm.push_back(r.norm());
     hist_bnorm0.push_back(bnorm0);
-    hist_neg_curv.push_back(neg_curv ? 1 : 0);
-    if (collect_debug) {
-        hist_min_curv.push_back(min_curv);
-        hist_max_curv.push_back(max_curv);
-    }
 
     return x;
 }

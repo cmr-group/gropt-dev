@@ -2,10 +2,9 @@
 #define OP_EDDY_H
 
 /**
- * Constraint on gradient amplitude.  Supports the 'rot_variant' variable
- * to decide if gmax operates per axis or on the gradient magnitude
- *
- * Checks 'set_vals' and forces those values if they are not NaN
+ * Residual eddy-current constraint: for each axis and time constant lambda [s], the eddy current left at
+ * the end of the waveform (exponential-kernel functional of g) must satisfy |e| <= tol (target 0).
+ * With use_projection it is instead driven to exactly 0 by the equality projection.
  */
 
 #include "Eigen/Dense"

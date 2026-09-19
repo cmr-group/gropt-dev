@@ -2,10 +2,9 @@
 #define STEP_MONITOR_H
 
 /**
- * Pluggable trust-region step-acceptance strategies for the SDMM solver. After the inner CG produces a
- * candidate iterate, a StepMonitor decides whether the linearized model held over the step (accept) or
- * was outrun (reject -> the solver re-solves from the previous iterate with the proximal sigma scaled
- * up).
+ * Trust-region step-acceptance strategies for the SDMM solver. A StepMonitor accepts or rejects the inner
+ * solve's candidate iterate; on reject the solver re-solves from the previous iterate with a larger
+ * proximal sigma.
  */
 
 #include <memory>
@@ -21,7 +20,7 @@ class GroptParams; // forward decl (check() reads gp.all_op)
 struct StepDecision {
     bool accept = true;       // accept the CG step, or reject and re-solve with a larger sigma
     double sigma_scale = 1.0; // multiply the proximal sigma by this on reject (>1); ignored on accept
-    double signal = 0.0;      // the raw signal value (for logging / diagnostics)
+    double signal = 0.0;      // monitored value, for logging
 };
 
 // Base strategy. tol = reject threshold (meaning depends on the signal); bump = sigma multiplier on reject.
@@ -36,9 +35,8 @@ class StepMonitor {
     double bump = 4.0;
 };
 
-// DEFAULT: model fidelity of every nonlinear operator's frozen linearization (gain-ratio).
-// Rejects when max over ops of Operator::linearization_error(x_new) exceeds tol -- for SAFE this is
-// exactly "did the step leave the |.| linearization's valid region"; linear ops report 0 (never trigger).
+// Default monitor: rejects when the largest Operator::linearization_error(x_new) exceeds tol, i.e. the step
+// left a nonlinear op's frozen-linearization region (e.g. SAFE's |.|). Linear ops report 0.
 class LinearizationErrorMonitor : public StepMonitor {
   public:
     StepDecision check(GroptParams &gp, const Eigen::VectorXd &x_old, const Eigen::VectorXd &x_new,
@@ -46,8 +44,8 @@ class LinearizationErrorMonitor : public StepMonitor {
     const char *name() const override { return "linearization_error"; }
 };
 
-// ALTERNATIVE: relative primal step ||x_new - x_old|| / ||x_old|| (the "change in x" divergence signal).
-// Operator-agnostic and cheap, but needs a tuned tol (no self-calibration like the model-fidelity one).
+// Rejects when the relative step ||x_new - x_old|| / ||x_old|| exceeds tol. Operator-agnostic, but the tol
+// needs tuning.
 class RelStepMonitor : public StepMonitor {
   public:
     RelStepMonitor() { tol = 0.5; }
@@ -56,8 +54,8 @@ class RelStepMonitor : public StepMonitor {
     const char *name() const override { return "rel_step"; }
 };
 
-// FEASIBILITY FUNNEL (SQP restoration): accept a step only if the worst-sample constraint violation
-// does not grow beyond max(previous, tol).
+// Feasibility funnel: rejects when the constraint violation (sum over ops of
+// Operator::constraint_violation) grows beyond max(previous, tol).
 class FeasibilityMonitor : public StepMonitor {
   public:
     FeasibilityMonitor() { tol = 0.02; }
@@ -66,9 +64,9 @@ class FeasibilityMonitor : public StepMonitor {
     const char *name() const override { return "feasibility"; }
 };
 
-// By name ("linearization_error" | "rel_step" | "feasibility"); nullptr for "none"/unknown (TR
-// off). tol / bump override the monitor's own default only when > 0 (pass tr_tol<=0 to keep the default,
-// since the good tol differs per monitor: ~0.2 linearization, ~0.02 feasibility).
+// Monitor by name ("linearization_error" | "rel_step" | "feasibility"); nullptr for "none"/unknown
+// (trust region off). tol / bump apply only when > 0, otherwise the per-monitor defaults are kept
+// (tol: 0.2 linearization_error, 0.5 rel_step, 0.02 feasibility).
 std::unique_ptr<StepMonitor> make_step_monitor(const std::string &name, double tol, double bump);
 
 } // namespace Gropt

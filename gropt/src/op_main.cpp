@@ -23,7 +23,6 @@ void Operator::init() {
     Ntot = N * Naxis;
 
     x_temp.setZero(Ntot);
-    x_temp_obj.setZero(Ntot);
     Ax_temp.setZero(Ax_size);
 
     eq_rows.setOnes(Ax_size);
@@ -78,9 +77,7 @@ void Operator::transpose_op(Eigen::VectorXd &X, Eigen::VectorXd &out) { transpos
 double Operator::estimate_self_spec_norm(int n_iters) {
     int Ntot_local = pdata->N * pdata->Naxis;
 
-    // Deterministic fixed-seed random start (broad spectral content, no global-RNG dependence, so
-    // spec_norm is bit-reproducible). Power iteration converges to the top singular value regardless
-    // of the start, so the seed choice only affects early-iteration transients.
+    // Fixed seed so spec_norm is reproducible
     std::mt19937 gen(1234567u);
     std::normal_distribution<double> dist(0.0, 1.0);
     Eigen::VectorXd v(Ntot_local);
@@ -94,10 +91,10 @@ double Operator::estimate_self_spec_norm(int n_iters) {
     double lam = 0.0;
     for (int it = 0; it < n_iters; it++) {
         Av.setZero();
-        forward(v, Av); // raw linear op (Op_SAFE freezes its abs-signs from v)
+        forward(v, Av); // raw op; SAFE recaptures its |.| signs from v (linearized at v)
         AtAv.setZero();
-        transpose(Av, AtAv); // raw adjoint; AᵀA is symmetric PSD -> real power iteration
-        lam = AtAv.norm();   // = ||AᵀA v||; -> lambda_max(AᵀA) = ||A||^2 as v converges
+        transpose(Av, AtAv); // raw adjoint
+        lam = AtAv.norm();   // -> lambda_max(AᵀA) = ||A||^2 as v converges
         if (lam <= 0.0) {
             break;
         }
@@ -147,9 +144,8 @@ void Operator::add_obj(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     spdlog::trace("Operator::add_obj   name = {}  obj_weight = {:.1e}", name, obj_weight);
 }
 
-// Linearized objective contribution to the RHS (convex-concave / DCA): freezes the objective
-// gradient at the current iterate x0 so the LHS stays positive-definite. Adds -obj_weight * AᵀA x0
-// (for obj_weight < 0 this is an ascent pull toward larger ||A x||, i.e. maximization).
+// Linearized (DCA) objective: gradient frozen at x0 goes in the RHS so the LHS stays positive-definite.
+// Adds -obj_weight * obj_gate * AᵀA x0; obj_weight < 0 pulls toward larger ||A x|| (maximization).
 void Operator::add_obj_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out, bool normalize) {
     if (!linearize_obj) return; // convex objectives contribute curvature via add_obj (LHS), not RHS
 
@@ -159,10 +155,10 @@ void Operator::add_obj_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out, bool norma
     forward_op(x0, Ax_temp);
     transpose_op(Ax_temp, x_temp);
 
-    double scale = -obj_weight * obj_gate; // obj_gate in [0,1]: feasibility gate (1.0 = off)
+    double scale = -obj_weight * obj_gate;
     if (normalize) {
         double n = x_temp.norm();
-        if (n > 1e-300) scale /= n; // self-normalize the direction; magnitude = |obj_weight| (constant)
+        if (n > 1e-300) scale /= n; // unit direction; magnitude = |obj_weight * obj_gate|
     }
     out.array() += scale * x_temp.array();
 
@@ -171,9 +167,7 @@ void Operator::add_obj_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out, bool norma
 }
 
 std::vector<int> Operator::Ax_block_lengths() const {
-    // Naxis equal, axis-contiguous blocks -- the layout every operator uses except SAFE. When
-    // Ax_size isn't a multiple of Naxis the output isn't axis-partitioned (e.g. a single scalar
-    // moment), so treat it as one N-independent block (it then resizes by carry-through).
+    // Naxis equal axis-contiguous blocks; if Ax_size % Naxis != 0 (e.g. a scalar output), one block
     if (Naxis > 0 && Ax_size % Naxis == 0) {
         return std::vector<int>(Naxis, Ax_size / Naxis);
     }

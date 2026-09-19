@@ -1,22 +1,9 @@
 #ifndef GROPT_WARMSTART_H
 #define GROPT_WARMSTART_H
 
-// Warm-starting one solve from another (e.g. sweeping TE, or adding a constraint).
-//
-// What we carry, and why
-//   * primal  X        -- the waveform. Resized across a grid change by interpolating only
-//                         the FREE segments of the fixer mask; FIXED segments come from the
-//                         new problem's set_vals (see ws_resize_waveform).
-//   * dual    y (per op) -- the Lagrange multiplier. This is the high-value state: it
-//                         accumulates over iterations and cannot be cheaply regenerated.
-//   * weight rho, gamma  -- seeded; the reweighter (Xu et al.) re-adapts them.
-// We deliberately do NOT carry the consensus z: it is regenerated as z = A*X after X is
-// loaded (the cold-start path already does exactly this in WorkspaceSolver::prep).
-//
-// Operators are matched between solves by Operator::unique_name (assigned in prepare() as
-// "<name>#<occurrence>"), so duplicate-named operators stay distinguishable and a rebuilt,
-// resized operator set still maps correctly as long as it is built in the same order. An
-// operator with no matching key (e.g. a newly added constraint) is left cold.
+// Warm-starting one solve from another (e.g. a TE sweep, or adding a constraint). Carries the primal X
+// and each operator's dual y, weight and gamma, matched by Operator::unique_name ("<name>#<occurrence>").
+// z is regenerated as A*X on load; unmatched operators start cold.
 
 #include "Eigen/Dense"
 #include <algorithm>
@@ -26,16 +13,14 @@
 
 namespace Gropt {
 
-// Snapshot of one operator's ADMM dual state. `blocks` records the flat partition of `y`
-// at capture time (e.g. SAFE = n_terms*Naxis blocks of N) so the loader can resize `y`
-// onto a new grid without needing the original operator object.
+// Snapshot of one operator's ADMM state.
 struct OpWarmState {
-    std::string key;
-    Eigen::VectorXd y;       // dual / Lagrange multiplier, in the operator's Ax-space
-    double weight = 1.0;     // ADMM penalty rho_i (seed; reweighter re-adapts)
+    std::string key;         // Operator::unique_name
+    Eigen::VectorXd y;       // dual, in the operator's normalized Ax-space
+    double weight = 1.0;     // ADMM penalty rho_i
     double gamma = 1.5;      // relaxation gamma_i
-    double spec_norm = 1.0;  // operator normalization at capture; renormalizes the dual on load (dt/N)
-    std::vector<int> blocks; // partition of y at capture (sum == y.size())
+    double spec_norm = 1.0;  // operator spec_norm at capture, used to rescale y on load
+    std::vector<int> blocks; // partition of y at capture (e.g. SAFE: n_terms*Naxis blocks of N)
 };
 
 // Full warm-start snapshot, decoupled from the operators/params that produced it.
@@ -59,12 +44,17 @@ struct WarmStart {
 // ---- resize primitives ---------------------------------------------------- //
 
 // Linearly resample a 1-D vector to n_new samples, preserving the endpoints.
-// n_new == n returns a copy; degenerate sizes are handled gracefully.
 inline Eigen::VectorXd ws_resample(const Eigen::VectorXd &v, int n_new) {
     const int n = static_cast<int>(v.size());
     if (n_new <= 0) return Eigen::VectorXd();
     if (n_new == n) return v;
     if (n <= 1) return Eigen::VectorXd::Constant(n_new, n == 1 ? v(0) : 0.0);
+    if (n_new == 1) { // the endpoint map below divides by n_new - 1; take the midpoint instead
+        const double t = 0.5 * (n - 1);
+        const int lo = static_cast<int>(t);
+        const int hi = std::min(lo + 1, n - 1);
+        return Eigen::VectorXd::Constant(1, (1.0 - (t - lo)) * v(lo) + (t - lo) * v(hi));
+    }
     Eigen::VectorXd out(n_new);
     for (int i = 0; i < n_new; i++) {
         const double t = static_cast<double>(i) * (n - 1) / (n_new - 1); // [0,n_new-1] -> [0,n-1]
@@ -76,15 +66,15 @@ inline Eigen::VectorXd ws_resample(const Eigen::VectorXd &v, int n_new) {
     return out;
 }
 
-// Resize a vector partitioned into blocks_src to the partition blocks_tgt, interpolating
-// each block independently so stacked blocks (e.g. SAFE's three term-blocks) never bleed
-// into each other. If the block COUNTS differ the input is returned unchanged (the caller
-// validates and warns -- a count change means the operator type changed, not just N).
+// Resample each block of v (partition blocks_src) to its blocks_tgt length independently, so stacked
+// blocks never bleed into each other. Returns an empty vector if the partitions are incompatible.
 inline Eigen::VectorXd ws_resize_blocks(const Eigen::VectorXd &v, const std::vector<int> &blocks_src,
                                         const std::vector<int> &blocks_tgt) {
-    if (blocks_src.size() != blocks_tgt.size()) return v;
-    int tgt_total = 0;
+    if (blocks_src.size() != blocks_tgt.size()) return Eigen::VectorXd();
+    int src_total = 0, tgt_total = 0;
+    for (int b : blocks_src) src_total += b;
     for (int b : blocks_tgt) tgt_total += b;
+    if (src_total != v.size()) return Eigen::VectorXd();
     Eigen::VectorXd out(tgt_total);
     int si = 0, ti = 0;
     for (size_t k = 0; k < blocks_src.size(); k++) {
@@ -95,11 +85,9 @@ inline Eigen::VectorXd ws_resize_blocks(const Eigen::VectorXd &v, const std::vec
     return out;
 }
 
-// Resize a captured dual onto a target operator's grid AND renormalize it for that operator's
-// spec_norm. The snapshot's dual lives in the SOURCE operator's spec_norm-normalized space, and
-// spec_norm depends on dt (and N for some operators), so preserving the *physical* dual across a
-// grid change requires scaling by spec_norm_new / spec_norm_old after the block interpolation.
-// blocks_tgt = target operator's Ax_block_lengths(); spec_norm_new = target operator's spec_norm.
+// Resize a captured dual onto the target operator's blocks and rescale by spec_norm_new / spec_norm_old:
+// y lives in the spec_norm-normalized Ax-space and spec_norm depends on dt (and N), so this keeps the
+// physical dual y / spec_norm unchanged.
 inline Eigen::VectorXd ws_resize_dual(const OpWarmState &st, const std::vector<int> &blocks_tgt,
                                       double spec_norm_new) {
     Eigen::VectorXd y = ws_resize_blocks(st.y, st.blocks, blocks_tgt);
@@ -128,9 +116,8 @@ inline std::vector<WsSeg> ws_segments(const Eigen::VectorXd &mask, int off, int 
     return segs;
 }
 
-// Segment-aware resize of a per-axis waveform. FREE runs are interpolated source-run k ->
-// target-run k; FIXED runs are taken from the target problem's set_vals. Requires equal
-// free-run counts per axis (the topology contract); missing source runs fill with zeros.
+// Resize a waveform run by run: free run k is resampled from source free run k (zeros if the source has
+// fewer runs); fixed runs come from the target set_vals. Callers check free-run counts match first.
 inline Eigen::VectorXd ws_resize_waveform(const Eigen::VectorXd &x_src, const Eigen::VectorXd &src_mask,
                                           const Eigen::VectorXd &tgt_mask, const Eigen::VectorXd &tgt_setvals,
                                           int Naxis) {
@@ -161,14 +148,16 @@ inline Eigen::VectorXd ws_resize_waveform(const Eigen::VectorXd &x_src, const Ei
     return out;
 }
 
-// Count free runs per axis (used to validate the topology contract before resizing X).
-inline int ws_free_run_count(const Eigen::VectorXd &mask, int Naxis) {
+// Count free runs on each axis (source and target must match before ws_resize_waveform).
+inline std::vector<int> ws_free_run_counts(const Eigen::VectorXd &mask, int Naxis) {
     const int n = static_cast<int>(mask.size()) / Naxis;
-    int count = 0;
-    for (const auto &s : ws_segments(mask, 0, n)) {
-        if (s.is_free) count++;
+    std::vector<int> counts(Naxis, 0);
+    for (int ax = 0; ax < Naxis; ax++) {
+        for (const auto &s : ws_segments(mask, ax * n, n)) {
+            if (s.is_free) counts[ax]++;
+        }
     }
-    return count;
+    return counts;
 }
 
 } // namespace Gropt

@@ -32,8 +32,6 @@ int Solver::logger(Eigen::VectorXd &X) {
         }
     }
 
-    hist_cg_iter.push_back(ils_solver->hist_n_iter.back());
-
     return all_feasible;
 }
 
@@ -41,7 +39,10 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
 
     result.converged = true;
 
-    result.n_feval = std::accumulate(ils_solver->hist_n_iter.begin(), ils_solver->hist_n_iter.end(), 0);
+    result.n_feval = 0;
+    for (int n : ils_solver->hist_n_iter) {
+        if (n > 0) result.n_feval += n; // skip the -1 placeholder for iteration 0 (no inner solve)
+    }
 
     spdlog::info(" ");
     spdlog::info("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ");
@@ -55,11 +56,9 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
         Operator *op = gparams->all_op[i].get();
         op->Ax_temp.setZero();
         op->forward_op(X, op->Ax_temp);
-        op->check(op->Ax_temp); // fresh feasibility of the RETURNED waveform (not the last loop iterate)
+        op->check(op->Ax_temp); // feasibility of the returned X, not the last loop iterate
 
-        // Physical (un-normalized) constraint values for the table: forward() is the raw A*X in the
-        // same units as target/tol0, whereas forward_op() above is divided by spec_norm (and equil-
-        // scaled) for the solver. Use a local vector so op->Ax_temp (the check() input) is untouched.
+        // Table values in the units of target/tol0: raw forward(), not the normalized forward_op().
         Eigen::VectorXd Ax_phys(op->Ax_size);
         op->forward(X, Ax_phys);
 
@@ -71,8 +70,7 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
         }
     }
 
-    // Report the final b-value if a b-value operator exists, whether it was added as a
-    // constraint (all_op) or as a maximization objective (all_obj).
+    // Report the final b-value from a b-value operator in either all_op or all_obj.
     auto report_bvalue = [&](std::vector<std::unique_ptr<Operator>> &ops) {
         for (auto &op_ptr : ops) {
             Operator *op = op_ptr.get();
@@ -93,10 +91,8 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
 }
 
 WarmStart Solver::capture_warmstart(const Eigen::VectorXd &X) {
-    // Snapshot the current ADMM state: primal X, plus each operator's dual (ws->y1), penalty
-    // (weight) and relaxation (gamma), tagged by unique_name and the operator's Ax-block layout
-    // so it can be matched and resized in a later solve. The consensus z is deliberately NOT
-    // stored -- it is regenerated as z = A*X when the snapshot is loaded (see warmstart.hpp).
+    // Snapshot X and each operator's y1, weight and gamma, keyed by unique_name with its Ax-block layout.
+    // z is not stored; it is regenerated as A*X on load.
     WarmStart w;
     if (gparams == nullptr) return w;
     w.active = true;
@@ -112,7 +108,7 @@ WarmStart Solver::capture_warmstart(const Eigen::VectorXd &X) {
         st.y = ws[i]->y1;
         st.weight = ws[i]->weight;
         st.gamma = ws[i]->gamma;
-        st.spec_norm = op->spec_norm; // normalization at capture, to rescale the dual on load
+        st.spec_norm = op->spec_norm; // to rescale the dual on load
         st.blocks = op->Ax_block_lengths();
         w.ops.push_back(st);
     }

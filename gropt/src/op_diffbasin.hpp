@@ -7,8 +7,8 @@
  *     mean(g, pre-180 window)  >=  +eps
  *     mean(g, post-180 window) <=  -eps        eps = eps_factor * gmax
  *
- * Essentially forces a gradient flip around the 180 (or that they stay the same sign if same_sign=true). 
- * The mean is taken over a window of length window_time on each side of the 180.
+ * Forces the gradient sign to flip across the 180 (with same_sign=true, post >= +eps instead).
+ * Each mean is over round(window_time / dt) free samples on that side of the 180.
  */
 
 #include "Eigen/Dense"

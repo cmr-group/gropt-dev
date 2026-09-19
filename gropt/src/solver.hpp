@@ -16,6 +16,7 @@ namespace Gropt {
 
 class GroptParams; // Forward declaration of GroptParams class
 
+// Per-iteration solver traces, filled only when Solver::extra_debug is true.
 struct DebugSolver {
     std::vector<Eigen::VectorXd> hist_X;
     std::vector<Eigen::VectorXd> hist_Ax;
@@ -25,26 +26,23 @@ struct DebugSolver {
     std::vector<std::vector<double>> hist_weight;
     std::vector<std::vector<double>> hist_gamma;
     std::vector<double> hist_gamma_x;
-    // Boyd ADMM residual traces (per iteration, per operator); only filled when extra_debug is on:
+    // Boyd ADMM residuals per iteration, per non-projected operator:
     //   primal = ||A x - z||                 (consensus gap)
     //   dual   = ||rho * A^T (z - z_prev)||  (stationarity)
     std::vector<std::vector<double>> hist_r_prim;
     std::vector<std::vector<double>> hist_r_dual;
-    // Per-operator feasibility traces (per iteration, per operator):
+    // Per-operator feasibility per iteration:
     //   r_feas = relative distance of A x from the feasible set
     //   feas   = binary feasible flag (1/0)
     std::vector<std::vector<double>> hist_r_feas;
     std::vector<std::vector<int>> hist_feas;
-    // Single binary: 1 if ALL operators were feasible this iteration (logger's verdict), else 0.
-    // Plot against hist_bvalue to see whether the objective is still climbing while feasibility
-    // flickers off (best-feasible returns an earlier iterate) or has plateaued while feasible.
+    // 1 if all operators were feasible this iteration, else 0.
     std::vector<int> hist_all_feas;
-    // Achieved b-value per iteration (scalar). Empty if no b-value operator is present.
+    // Achieved b-value per iteration. Empty if no b-value operator is present.
     std::vector<double> hist_bvalue;
-    // Outer iteration whose iterate was actually RETURNED (the best feasible one), or -1 if none.
-    // Index hist_bvalue[best_feasible_iter] to mark the returned solution on the plots.
+    // Outer iteration of the returned (best feasible) iterate, or -1 if none was feasible.
     int best_feasible_iter = -1;
-    // Inner linear-solver (CG/BiCGstabl) diagnostics, one entry per outer iteration:
+    // Inner linear-solver diagnostics, one entry per inner solve (hist_cg_iter[0] is a -1 placeholder):
     //   n_iter = iterations the inner solver took
     //   rnorm0 = initial residual ||b - A x0|| (warm-start residual)
     //   rnorm  = final residual at the inner-solver stop
@@ -53,11 +51,8 @@ struct DebugSolver {
     std::vector<double> hist_cg_rnorm0;
     std::vector<double> hist_cg_rnorm;
     std::vector<double> hist_cg_bnorm0;
-    std::vector<int> hist_cg_neg_curv;  // CG: per outer iter, 1 if non-positive curvature (pAp<=0) was hit
-    std::vector<double> hist_cg_min_curv;  // CG: per outer iter, min Rayleigh quotient (curvature margin)
-    std::vector<double> hist_cg_max_curv;  // CG: per outer iter, max Rayleigh quotient
-    // Objective-vs-constraint balance (DCA objective), per outer iteration:
-    std::vector<double> hist_obj_pull;                 // ||g_obj||  objective DCA/RHS pull
+    // Objective vs constraint pull on the x-update RHS, per outer iteration:
+    std::vector<double> hist_obj_pull;                 // ||g_obj||  linearized objective pull
     std::vector<double> hist_con_pull;                 // ||Σ Aᵀy||  total constraint pull
     std::vector<std::vector<double>> hist_con_pull_op; // per-operator ||Aᵀy||
 };
@@ -73,31 +68,29 @@ class Solver {
     int max_iter = 2000;
     int max_feval = 12000;
     int log_interval = 20;
-    int min_iter = 0;
+    int min_iter = 1;
     double gamma_x = 1.6;
     int obj_patience = 20;  // stop after this many feasible iters with no objective improvement
     double obj_rtol = 1e-4; // relative objective-improvement threshold
 
     double ils_tol = 1e-3;
-    int ils_max_iter = 10;
+    int ils_max_iter = 20;
     int ils_min_iter = 2;
     double ils_sigma = 1e-4;
-    double ils_tik_lam = 1e-4;
+    double ils_tik_lam = 0.0;
 
     bool extra_debug = false;
     DebugSolver debug_solver;
 
     // Warm-start state (see warmstart.hpp).
     WarmStart warmstart;       // input: loaded by set_warmstart(), consumed by solve()
-    WarmStart best_warmstart;  // output: captured at the best-feasible lock, returned by get_warmstart()
+    WarmStart best_warmstart;  // output: captured at the best feasible iterate, returned by get_warmstart()
 
-    std::vector<int> hist_cg_iter;
-
-    // Iteration counter (was on GroptParams)
+    // Outer iteration counter
     int iiter = 0;
 
     Solver() = default;
-    ~Solver() = default;
+    virtual ~Solver() = default; // deleted through Solver* when the solver type is chosen at runtime
 
     virtual SolveResult solve(GroptParams &_gparams);
     virtual int logger(Eigen::VectorXd &X);
