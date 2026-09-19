@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/eigen/dense.h>
@@ -1332,14 +1333,16 @@ np.ndarray
     );
 
     // low_freq_project: exposes fft_tools LowFreqProjector (per-free-run DST-I low-pass)
+    // fixer defaults to None: an Eigen default would be converted to a numpy array at import time, so the
+    // module (and build-time stub generation) would need numpy.
     m.def("low_freq_project", [](Eigen::VectorXd x, double dt, double cutoff_hz,
-                                 Eigen::VectorXd fixer, int Naxis, double trans_frac) -> Eigen::VectorXd {
+                                 std::optional<Eigen::VectorXd> fixer, int Naxis, double trans_frac) -> Eigen::VectorXd {
         int N = static_cast<int>(x.size()) / Naxis;
         Gropt::LowFreqProjector proj;
-        proj.setup(N, Naxis, dt, cutoff_hz, fixer, trans_frac);
+        proj.setup(N, Naxis, dt, cutoff_hz, fixer.value_or(Eigen::VectorXd()), trans_frac);
         proj.project(x);
         return x;
-    }, "x"_a, "dt"_a, "cutoff_hz"_a, "fixer"_a = Eigen::VectorXd(), "Naxis"_a = 1, "trans_frac"_a = 0.0,
+    }, "x"_a, "dt"_a, "cutoff_hz"_a, "fixer"_a = nb::none(), "Naxis"_a = 1, "trans_frac"_a = 0.0,
 R"doc(Low-pass a waveform with a per-free-run DST-I projection.
 
 This is the filter SolverGroptSDMM applies when cutoff_freq > 0. Each maximal run
@@ -1355,7 +1358,7 @@ dt : float
 cutoff_hz : float
     Cutoff frequency [Hz]; <= 0 returns x unchanged.
 fixer : np.ndarray, optional
-    Free mask (1 = free, 0 = fixed), length Naxis*N. Empty (default) or any
+    Free mask (1 = free, 0 = fixed), length Naxis*N. None (default) or any
     other length treats every sample as free.
 Naxis : int, optional
     Number of axes.

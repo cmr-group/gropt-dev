@@ -8,7 +8,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Sep 18 2026 21:36:42'
+__build_date__: str = 'Sep 19 2026 12:02:16'
 
 def set_log_level(level: int) -> None:
     """
@@ -1315,7 +1315,7 @@ def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')
         (1.0 = at the limit).
     """
 
-def low_freq_project(x: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, cutoff_hz: float, fixer: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] = ..., Naxis: int = 1, trans_frac: float = 0.0) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
+def low_freq_project(x: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, cutoff_hz: float, fixer: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')] | None = None, Naxis: int = 1, trans_frac: float = 0.0) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
     """
     Low-pass a waveform with a per-free-run DST-I projection.
 
@@ -1332,7 +1332,7 @@ def low_freq_project(x: Annotated[NDArray[numpy.float64], dict(shape=(None,), or
     cutoff_hz : float
         Cutoff frequency [Hz]; <= 0 returns x unchanged.
     fixer : np.ndarray, optional
-        Free mask (1 = free, 0 = fixed), length Naxis*N. Empty (default) or any
+        Free mask (1 = free, 0 = fixed), length Naxis*N. None (default) or any
         other length treats every sample as free.
     Naxis : int, optional
         Number of axes.
