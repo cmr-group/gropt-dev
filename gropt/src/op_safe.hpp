@@ -2,7 +2,18 @@
 #define OP_SAFE_H
 
 /**
- * Constraint on the SAFE-model PNS prediction of the gradient waveform, per axis and sample.
+ * Constraint on the SAFE-model PNS prediction of the gradient waveform.
+ *
+ * At each sample the per-axis stimulations are combined as the root-sum-square,
+ * sqrt(sum_j (stim_j / thresh_j)^2) <= 1, which is how the scanner adds simultaneous axes. Limiting each
+ * axis on its own would be weaker by up to sqrt(Naxis) and would trip the scanner. Naxis == 1 reduces to
+ * the single-axis clamp exactly.
+ *
+ * This is NOT rotationally invariant: the per-axis time constants, weights and limits differ, so rotating
+ * the waveform changes the predicted PNS. Unlike gmax/slew -- where the constraint carries no per-axis
+ * weighting, so the Euclidean norm really is invariant -- no norm of the per-axis SAFE responses is. Hence
+ * rot_variant is required to be true (init() throws otherwise); a rotationally invariant limit needs a
+ * worst-case-over-orientations bound, which this is not.
  */
 
 #include "Eigen/Dense"
@@ -62,6 +73,9 @@ class Op_SAFE : public Operator {
 
     // Set during the inner CG: forward() applies the held signs1/2/3 linearly instead of |.|
     bool freeze_signs = false;
+
+    // Summed stimulation of one axis at one sample, from the n_terms blocks of X (Ax space).
+    double axis_stim(const Eigen::VectorXd &X, int j, int i) const;
 
     Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod);
     Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_vec, double _weight_mod);

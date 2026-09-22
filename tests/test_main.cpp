@@ -7,11 +7,13 @@
 
 int run_op_transpose_tests();
 int run_add_obj_tests();
+int run_safe_axes_tests();
 
 int main() {
     int failures = 0;
     failures += run_op_transpose_tests();
     failures += run_add_obj_tests();
+    failures += run_safe_axes_tests();
 
     if (failures > 0) {
         std::fprintf(stderr, "\nFAILED: %d test(s)\n", failures);

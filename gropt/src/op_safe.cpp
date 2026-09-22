@@ -253,6 +253,12 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     }
 }
 
+double Op_SAFE::axis_stim(const Eigen::VectorXd &X, int j, int i) const {
+    double v = X(j * n_terms * N + i) + X(j * n_terms * N + i + N);
+    if (n_terms == 3) v += X(j * n_terms * N + i + 2 * N);
+    return v;
+}
+
 void Op_SAFE::prox(Eigen::VectorXd &X) {
     spdlog::trace("Starting Op_SAFE::prox");
 
@@ -261,30 +267,19 @@ void Op_SAFE::prox(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
-    // Sum the n_terms per axis (not across axes)
-    x_temp.setZero();
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            if (n_terms == 3) {
-                x_temp(j * N + i) =
-                    X(j * n_terms * N + i) + X(j * n_terms * N + i + N) + X(j * n_terms * N + i + 2 * N);
-            } else if (n_terms == 2) {
-                x_temp(j * N + i) = X(j * n_terms * N + i) + X(j * n_terms * N + i + N);
-            }
+    // Project onto the combined limit at each sample. Naxis == 1 reduces to the per-axis clamp exactly.
+    const double upper = 1.0 - cushion; // in units of "fraction of the limit"
+    for (int i = 0; i < N; i++) {
+        double ss = 0.0;
+        for (int j = 0; j < Naxis; j++) {
+            double u = axis_stim(X, j, i) / stim_thresh_vec(j * N + i);
+            ss += u * u;
         }
-    }
-
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            double val = abs(x_temp(j * N + i));
-
-            double upper_bound = (1 - cushion) * stim_thresh_vec(j * N + i);
-            if (val > upper_bound) {
-                X(j * n_terms * N + i) *= (upper_bound / val);
-                X(j * n_terms * N + i + N) *= (upper_bound / val);
-                if (n_terms == 3) {
-                    X(j * n_terms * N + i + 2 * N) *= (upper_bound / val);
-                }
+        double val = sqrt(ss);
+        if (val > upper) {
+            const double f = upper / val;
+            for (int j = 0; j < Naxis; j++) {
+                for (int b = 0; b < n_terms; b++) X(j * n_terms * N + i + b * N) *= f;
             }
         }
     }
@@ -305,27 +300,13 @@ void Op_SAFE::check(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
-    x_temp.setZero();
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            if (n_terms == 3) {
-                x_temp(j * N + i) =
-                    X(j * n_terms * N + i) + X(j * n_terms * N + i + N) + X(j * n_terms * N + i + 2 * N);
-            } else if (n_terms == 2) {
-                x_temp(j * N + i) = X(j * n_terms * N + i) + X(j * n_terms * N + i + N);
-            }
+    for (int i = 0; i < N; i++) {
+        double ss = 0.0;
+        for (int j = 0; j < Naxis; j++) {
+            double u = axis_stim(X, j, i) / stim_thresh_vec(j * N + i);
+            ss += u * u;
         }
-    }
-
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            double val = abs(x_temp(j * N + i));
-            double upper_bound = stim_thresh_vec(j * N + i);
-
-            if (val > upper_bound) {
-                is_feas = 0;
-            }
-        }
+        if (sqrt(ss) > 1.0) is_feas = 0;
     }
 
     if (do_equil) {
@@ -365,7 +346,8 @@ double Op_SAFE::linearization_error(const Eigen::VectorXd &x_new) {
 }
 
 double Op_SAFE::constraint_violation(const Eigen::VectorXd &x_new) {
-    // max over samples of (|SAFE(x)| - limit), in check()'s units; leaves the frozen-sign state unchanged.
+    // max over samples of the fractional excess over the combined limit, sqrt(sum_j (stim_j/thresh_j)^2) - 1,
+    // matching check(); leaves the frozen-sign state unchanged.
     Eigen::VectorXd xc = x_new;
     Eigen::VectorXd out(Ax_size);
     const bool saved = freeze_signs;
@@ -377,18 +359,14 @@ double Op_SAFE::constraint_violation(const Eigen::VectorXd &x_new) {
     signs3 = s3;
     freeze_signs = saved;
     double viol = 0.0;
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            double val;
-            if (n_terms == 3) {
-                val = out(j * n_terms * N + i) + out(j * n_terms * N + i + N) + out(j * n_terms * N + i + 2 * N);
-            } else {
-                val = out(j * n_terms * N + i) + out(j * n_terms * N + i + N);
-            }
-            double av = (val < 0.0) ? -val : val;
-            double over = av - stim_thresh_vec(j * N + i);
-            if (over > viol) viol = over;
+    for (int i = 0; i < N; i++) {
+        double ss = 0.0;
+        for (int j = 0; j < Naxis; j++) {
+            double u = axis_stim(out, j, i) / stim_thresh_vec(j * N + i);
+            ss += u * u;
         }
+        double over = sqrt(ss) - 1.0;
+        if (over > viol) viol = over;
     }
     return viol;
 }
