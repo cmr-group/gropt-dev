@@ -457,6 +457,7 @@ void GroptParams::add_SAFE(double stim_thresh, int new_first_axis, double weight
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
+    op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
 }
 
@@ -468,6 +469,7 @@ void GroptParams::add_SAFE(double stim_thresh, const Eigen::VectorXd &tau1, cons
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
+    op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
 }
 
@@ -476,6 +478,7 @@ void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, int new_f
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
+    op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
 }
 
@@ -487,6 +490,7 @@ void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, const Eig
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
+    op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
 }
 

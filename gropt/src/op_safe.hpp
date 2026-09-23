@@ -60,6 +60,15 @@ class Op_SAFE : public Operator {
     Eigen::VectorXd signs1;
     Eigen::VectorXd signs2;
     Eigen::VectorXd signs3;
+    Eigen::VectorXd slew_temp;
+
+    // One-pole IIR pieces, shared with Op_SAFE_Slack so the two forwards differ only in term 2.
+    void compute_slew(const Eigen::VectorXd &X);                        // -> slew_temp
+    void lowpass(Eigen::VectorXd &v, const std::vector<double> &alpha) const;   // causal, in place
+    void lowpass_T(Eigen::VectorXd &v, const std::vector<double> &alpha) const; // its adjoint
+    void take_abs(Eigen::VectorXd &v, Eigen::VectorXd &signs) const;    // |.|, softabs or frozen sign
+    void diff_T(Eigen::VectorXd &out) const;                            // D^T on the waveform block
+
     Eigen::VectorXd stim1;
     Eigen::VectorXd stim2;
     Eigen::VectorXd stim3;
@@ -70,6 +79,13 @@ class Op_SAFE : public Operator {
 
     // Softabs smoothing of |.| [T/m/s]: |v| -> sqrt(v^2 + eps^2); 0 = exact |.|
     double safe_eps = 0.0;
+
+    // Emit terms 1 and 3 SIGNED and take their |.| in prox() instead. Their abs is OUTSIDE the filter, so
+    // the constraint at a sample depends on only a few per-sample coordinates and the projection can take
+    // the absolute values exactly -- no sign freezing for those terms, and no extra variable. Term 2
+    // cannot be done this way: its abs is inside the filter, so LP2(|S|) at a sample depends on every
+    // earlier one; removing THAT linearization needs the slack of Op_SAFE_Slack.
+    bool signed_terms13 = false;
 
     // Set during the inner CG: forward() applies the held signs1/2/3 linearly instead of |.|
     bool freeze_signs = false;
@@ -84,6 +100,8 @@ class Op_SAFE : public Operator {
     virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);
     virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);
     virtual void prox(Eigen::VectorXd &X);
+    void prox_signed(Eigen::VectorXd &X); // projection in magnitude space, used when signed_terms13
+
     virtual void check(Eigen::VectorXd &X);
 
     // Hold the |.| signs captured at X during the inner CG

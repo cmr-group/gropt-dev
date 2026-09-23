@@ -159,6 +159,10 @@ class GroptParams {
     // SAFE softabs smoothing [T/m/s] (see Op_SAFE::safe_eps); copied into each Op_SAFE by add_SAFE, so set it first.
     double safe_eps = 0.0;
 
+    // Emit SAFE terms 1 and 3 signed and take their |.| in the prox (see Op_SAFE::signed_terms13).
+    // Same lifetime rule as safe_eps -- set it before add_SAFE.
+    bool safe_signed13 = false;
+
     // Equality projector for project=true constraints, built in prepare(). eq_proj_dynamic: some projected
     // operator has iterate-dependent rows, so the solver rebuilds it every outer iteration.
     EqualityProjection eq_proj;

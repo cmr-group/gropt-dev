@@ -8,7 +8,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Sep 19 2026 12:02:16'
+__build_date__: str = 'Sep 23 2026 08:49:17'
 
 def set_log_level(level: int) -> None:
     """
@@ -156,6 +156,15 @@ class GroptParams:
 
     @safe_eps.setter
     def safe_eps(self, arg: float, /) -> None: ...
+
+    @property
+    def safe_signed13(self) -> bool:
+        """
+        Emit SAFE terms 1 and 3 signed and take their absolute values in the prox rather than the forward map, dropping the sign freezing of those terms. Set before add_SAFE.
+        """
+
+    @safe_signed13.setter
+    def safe_signed13(self, arg: bool, /) -> None: ...
 
     def vec_init_simple(self, N: int = -1, Naxis: int = -1, first_val: float = 0.0, last_val: float = 0.0) -> None:
         """

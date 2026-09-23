@@ -64,6 +64,7 @@ class DiffParams:
     cns_lim: float | None = None         # SAFE cardiac limit, same scale; None = off
     safe_params: SafeSource | None = None   # SAFE model source; None = SafeSource() (random, seed 42)
     safe_eps: float = 0.0                # softabs smoothing of SAFE |.| [T/m/s]; 0 = exact |.|
+    safe_signed13: bool = False          # |.| of SAFE terms 1/3 in the prox, not the forward map
     w_pns: float = 1.0
     w_cns: float = 1.0
 
@@ -525,6 +526,7 @@ def build_gparams(cfg: DiffParams):
     if cfg.pns_lim is not None or cfg.cns_lim is not None:
         pns_params, cns_params = (cfg.safe_params or SafeSource()).resolve()
         gp.safe_eps = cfg.safe_eps  # copied into each Op_SAFE by add_SAFE; must be set first
+        gp.safe_signed13 = cfg.safe_signed13
         if cfg.pns_lim is not None:
             gp.add_SAFE(cfg.pns_lim, safe_params=pns_params, weight_mod=cfg.w_pns)
             op_weights.append(cfg.w_pns)

@@ -135,6 +135,10 @@ R"doc(Problem definition: waveform layout, constraints, and objectives.)doc"
             "0 = exact (default). Set before add_SAFE/add_SAFE_vec; try ~1% of smax (e.g. 1-5 for "
             "smax = 200).")
 
+        .def_rw("safe_signed13", &Gropt::GroptParams::safe_signed13,
+            "Emit SAFE terms 1 and 3 signed and take their absolute values in the prox rather than the "
+            "forward map, dropping the sign freezing of those terms. Set before add_SAFE.")
+
         // vec_init_simple
         .def("vec_init_simple", &Gropt::GroptParams::vec_init_simple,
             "N"_a = -1, "Naxis"_a = -1, "first_val"_a = 0.0, "last_val"_a = 0.0,
