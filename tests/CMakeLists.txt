@@ -4,6 +4,8 @@ add_executable(gropt_tests
     test_add_obj.cpp
     test_safe_axes.cpp
     test_safe_signed.cpp
+    test_aux_blocks.cpp
+    test_slack_lift.cpp
     test_slew_check.cpp
 )
 

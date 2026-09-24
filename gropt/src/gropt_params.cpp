@@ -12,6 +12,8 @@
 #include "op_identity.hpp"
 #include "op_moment.hpp"
 #include "op_safe.hpp"
+#include "op_safe_slack.hpp"
+#include "op_slack_abs.hpp"
 #include "op_slew.hpp"
 #include "op_tv.hpp"
 
@@ -20,7 +22,12 @@ namespace Gropt {
 GroptParams::GroptParams() {}
 
 void GroptParams::rebuild_fixer_from_set_vals() {
-    pdata.fixer.setOnes(pdata.set_vals.size());
+    // The fixer spans the FULL primal so transpose_op stays a single elementwise multiply. Auxiliary
+    // blocks are left free: for u >= |slew| the slew at sample i depends on x_i AND x_{i-1}, so |slew_i|
+    // is pinned only where both are, which is a shifted AND of this mask -- not this mask. Reusing it
+    // directly would pin a slack whose slew is still free. Leaving them free is never unsafe: a slack
+    // above its true value only makes the constraint conservative, and check() scores the true waveform.
+    pdata.fixer.setOnes(pdata.n_total());
     for (int i = 0; i < pdata.set_vals.size(); i++) {
         if (!std::isnan(pdata.set_vals(i))) {
             pdata.fixer(i) = 0.0;
@@ -330,6 +337,17 @@ void GroptParams::prepare() {
         vec_init_simple(-1, -1, 0.0, 0.0);
     }
 
+    // Auxiliary primal blocks must be registered before any init(), which sizes its buffers from the total
+    // primal length. Rebuilt from scratch so repeated prepare() calls do not accumulate blocks.
+    pdata.clear_aux();
+    for (int i = 0; i < all_op.size(); i++) {
+        all_op[i]->declare_aux(pdata);
+    }
+    for (int i = 0; i < all_obj.size(); i++) {
+        all_obj[i]->declare_aux(pdata);
+    }
+    rebuild_fixer_from_set_vals(); // resize the mask now that the total length is known
+
     for (int i = 0; i < all_op.size(); i++) {
         all_op[i]->init();
     }
@@ -408,10 +426,10 @@ void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
         return;
     }
 
-    Eigen::MatrixXd M(k, Ntot);
+    Eigen::MatrixXd M = Eigen::MatrixXd::Zero(k, pdata.n_total()); // aux columns stay zero
     Eigen::VectorXd t(k);
     for (int r = 0; r < k; r++) {
-        M.row(r) = rows[r].transpose();
+        M.row(r).head(rows[r].size()) = rows[r].transpose();
         t(r) = targets[r];
     }
     eq_proj.build(M, t, pdata.fixer, eq_proj_solver, eq_proj_rcond);
@@ -452,46 +470,80 @@ void GroptParams::add_moment(double order, double target, double tol0, std::stri
     all_op.push_back(std::move(op));
 }
 
+void GroptParams::ensure_slack_abs(const std::string &aux_name, double weight_mod) {
+    // One coupling operator per block, however many lifted SAFE constraints read it: u >= |slew|
+    // is a statement about the waveform, so the PNS and cardiac models share it.
+    for (const auto &op : all_op) {
+        auto *sa = dynamic_cast<Op_SlackAbs *>(op.get());
+        if (sa != nullptr && sa->aux_block() == aux_name) return;
+    }
+    all_op.push_back(std::make_unique<Op_SlackAbs>(pdata, aux_name, weight_mod));
+}
+
 void GroptParams::add_SAFE(double stim_thresh, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
+    std::unique_ptr<Op_SAFE> op_F;
+    if (safe_lifted) {
+        op_F = std::make_unique<Op_SAFE_Slack>(pdata, stim_thresh, weight_mod, SAFE_SLACK_BLOCK);
+    } else {
+        op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
+    }
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
     op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
+    if (safe_lifted) ensure_slack_abs(SAFE_SLACK_BLOCK, weight_mod);
 }
 
 void GroptParams::add_SAFE(double stim_thresh, const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2,
                            const Eigen::VectorXd &tau3, const Eigen::VectorXd &a1, const Eigen::VectorXd &a2,
                            const Eigen::VectorXd &a3, const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
                            int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
+    std::unique_ptr<Op_SAFE> op_F;
+    if (safe_lifted) {
+        op_F = std::make_unique<Op_SAFE_Slack>(pdata, stim_thresh, weight_mod, SAFE_SLACK_BLOCK);
+    } else {
+        op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
+    }
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
     op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
+    if (safe_lifted) ensure_slack_abs(SAFE_SLACK_BLOCK, weight_mod);
 }
 
 void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
+    std::unique_ptr<Op_SAFE> op_F;
+    if (safe_lifted) {
+        op_F = std::make_unique<Op_SAFE_Slack>(pdata, stim_thresh_vec, weight_mod, SAFE_SLACK_BLOCK);
+    } else {
+        op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
+    }
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
     op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
+    if (safe_lifted) ensure_slack_abs(SAFE_SLACK_BLOCK, weight_mod);
 }
 
 void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, const Eigen::VectorXd &tau1,
                                const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3, const Eigen::VectorXd &a1,
                                const Eigen::VectorXd &a2, const Eigen::VectorXd &a3, const Eigen::VectorXd &stim_limit,
                                const Eigen::VectorXd &g_scale, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
+    std::unique_ptr<Op_SAFE> op_F;
+    if (safe_lifted) {
+        op_F = std::make_unique<Op_SAFE_Slack>(pdata, stim_thresh_vec, weight_mod, SAFE_SLACK_BLOCK);
+    } else {
+        op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
+    }
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
     op_F->signed_terms13 = safe_signed13;
     all_op.push_back(std::move(op_F));
+    if (safe_lifted) ensure_slack_abs(SAFE_SLACK_BLOCK, weight_mod);
 }
 
 void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod, int mode,

@@ -31,7 +31,14 @@ class Operator
 
     int N;
     int Naxis;
-    int Ntot;
+    int Ntot;     // waveform length, N * Naxis
+    int Ntot_all; // full primal length, waveform + auxiliary blocks
+
+    // Only an operator that reads or writes an auxiliary block sees the full primal. Everything else is
+    // handed the waveform alone, exactly the vector it saw before auxiliary blocks existed, so no ordinary
+    // operator needs to know they are there.
+    bool uses_aux = false;
+    int n_primal() const { return uses_aux ? Ntot_all : Ntot; }
     double dt;
     int Ax_size;
 
@@ -101,6 +108,16 @@ class Operator
     // ||true(x_new) - frozen_linear(x_new)|| / ||true(x_new)||, 0 for linear ops; call while frozen.
     // Used by LinearizationErrorMonitor to reject steps that leave a nonlinear op's valid region.
     virtual double linearization_error(const Eigen::VectorXd &x_new) { return 0.0; }
+
+    // Register any auxiliary primal blocks this operator needs (see ProblemData::add_aux). Called for
+    // every operator at the start of prepare(), before any init(), because init() sizes its buffers from
+    // the total primal length. Registration is by name, so operators needing the same quantity share one
+    // block. Seed the block's starting values in init_aux().
+    virtual void declare_aux(ProblemData & /*pd*/) {}
+
+    // Fill this operator's aux block(s) of the initial primal, given the waveform part. Default: leave
+    // them at zero.
+    virtual void init_aux(Eigen::VectorXd & /*X_full*/) {}
 
     // Worst-sample true (nonlinear) constraint overage at x_new, 0 when feasible; only Op_SAFE implements it.
     // Used by FeasibilityMonitor and the objective gate.

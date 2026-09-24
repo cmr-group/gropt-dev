@@ -160,7 +160,8 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             Xhat = X;
         }
 
-        if (((Xhat.array().abs() > 10).any()) || (Xhat.array().isNaN().any())) {
+        if (((Xhat.head(gparams->pdata.n_wave()).array().abs() > 10).any()) ||
+            (!Xhat.allFinite())) {
             spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         }
@@ -175,7 +176,10 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 
         // Low-pass the iterate until cutoff_iter (< 0 = always); re-project, since it changes the moments.
         if (lowfreq.active() && (cutoff_iter < 0 || iiter < cutoff_iter)) {
-            lowfreq.project(X);
+            // The filter is defined on the waveform's free runs; auxiliary blocks have no such structure.
+            Eigen::VectorXd x_wave = X.head(gparams->pdata.n_wave());
+            lowfreq.project(x_wave);
+            X.head(gparams->pdata.n_wave()) = x_wave;
             if (gparams->eq_proj.active) {
                 gparams->eq_proj.project_affine(X);
             }
@@ -238,7 +242,11 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     }
     result.n_iter = iiter;
     result.dt = gparams->dt;
-    final_log(result.X, result);
+    final_log(result.X, result); // reads the full primal: the operators see their auxiliary blocks
+    for (const auto &a : gparams->pdata.aux) {
+        result.aux[a.name] = result.X.segment(a.offset, a.size);
+    }
+    result.X = result.X.head(gparams->pdata.n_wave()).eval();
 
     // Copy the inner-solver histories before ils_solver is freed.
     if (extra_debug) {
@@ -257,6 +265,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 // --- solve() helpers ----------------------------------------------------------------------------- //
 
 Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
+    const int n_wave = gparams->pdata.n_wave();
     // Warm start: resize the snapshot waveform onto this grid (see warmstart.hpp). Start cold if its
     // axes or free/fixed layout don't match.
     Eigen::VectorXd X0_init = gparams->pdata.X0;
@@ -265,15 +274,26 @@ Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
                           (warmstart.X.size() == warmstart.fixer.size()) &&
                           (warmstart.fixer.size() % warmstart.Naxis == 0) &&
                           (ws_free_run_counts(warmstart.fixer, warmstart.Naxis) ==
-                           ws_free_run_counts(gparams->pdata.fixer, gparams->Naxis));
+                           ws_free_run_counts(gparams->pdata.fixer.head(n_wave), gparams->Naxis));
         if (compatible) {
-            X0_init = ws_resize_waveform(warmstart.X, warmstart.fixer, gparams->pdata.fixer,
+            // The fixer spans the auxiliary blocks, which are always free; comparing the whole thing would
+            // count their one long free run and reject every warm start.
+            X0_init = ws_resize_waveform(warmstart.X, warmstart.fixer, gparams->pdata.fixer.head(n_wave),
                                          gparams->pdata.set_vals, gparams->Naxis);
         } else {
             spdlog::warn("Warm start incompatible (Naxis, size, or free-segment count mismatch); "
                          "ignoring it and starting cold.");
             warmstart.active = false;
         }
+    }
+
+    // Grow to the full primal and let each operator seed the blocks it declared.
+    if (X0_init.size() < gparams->pdata.n_total()) {
+        Eigen::VectorXd full = Eigen::VectorXd::Zero(gparams->pdata.n_total());
+        full.head(n_wave) = X0_init.head(n_wave);
+        for (auto &op : gparams->all_op) op->init_aux(full);
+        for (auto &op : gparams->all_obj) op->init_aux(full);
+        X0_init = full;
     }
     return X0_init;
 }
@@ -335,7 +355,7 @@ void SolverGroptSDMM::record_debug(Eigen::VectorXd &X, Op_BValue *bval_op) {
 
         op->x_temp.setZero();
         op->transpose_op(w.y1, op->x_temp);
-        Aty.array() += op->x_temp.array();
+        Aty.head(op->n_primal()).array() += op->x_temp.array();
         con_pull_vec.push_back(op->x_temp.norm());
 
         weight_vec.push_back(w.weight);

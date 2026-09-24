@@ -1,6 +1,6 @@
 """GrOpt: Gradient Optimization for MRI"""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 import enum
 from typing import Annotated, overload
 
@@ -8,7 +8,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Sep 23 2026 08:49:17'
+__build_date__: str = 'Sep 24 2026 16:31:58'
 
 def set_log_level(level: int) -> None:
     """
@@ -50,6 +50,9 @@ class SolveResult:
         Total number of inner linear-solver iterations.
     dt : float
         Raster time of the waveform [s].
+    aux : dict[str, np.ndarray]
+        Auxiliary primal blocks by name, empty unless a constraint declared one
+        (SAFE's lifting declares "abs_slew" = u >= |slew|). X stays the waveform.
     bvalue : float
         b-value of the returned waveform [s/mm^2] if the problem has a b-value term
         (constraint or objective), else 0.
@@ -92,6 +95,12 @@ class SolveResult:
 
     @bvalue.setter
     def bvalue(self, arg: float, /) -> None: ...
+
+    @property
+    def aux(self) -> dict[str, Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]]: ...
+
+    @aux.setter
+    def aux(self, arg: Mapping[str, Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]], /) -> None: ...
 
     def __repr__(self) -> str: ...
 
@@ -165,6 +174,20 @@ class GroptParams:
 
     @safe_signed13.setter
     def safe_signed13(self, arg: bool, /) -> None: ...
+
+    @property
+    def safe_lifted(self) -> bool:
+        """
+        Lift SAFE's abs-inside-the-filter term: add_SAFE builds an Op_SAFE_Slack reading an auxiliary u >= |slew| in place of LP2(|slew|), plus the Op_SlackAbs that keeps u honest, so that term is linear and never re-linearized. Every lifted SAFE shares one u block. Set before add_SAFE/add_SAFE_vec.
+        """
+
+    @safe_lifted.setter
+    def safe_lifted(self, arg: bool, /) -> None: ...
+
+    def ensure_slack_abs(self, aux_name: str = 'abs_slew', weight_mod: float = 1.0) -> None:
+        """
+        Add the Op_SlackAbs enforcing u >= |slew|, unless one is already present. add_SAFE calls this itself when safe_lifted is set; call it first only to fix the operator's position in the list (warm-start keys are positional).
+        """
 
     def vec_init_simple(self, N: int = -1, Naxis: int = -1, first_val: float = 0.0, last_val: float = 0.0) -> None:
         """

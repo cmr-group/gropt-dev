@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/map.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/vector.h>
@@ -76,6 +77,9 @@ n_feval : int
     Total number of inner linear-solver iterations.
 dt : float
     Raster time of the waveform [s].
+aux : dict[str, np.ndarray]
+    Auxiliary primal blocks by name, empty unless a constraint declared one
+    (SAFE's lifting declares "abs_slew" = u >= |slew|). X stays the waveform.
 bvalue : float
     b-value of the returned waveform [s/mm^2] if the problem has a b-value term
     (constraint or objective), else 0.)doc"
@@ -87,6 +91,7 @@ bvalue : float
         .def_rw("n_feval", &Gropt::SolveResult::n_feval)
         .def_rw("dt", &Gropt::SolveResult::dt)
         .def_rw("bvalue", &Gropt::SolveResult::bvalue)
+        .def_rw("aux", &Gropt::SolveResult::aux)
         .def("__repr__", [](const Gropt::SolveResult &r) {
             return "SolveResult(converged=" + std::string(r.converged ? "True" : "False") +
                    ", n_iter=" + std::to_string(r.n_iter) +
@@ -138,6 +143,18 @@ R"doc(Problem definition: waveform layout, constraints, and objectives.)doc"
         .def_rw("safe_signed13", &Gropt::GroptParams::safe_signed13,
             "Emit SAFE terms 1 and 3 signed and take their absolute values in the prox rather than the "
             "forward map, dropping the sign freezing of those terms. Set before add_SAFE.")
+
+        .def_rw("safe_lifted", &Gropt::GroptParams::safe_lifted,
+            "Lift SAFE's abs-inside-the-filter term: add_SAFE builds an Op_SAFE_Slack reading an "
+            "auxiliary u >= |slew| in place of LP2(|slew|), plus the Op_SlackAbs that keeps u honest, "
+            "so that term is linear and never re-linearized. Every lifted SAFE shares one u block. "
+            "Set before add_SAFE/add_SAFE_vec.")
+
+        .def("ensure_slack_abs", &Gropt::GroptParams::ensure_slack_abs,
+            "aux_name"_a = "abs_slew", "weight_mod"_a = 1.0,
+            "Add the Op_SlackAbs enforcing u >= |slew|, unless one is already present. add_SAFE calls "
+            "this itself when safe_lifted is set; call it first only to fix the operator's position in "
+            "the list (warm-start keys are positional).")
 
         // vec_init_simple
         .def("vec_init_simple", &Gropt::GroptParams::vec_init_simple,

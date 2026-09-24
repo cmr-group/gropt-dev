@@ -12,7 +12,7 @@ ILS_BiCGstabl::ILS_BiCGstabl(GroptParams &_gparams, double _tol, double _sigma, 
 {
     name = "BiCGStabl";
 
-    int n = gparams->N * gparams->Naxis;
+    int n = gparams->pdata.n_total(); // the primal spans the auxiliary blocks
     rs.resize(ell + 1);
     us.resize(ell + 1);
     for (int i = 0; i <= ell; ++i) {

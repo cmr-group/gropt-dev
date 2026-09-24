@@ -65,6 +65,8 @@ class DiffParams:
     safe_params: SafeSource | None = None   # SAFE model source; None = SafeSource() (random, seed 42)
     safe_eps: float = 0.0                # softabs smoothing of SAFE |.| [T/m/s]; 0 = exact |.|
     safe_signed13: bool = False          # |.| of SAFE terms 1/3 in the prox, not the forward map
+    safe_lifted: bool = False            # lift LP2(|slew|) onto a slack u >= |slew| (Op_SAFE_Slack)
+    w_slack: float = 1.0                 # weight of the u >= |slew| coupling op (safe_lifted only)
     w_pns: float = 1.0
     w_cns: float = 1.0
 
@@ -351,7 +353,8 @@ def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_
     Returns
     -------
     dict  (or ``(dict, solver, gp)`` if ``return_solver``)
-        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, warmstart, solve_time
+        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, aux, warmstart,
+        solve_time
         [, debug, op_names].
     """
     scfg = scfg or SolverCfg()
@@ -527,6 +530,12 @@ def build_gparams(cfg: DiffParams):
         pns_params, cns_params = (cfg.safe_params or SafeSource()).resolve()
         gp.safe_eps = cfg.safe_eps  # copied into each Op_SAFE by add_SAFE; must be set first
         gp.safe_signed13 = cfg.safe_signed13
+        gp.safe_lifted = cfg.safe_lifted
+        if cfg.safe_lifted:
+            # Added up front so the operator order is deterministic: add_SAFE would otherwise insert it
+            # after whichever lifted SAFE comes first, and op_weights is zipped positionally.
+            gp.ensure_slack_abs(weight_mod=cfg.w_slack)
+            op_weights.append(cfg.w_slack)
         if cfg.pns_lim is not None:
             gp.add_SAFE(cfg.pns_lim, safe_params=pns_params, weight_mod=cfg.w_pns)
             op_weights.append(cfg.w_pns)
@@ -711,7 +720,7 @@ def _result_dict(cfg: DiffParams, r, solver, scfg: SolverCfg, gp=None, start_idx
     Returns
     -------
     dict
-        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, warmstart
+        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, aux, warmstart
         [, debug, op_names].
     """
     out = {
@@ -724,6 +733,9 @@ def _result_dict(cfg: DiffParams, r, solver, scfg: SolverCfg, gp=None, start_idx
         "n_feval": int(r.n_feval),
         "X": np.asarray(r.X),
         "warmstart": solver.get_warmstart(),
+        # Auxiliary primal blocks, empty unless a constraint declared one (SAFE's lifting gives
+        # "abs_slew" = u >= |slew|). X stays the waveform alone.
+        "aux": {k: np.asarray(v) for k, v in r.aux.items()},
     }
     if scfg.extra_debug:
         out["debug"] = solver.get_debug()

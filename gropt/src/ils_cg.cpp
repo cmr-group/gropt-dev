@@ -10,7 +10,7 @@ ILS_CG::ILS_CG(GroptParams &_gparams, double _tol, int _min_iter, double _sigma,
     : IndirectLinearSolver(_gparams, _n_iter, _sigma, _tik_lam), tol(_tol), min_iter(_min_iter) {
     name = "CG";
 
-    int size = gparams->N * gparams->Naxis;
+    int size = gparams->pdata.n_total(); // the primal spans the auxiliary blocks
     b.setZero(size);
     Ax.setZero(size);
     Ap.setZero(size);
