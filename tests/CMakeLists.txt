@@ -4,6 +4,7 @@ add_executable(gropt_tests
     test_add_obj.cpp
     test_safe_axes.cpp
     test_safe_signed.cpp
+    test_slew_check.cpp
 )
 
 target_link_libraries(gropt_tests PRIVATE gropt_core)

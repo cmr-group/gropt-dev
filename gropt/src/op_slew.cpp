@@ -1,5 +1,7 @@
 #include "spdlog/spdlog.h"
 
+#include <cmath>
+
 #include "op_slew.hpp"
 
 namespace Gropt {
@@ -127,36 +129,32 @@ void Op_Slew::check(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
+    // Slew sample i on axis ax is g(i+1) - g(i). It is checked unless samples i-1, i and i+1 of that axis are
+    // all pinned by set_vals: a pinned-to-pinned step is not the solver's to fix. The combined (rot_variant
+    // false) norm is checked if any axis has a free sample there, so pinning one axis (e.g. gx = 0 during a
+    // bipolar) does not switch off the check for the others.
+    auto free_near = [&](int ax, int i) {
+        const int base = ax * N;
+        bool f = std::isnan(pdata->set_vals(base + i)) || std::isnan(pdata->set_vals(base + i + 1));
+        if (i > 0) f = f || std::isnan(pdata->set_vals(base + i - 1));
+        return f;
+    };
+
     if (rot_variant) {
         bool use_vec = (smax_vec.size() == X.size());
-        for (int i = 0; i < X.size(); i++) {
-
-            bool should_check = isnan(pdata->set_vals(i));
-            if (i > 0) {
-                should_check = should_check || isnan(pdata->set_vals(i - 1));
-            }
-            if (i < X.size() - 1) {
-                should_check = should_check || isnan(pdata->set_vals(i + 1));
-            }
-            double tol_i = use_vec ? smax_vec(i) : tol0;
-            double lower_bound = target - tol_i;
-            double upper_bound = target + tol_i;
-
-            if (((X(i) < lower_bound) || (X(i) > upper_bound)) && should_check) {
-                is_feas = 0;
+        for (int i_ax = 0; i_ax < Naxis; i_ax++) {
+            for (int i = 0; i < N - 1; i++) {
+                const int e = i_ax * (N - 1) + i;
+                double tol_i = use_vec ? smax_vec(e) : tol0;
+                if (((X(e) < target - tol_i) || (X(e) > target + tol_i)) && free_near(i_ax, i)) {
+                    is_feas = 0;
+                }
             }
         }
     } else {
         for (int i = 0; i < N - 1; i++) {
-            bool should_check = isnan(pdata->set_vals(i));
-            if (i > 0) {
-                should_check = should_check || isnan(pdata->set_vals(i - 1));
-            }
-            if (i < N - 1) {
-                should_check = should_check || isnan(pdata->set_vals(i + 1));
-            }
-
-            double upper_bound = (target + tol0);
+            bool should_check = false;
+            for (int i_ax = 0; i_ax < Naxis; i_ax++) should_check = should_check || free_near(i_ax, i);
 
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
@@ -164,7 +162,7 @@ void Op_Slew::check(Eigen::VectorXd &X) {
             }
             val = sqrt(val);
 
-            if ((val > upper_bound) && should_check) {
+            if ((val > target + tol0) && should_check) {
                 is_feas = 0;
             }
         }
