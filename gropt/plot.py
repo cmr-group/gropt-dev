@@ -3,6 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import gropt
+from gropt.diffusion import safe_ops
 
 
 def get_moments(g, dt, inv_vec=None, start_idx=0, scale_to_one=True):
@@ -161,16 +162,12 @@ def plot_diff(cfg, res, cols=2, figsize=None, dpi=80, savename=None, highlight_r
 
     to_plot = ['gradient', 'slew', 'moments']
 
-    stim = []
-    if cfg.pns_lim is not None or cfg.cns_lim is not None:
-        if cfg.safe_params is not None:
-            pns_params, cns_params = cfg.safe_params.resolve()
-        else:
-            pns_params, cns_params = gropt.get_random_safe_params()
-        if cfg.pns_lim is not None:
-            stim.append((gropt.get_SAFE(g, dt, safe_params=pns_params), 'PNS', cfg.pns_lim, 'r'))
-        if cfg.cns_lim is not None:
-            stim.append((gropt.get_SAFE(g, dt, safe_params=cns_params), 'CNS', cfg.cns_lim, 'm'))
+    stim = []  # one curve per SAFE op, with the solve's filter
+    for model, axis, lim, params in safe_ops(cfg, N):
+        label = model.upper() + (f' {"xyz"[axis]}' if len(cfg.safe_test_axes) > 1 else '')
+        wave = gropt.get_SAFE(g, dt, new_first_axis=axis, safe_params=params,
+                              alpha_exact=cfg.safe_alpha_exact)
+        stim.append((wave, label, lim, 'r' if model == 'pns' else 'm'))
     if len(stim) > 0:
         to_plot.append('stim')
 
@@ -241,7 +238,7 @@ def plot_diff(cfg, res, cols=2, figsize=None, dpi=80, savename=None, highlight_r
         elif plot_type == 'stim':
             for stim_wave, label, lim, color in stim:
                 ax.plot(tt_ms, stim_wave, label=label)
-                ax.axhline(lim, linestyle=':', color=color, alpha=0.7)
+                ax.plot(tt_ms, np.broadcast_to(lim, tt_ms.shape), linestyle=':', color=color, alpha=0.7)
             ax.set_title('SAFE')
             ax.set_xlabel('t [ms]')
             ax.legend(loc='lower left')

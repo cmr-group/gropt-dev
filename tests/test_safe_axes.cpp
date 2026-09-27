@@ -165,5 +165,43 @@ int run_safe_axes_tests() {
         failures += report(rel[1] > 1e-9, "equal coefficients: still not rotation invariant", rel[1]);
         failures += report(rel[1] < rel[0], "equal coefficients shrink the rotation dependence", rel[1] / rel[0]);
     }
+
+    // 6. Limits: a vector must be Naxis*N long (no silent 1.0), empty = uniform 1.0, a scalar survives new N.
+    {
+        ProblemData p1 = make_pdata(N, 1);
+        auto safe_op = [&](auto thresh) {
+            auto op = std::make_unique<Op_SAFE>(p1, thresh, 1.0);
+            op->safe_params.set_demo_params();
+            return op;
+        };
+        auto prox_peak = [](Op_SAFE &op, Eigen::VectorXd w) { // peak stim / limit scale after prox
+            op.init();
+            Eigen::VectorXd a(op.Ax_size);
+            op.forward_op(w, a);
+            op.prox(a);
+            double ax, rss;
+            stim_stats(op, a, ax, rss);
+            return ax / (1.0 - op.cushion);
+        };
+        Eigen::VectorXd x = make_wave(N, 1, false);
+
+        bool threw = false;
+        try {
+            safe_op(Eigen::VectorXd::Constant(N - 1, 0.7))->init();
+        } catch (const std::invalid_argument &) {
+            threw = true;
+        }
+        failures += report(threw, "limit vector of the wrong length throws");
+        double ax = prox_peak(*safe_op(Eigen::VectorXd::Constant(N, 0.7)), x);
+        failures += report(std::abs(ax - 0.7) < 1e-9, "limit vector is the limit", ax);
+        ax = prox_peak(*safe_op(Eigen::VectorXd()), x);
+        failures += report(std::abs(ax - 1.0) < 1e-9, "empty limit vector = uniform 1.0", ax);
+
+        auto scal = safe_op(0.8);
+        scal->init();
+        p1 = make_pdata(N / 2, 1); // same object, new N
+        ax = prox_peak(*scal, make_wave(N / 2, 1, false));
+        failures += report(std::abs(ax - 0.8) < 1e-9, "scalar limit re-inits and holds at a new N", ax);
+    }
     return failures;
 }

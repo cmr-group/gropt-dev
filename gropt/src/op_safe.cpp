@@ -20,6 +20,7 @@ Op_SAFE::Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_
     stim_thresh = 1.0;
     weight_mod = _weight_mod;
     stim_thresh_vec = _stim_thresh_vec;
+    thresh_from_vec = (_stim_thresh_vec.size() > 0); // empty = uniform stim_thresh, as before
 }
 
 void Op_SAFE::init() {
@@ -41,14 +42,12 @@ void Op_SAFE::init() {
     tol0 = stim_thresh;
     tol = (1.0 - cushion) * tol0;
 
-    if (stim_thresh_vec.size() != pdata->Naxis * pdata->N) {
-        if (stim_thresh_vec.size() != 0) {
-            spdlog::warn("Op_SAFE::init  stim_thresh_vec size does not match Naxis * N, resizing to match");
-        }
-        stim_thresh_vec.resize(pdata->Naxis * pdata->N);
-        for (int i = 0; i < stim_thresh_vec.size(); i++) {
-            stim_thresh_vec(i) = stim_thresh;
-        }
+    // a scalar limit re-expands every init (N can change); a caller's vector must fit, no silent 1.0
+    if (!thresh_from_vec) {
+        stim_thresh_vec.setConstant(pdata->Naxis * pdata->N, stim_thresh);
+    } else if (stim_thresh_vec.size() != pdata->Naxis * pdata->N) {
+        throw std::invalid_argument("Op_SAFE: the limit vector has " + std::to_string(stim_thresh_vec.size()) +
+                                    " entries, expected Naxis*N = " + std::to_string(pdata->Naxis * pdata->N));
     }
 
     Ax_size = n_terms * pdata->Naxis * pdata->N;

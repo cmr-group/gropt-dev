@@ -554,7 +554,7 @@ Parameters
 ----------
 stim_thresh_vec : np.ndarray
     Per-sample stimulation limits as fractions of the SAFE threshold, length
-    Naxis*N. Any other length falls back to 1.0 everywhere, with a warning.
+    Naxis*N. Any other length raises ValueError at prepare().
 new_first_axis : int, optional
     Use the SAFE parameters of this axis (0, 1, 2) for the first gradient axis
     (swapped with axis 0).

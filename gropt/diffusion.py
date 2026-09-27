@@ -13,11 +13,15 @@ import copy
 import itertools
 from dataclasses import dataclass, replace
 from timeit import default_timer as timer
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 import gropt
-from gropt.readasc import asc_to_safe, get_random_safe_params
+from gropt.readasc import SAFE_KEYS, asc_to_safe, check_safe_params, get_random_safe_params
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 # ===========================================================================
@@ -25,7 +29,12 @@ from gropt.readasc import asc_to_safe, get_random_safe_params
 # ===========================================================================
 @dataclass(frozen=True)
 class DiffParams:
-    """Diffusion problem definition."""
+    """Diffusion problem definition.
+
+    ``pns_lim`` / ``cns_lim``: a float, a per-sample array (length N, or one row per ``safe_test_axes``
+    entry), or ``f(cfg, t)`` returning one for the sample times ``t``, re-evaluated for every TE (make it
+    module-level for parallel sweeps). See :func:`safe_ops`.
+    """
 
     # --- required timing [s] ---
     TE: float
@@ -62,9 +71,10 @@ class DiffParams:
     w_bval: float = 1.0             # constraint modes only
 
     # --- SAFE, PNS, CNS ---
-    pns_lim: float | None = None         # SAFE PNS limit (1.0 = model stim_limit); None = off
-    cns_lim: float | None = None         # SAFE cardiac limit, same scale; None = off
-    safe_params: SafeSource | None = None   # SAFE model source; None = SafeSource() (random, seed 42)
+    pns_lim: float | np.ndarray | Callable | None = None   # PNS limit, 1.0 = model stim_limit; None = off
+    cns_lim: float | np.ndarray | Callable | None = None   # CNS limit, same forms; None = off
+    safe_params: SafeSource | tuple | None = None   # None = random (seed 42); (pns, cns) -> kind="params"
+    safe_test_axes: tuple[int, ...] = (0,)          # axes (x, y, z = 0, 1, 2) to be safe on, one op each
     safe_eps: float = 0.0                # softabs smoothing of SAFE |.| [T/m/s]; 0 = exact |.|
     safe_signed13: bool = False          # |.| of SAFE terms 1/3 in the prox, not the forward map
     safe_lifted: bool = False            # lift LP2(|slew|) onto a slack u >= |slew| (Op_SAFE_Slack)
@@ -99,6 +109,17 @@ class DiffParams:
     x0_invert: bool = True          # flip the seed sign after the 180
     x0_periods: float = 1.0         # sine mode: periods per free run (zero at both ends)
     x0_project: bool = False        # pre-project the seed onto the moment null-space (M0..M_MMT = 0)
+
+    def __post_init__(self):
+        """Turn a (pns, cns) dict pair into SafeSource(kind="params"); check safe_test_axes."""
+        if isinstance(self.safe_params, (tuple, list)):
+            pns, cns = self.safe_params
+            object.__setattr__(self, "safe_params", SafeSource(kind="params", pns=pns, cns=cns))
+        axes = tuple(int(a) for a in np.atleast_1d(self.safe_test_axes))
+        if not axes or any(a not in (0, 1, 2) for a in axes):
+            msg = f"safe_test_axes must be a non-empty subset of (0, 1, 2), got {self.safe_test_axes!r}"
+            raise ValueError(msg)
+        object.__setattr__(self, "safe_test_axes", axes)
 
 
 # ===========================================================================
@@ -166,15 +187,29 @@ class SolverCfg:
 # ===========================================================================
 @dataclass(frozen=True)
 class SafeSource:
-    """Hashable pointer to SAFE model parameters, resolved to ``(pns, cns)`` dicts by ``resolve``.
+    """Pointer to SAFE model parameters, resolved to ``(pns, cns)`` dicts by ``resolve``.
 
     * ``kind="random"`` -- synthetic params from ``seed`` (default).
     * ``kind="asc"``    -- params parsed from the scanner file ``asc_file`` (required).
+    * ``kind="params"`` -- the dicts ``pns`` / ``cns`` (either may be None), validated and copied
+      (see :func:`gropt.readasc.make_safe_params`). Not hashable.
     """
 
     kind: str = "random"
     seed: int = 42
     asc_file: str | None = None
+    pns: dict | None = None
+    cns: dict | None = None
+
+    def __post_init__(self):
+        """Validate and copy the dicts of a kind="params" source."""
+        if self.kind == "params":
+            if self.pns is None and self.cns is None:
+                msg = "SafeSource(kind='params') needs pns and/or cns"
+                raise ValueError(msg)
+            for name in ("pns", "cns"):
+                if getattr(self, name) is not None:
+                    object.__setattr__(self, name, check_safe_params(getattr(self, name)))
 
     def resolve(self):
         """Resolve the pointer to concrete SAFE parameter dicts.
@@ -196,6 +231,8 @@ class SafeSource:
                 msg = "SafeSource(kind='asc') requires asc_file"
                 raise ValueError(msg)
             return asc_to_safe(self.asc_file)
+        if self.kind == "params":
+            return self.pns, self.cns
         msg = f"Unknown SafeSource kind: {self.kind!r}"
         raise ValueError(msg)
 
@@ -479,6 +516,56 @@ def suggest_moment_tol(cfg: DiffParams, cushion: float = 10.0):
                 "N_free": n_free, "A0_norm": a0_norm, "G_norm_est": g_norm_est}
 
 
+def safe_ops(cfg: DiffParams, N: int):
+    """List the SAFE constraints ``cfg`` builds: one per model and distinct tested axis.
+
+    Parameters
+    ----------
+    cfg : DiffParams
+        Problem definition (``pns_lim``, ``cns_lim``, ``safe_params``, ``safe_test_axes``).
+    N : int
+        Waveform samples (``gp.N``; ``int((TE - T_readout) / dt) + 1`` for ``diff_mode="gropt"``).
+
+    Returns
+    -------
+    list of tuple
+        ``(model, axis, limit, params)``: ``"pns"`` / ``"cns"``, the ``new_first_axis``, a float or
+        length-N limit, and the SAFE dict. Axes repeating an earlier one's coefficients and limit are dropped.
+
+    Raises
+    ------
+    ValueError
+        On a limit of the wrong shape or <= 0, or a limit whose model ``safe_params`` lacks.
+    """
+    if cfg.pns_lim is None and cfg.cns_lim is None:
+        return []
+    pns_params, cns_params = (cfg.safe_params or SafeSource()).resolve()
+    axes = cfg.safe_test_axes
+    t = np.arange(N) * cfg.dt
+    ops = []
+    for model, lim_src, params in (("pns", cfg.pns_lim, pns_params), ("cns", cfg.cns_lim, cns_params)):
+        if lim_src is None:
+            continue
+        if params is None:
+            msg = f"{model}_lim is set but safe_params has no {model} model"
+            raise ValueError(msg)
+        lim = np.asarray(lim_src(cfg, t) if callable(lim_src) else lim_src, dtype=float)
+        if lim.shape not in ((), (N,), (len(axes), N)):
+            msg = f"{model}_lim has shape {lim.shape}; expected a scalar, ({N},) or ({len(axes)}, {N})"
+            raise ValueError(msg)
+        if not (np.all(np.isfinite(lim)) and np.all(lim > 0)):
+            msg = f"{model}_lim must be finite and > 0"
+            raise ValueError(msg)
+        rows = [float(lim)] * len(axes) if lim.ndim == 0 else list(np.broadcast_to(lim, (len(axes), N)))
+        seen = set()
+        for axis, row in zip(axes, rows, strict=True):
+            key = (tuple(params[k][axis] for k in SAFE_KEYS), np.asarray(row).tobytes())
+            if key not in seen:
+                seen.add(key)
+                ops.append((model, axis, row, params))
+    return ops
+
+
 def build_gparams(cfg: DiffParams):
     """Build a ``GroptParams`` from a ``DiffParams``.
 
@@ -530,9 +617,9 @@ def build_gparams(cfg: DiffParams):
                       pwl_quad=cfg.moment_pwl_quad)
         op_weights.append(cfg.w_moment)
 
-    # SAFE (PNS / cardiac), both from one source (default: random params)
-    if cfg.pns_lim is not None or cfg.cns_lim is not None:
-        pns_params, cns_params = (cfg.safe_params or SafeSource()).resolve()
+    # SAFE (PNS / CNS): one op per model and tested axis, see safe_ops
+    ops = safe_ops(cfg, gp.N)
+    if ops:
         gp.safe_eps = cfg.safe_eps  # copied into each Op_SAFE by add_SAFE; must be set first
         gp.safe_signed13 = cfg.safe_signed13
         gp.safe_lifted = cfg.safe_lifted
@@ -541,12 +628,13 @@ def build_gparams(cfg: DiffParams):
             # up front for a deterministic op order (op_weights is zipped positionally)
             gp.ensure_slack_abs(weight_mod=cfg.w_slack)
             op_weights.append(cfg.w_slack)
-        if cfg.pns_lim is not None:
-            gp.add_SAFE(cfg.pns_lim, safe_params=pns_params, weight_mod=cfg.w_pns)
-            op_weights.append(cfg.w_pns)
-        if cfg.cns_lim is not None:
-            gp.add_SAFE(cfg.cns_lim, safe_params=cns_params, weight_mod=cfg.w_cns)
-            op_weights.append(cfg.w_cns)
+        for model, axis, lim, params in ops:
+            w = cfg.w_pns if model == "pns" else cfg.w_cns
+            if np.ndim(lim) == 0:
+                gp.add_SAFE(lim, new_first_axis=axis, safe_params=params, weight_mod=w)
+            else:
+                gp.add_SAFE_vec(lim, new_first_axis=axis, safe_params=params, weight_mod=w)
+            op_weights.append(w)
 
     if cfg.concomitant:
         gp.add_concomitant(start_idx=start_idx, project=cfg.concomitant_project, tol0=cfg.concomitant_tol,

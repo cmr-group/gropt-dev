@@ -54,6 +54,7 @@ class Op_SAFE : public Operator {
     double stim_thresh;
 
     Eigen::VectorXd stim_thresh_vec;
+    bool thresh_from_vec = false; // a caller-supplied limit vector: must be Naxis*N long, never rebuilt
 
     Eigen::VectorXd signs1;
     Eigen::VectorXd signs2;
