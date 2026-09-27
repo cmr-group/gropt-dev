@@ -5,6 +5,7 @@ nav:
       - Problem Init: python/problem.md
       - Constraints: python/constraints.md
       - Solving: python/solvers.md
+      - Diffusion: python/diffusion.md
   - Examples:
       - "examples/"
   - Math:

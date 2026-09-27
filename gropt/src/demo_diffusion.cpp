@@ -1,13 +1,12 @@
 // demo_diffusion.cpp -- recipe-driven diffusion solve; the C++ counterpart of gropt/diffusion.py.
 //
-//   gropt                          -> the built-in default recipe
-//   gropt recipes.json             -> the first recipe in that library file
-//   gropt recipes.json best_pns_1  -> that named recipe
+//   gropt                                   -> the built-in default recipe (Recipe{})
+//   gropt gropt/diffusion_recipes.json fast -> a role or entry of the shipped library
+//   gropt my_recipes.json [name]            -> a save_recipe file (default: its first recipe)
 //
 // The Problem (timing, limits, constraints) is fixed below; the Recipe (weights, x0 seed, solver settings)
-// comes from a gropt.diffusion_recipes.save_recipe JSON or default_recipe().
+// comes from diffusion_recipe.hpp.
 #include <cmath>
-#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -20,9 +19,10 @@
 #include <highfive/H5Easy.hpp>
 #include "solver.hpp"
 #endif
+#include "diffusion_recipe.hpp"
 #include "gropt_params.hpp"
-#include "nlohmann/json.hpp"
 #include "op_bvalue.hpp"
+#include "op_safe_slack.hpp"
 #include "solver_groptsdmm.hpp"
 
 using namespace Gropt;
@@ -102,6 +102,7 @@ struct Problem {
     // SAFE thresholds; < 0 => that model is off
     double pns_lim = 0.8;
     double cns_lim = 0.8;
+    bool safe_alpha_exact = true;      // raster-invariant filter (what the recipes are tuned with)
 
     // b-value: "obj" maximizes b; "setval"/"minval"/"minval_max" enforce it as a constraint
     std::string bval_mode = "obj";
@@ -109,216 +110,13 @@ struct Problem {
 
     // optional constraints (off by default)
     bool concomitant = false;
+    double concomitant_tol = 0.1;      // max |E_pre/E_post - 1|
+    bool concomitant_project = true;   // exact balance; false = the soft band
     double eddy_lam = -1.0;            // [s]; < 0 => off
     double jerk_lam = 0.0;             // order-2 TV weight; 0 => off
     int basin_same_sign = -1;          // -1 off | 0 force sign flip | 1 force same sign
     double basin_window = 1e-3, basin_eps = 0.07;
 };
-
-// ===================================================================================================
-// Recipe: how to solve. Mirrors save_recipe's JSON ("diff" = the non-problem DiffParams fields,
-// "solver" = SolverCfg). Defaults match the Python dataclasses, so missing keys act like replace().
-// ===================================================================================================
-struct Recipe {
-    std::string description;
-
-    // --- "diff" block (DiffParams solve knobs) ---
-    double w_gmax = 1.0, w_smax = 1.0, w_moment = 1.0;
-    double w_pns = 1.0, w_cns = 1.0, w_concomitant = 1.0, w_eddy = 1.0, w_jerk = 1.0, w_bval = 1.0;
-    bool   moment_project = true, concomitant_project = true, eddy_project = true;
-    double safe_eps = 0.0;
-    double bval_obj_weight = 1.0;   // obj mode
-    double bval_max_scale = 1.02;   // constraint mode
-    std::string x0_mode = "diff_init";   // "diff_init" | "const" | "sine"
-    double x0_amp = 0.01;
-    bool   x0_invert = true;
-    double x0_periods = 1.0;
-    bool   x0_project = false;
-
-    // --- "solver" block (SolverCfg) ---
-    int    max_iter = 4000, max_feval = 200000, min_iter = 1, obj_patience = 20;
-    double obj_rtol = 1e-4, gamma_x = 1.6;
-
-    double ils_tol = 0.1;
-    int    ils_max_iter = 20, ils_min_iter = 2;
-    double ils_sigma = 1e-4, ils_tik_lam = 0.0;
-
-    bool   bb_reweight = true;      // BB per-operator adaptation
-    int    rw_interval = 8;
-    double rw_e_corr = 0.2, rw_scalelim = 2.0, rw_eps = 1e-36;
-
-    bool   grw = true;              // global reweighting: bump the most persistently infeasible op
-    int    grw_interval = 20;
-    double grw_mod = 2.0;
-    bool   grw_balanced = false;
-
-    bool   reproject_iterate = true;
-
-    double cutoff_freq = -1.0;
-    int    cutoff_iter = -1;
-    double cutoff_trans = 0.0;
-
-    bool   tr_enable = false;       // trust-region step control
-    double tr_tol = -1.0, tr_bump = 4.0;
-    int    tr_max_reject = 5;
-    double tr_decay = 0.5;
-    std::string tr_monitor = "linearization_error";
-
-    bool   obj_gate = false;        // feasibility-gated objective
-    double obj_gate_scale = 0.05;
-
-    bool   extra_debug = false;
-};
-
-// A recipe tuned by a random sweep over PNS-limited problems, built in so the demo needs no JSON file.
-Recipe default_recipe() {
-    Recipe R;
-    R.description = "built-in best_pns_1 (frac_optimal=0.983)";
-
-    R.w_smax = 312.5601580523615;
-    R.w_pns = 47.05829778348828;
-    R.w_cns = 10.547056146456551;
-    R.bval_obj_weight = 0.21721639516550184;
-    R.bval_max_scale = 1.02;
-    R.x0_mode = "sine";
-    R.x0_amp = 0.036865715905310396;
-    R.x0_invert = false;
-    R.x0_periods = 4;
-    R.x0_project = true;
-
-    R.max_iter = 4000;
-    R.gamma_x = 1.0816673248634217;
-    R.ils_tol = 0.030682565018240758;
-    R.ils_max_iter = 26;
-    R.ils_min_iter = 2;
-    R.ils_sigma = 1.5214267699983488e-05;
-    R.rw_interval = 33;
-    R.rw_e_corr = 0.04925816096961088;
-    R.rw_scalelim = 9.591148924091835;
-    R.grw = true;
-    R.grw_interval = 15;
-    R.grw_mod = 9.56506967232672;
-    R.grw_balanced = false;
-    R.reproject_iterate = true;
-    R.tr_enable = true;
-    R.tr_bump = 10.985469703019819;
-    R.tr_tol = 0.1356731687978308;
-    R.tr_decay = 0.22704167936390063;
-    R.tr_max_reject = 25;
-    R.tr_monitor = "linearization_error";
-    R.obj_gate = false;
-    R.obj_gate_scale = 0.05;
-    return R;
-}
-
-// ===================================================================================================
-// Recipe JSON
-// ===================================================================================================
-// Overlay one JSON block onto R. Unknown keys (e.g. from a newer Python) are skipped with a warning.
-void apply_diff_block(const nlohmann::json &d, Recipe &R) {
-    for (const auto &[k, v] : d.items()) {
-        try {
-            if      (k == "w_gmax")          R.w_gmax = v.get<double>();
-            else if (k == "w_smax")          R.w_smax = v.get<double>();
-            else if (k == "w_moment")        R.w_moment = v.get<double>();
-            else if (k == "w_pns")           R.w_pns = v.get<double>();
-            else if (k == "w_cns")           R.w_cns = v.get<double>();
-            else if (k == "w_concomitant")   R.w_concomitant = v.get<double>();
-            else if (k == "w_eddy")          R.w_eddy = v.get<double>();
-            else if (k == "w_jerk")          R.w_jerk = v.get<double>();
-            else if (k == "w_bval")          R.w_bval = v.get<double>();
-            else if (k == "moment_project")  R.moment_project = v.get<bool>();
-            else if (k == "concomitant_project") R.concomitant_project = v.get<bool>();
-            else if (k == "eddy_project")    R.eddy_project = v.get<bool>();
-            else if (k == "safe_eps")        R.safe_eps = v.get<double>();
-            else if (k == "bval_obj_weight") R.bval_obj_weight = v.get<double>();
-            else if (k == "bval_max_scale")  R.bval_max_scale = v.get<double>();
-            else if (k == "x0_mode")         R.x0_mode = v.get<std::string>();
-            else if (k == "x0_amp")          R.x0_amp = v.get<double>();
-            else if (k == "x0_invert")       R.x0_invert = v.get<bool>();
-            else if (k == "x0_periods")      R.x0_periods = v.get<double>();
-            else if (k == "x0_project")      R.x0_project = v.get<bool>();
-            else spdlog::warn("recipe: ignoring unknown 'diff' key '{}'", k);
-        } catch (const nlohmann::json::exception &e) {   // nlohmann's type error does not name the key
-            throw std::runtime_error("recipe 'diff' key '" + k + "': " + e.what());
-        }
-    }
-}
-
-void apply_solver_block(const nlohmann::json &d, Recipe &R) {
-    for (const auto &[k, v] : d.items()) {
-        try {
-            if      (k == "max_iter")           R.max_iter = v.get<int>();
-            else if (k == "max_feval")          R.max_feval = v.get<int>();
-            else if (k == "min_iter")           R.min_iter = v.get<int>();
-            else if (k == "obj_patience")       R.obj_patience = v.get<int>();
-            else if (k == "obj_rtol")           R.obj_rtol = v.get<double>();
-            else if (k == "gamma_x")            R.gamma_x = v.get<double>();
-            else if (k == "ils_tol")            R.ils_tol = v.get<double>();
-            else if (k == "ils_max_iter")       R.ils_max_iter = v.get<int>();
-            else if (k == "ils_min_iter")       R.ils_min_iter = v.get<int>();
-            else if (k == "ils_sigma")          R.ils_sigma = v.get<double>();
-            else if (k == "ils_tik_lam")        R.ils_tik_lam = v.get<double>();
-            else if (k == "bb_reweight")        R.bb_reweight = v.get<bool>();
-            else if (k == "rw_interval")        R.rw_interval = v.get<int>();
-            else if (k == "rw_e_corr")          R.rw_e_corr = v.get<double>();
-            else if (k == "rw_scalelim")        R.rw_scalelim = v.get<double>();
-            else if (k == "rw_eps")             R.rw_eps = v.get<double>();
-            else if (k == "grw")                R.grw = v.get<bool>();
-            else if (k == "grw_interval")       R.grw_interval = v.get<int>();
-            else if (k == "grw_mod")            R.grw_mod = v.get<double>();
-            else if (k == "grw_balanced")       R.grw_balanced = v.get<bool>();
-            else if (k == "reproject_iterate")  R.reproject_iterate = v.get<bool>();
-            else if (k == "cutoff_freq")        R.cutoff_freq = v.get<double>();
-            else if (k == "cutoff_iter")        R.cutoff_iter = v.get<int>();
-            else if (k == "cutoff_trans")       R.cutoff_trans = v.get<double>();
-            else if (k == "tr_enable")          R.tr_enable = v.get<bool>();
-            else if (k == "tr_tol")             R.tr_tol = v.get<double>();
-            else if (k == "tr_bump")            R.tr_bump = v.get<double>();
-            else if (k == "tr_max_reject")      R.tr_max_reject = v.get<int>();
-            else if (k == "tr_decay")           R.tr_decay = v.get<double>();
-            else if (k == "tr_monitor")         R.tr_monitor = v.get<std::string>();
-            else if (k == "obj_gate")           R.obj_gate = v.get<bool>();
-            else if (k == "obj_gate_scale")     R.obj_gate_scale = v.get<double>();
-            else if (k == "extra_debug")        R.extra_debug = v.get<bool>();
-            else spdlog::warn("recipe: ignoring unknown 'solver' key '{}'", k);
-        } catch (const nlohmann::json::exception &e) {   // nlohmann's type error does not name the key
-            throw std::runtime_error("recipe 'solver' key '" + k + "': " + e.what());
-        }
-    }
-}
-
-// Load `name` from a recipe library JSON; empty => the alphabetically first entry (also the first in a
-// save_recipe file, which sorts keys). Missing keys keep the Recipe defaults.
-Recipe load_recipe(const std::string &path, const std::string &name) {
-    std::ifstream f(path);
-    if (!f) throw std::runtime_error("could not open recipe file: " + path);
-
-    nlohmann::json lib;
-    try {
-        f >> lib;
-    } catch (const nlohmann::json::parse_error &e) {
-        throw std::runtime_error("could not parse " + path + ": " + e.what());
-    }
-    if (!lib.is_object() || lib.empty()) {
-        throw std::runtime_error("recipe library is not a non-empty JSON object: " + path);
-    }
-
-    auto it = name.empty() ? lib.begin() : lib.find(name);
-    if (it == lib.end()) {
-        std::string have;
-        for (const auto &el : lib.items()) have += (have.empty() ? "" : ", ") + el.key();
-        throw std::runtime_error("recipe '" + name + "' not found in " + path + " (have: " + have + ")");
-    }
-    const nlohmann::json &entry = it.value();
-
-    Recipe R;
-    if (entry.contains("description")) R.description = entry["description"].get<std::string>();
-    if (entry.contains("diff")) apply_diff_block(entry["diff"], R);
-    if (entry.contains("solver")) apply_solver_block(entry["solver"], R);
-    spdlog::info("loaded recipe '{}' from {} ({})", it.key(), path, R.description);
-    return R;
-}
 
 // ===================================================================================================
 // Builders (the C++ mirror of diffusion.py's _build_x0 / build_gparams / make_solver)
@@ -386,6 +184,10 @@ int build_gparams(const Problem &P, const Recipe &R, GroptParams &gp) {
 
     if (P.pns_lim >= 0.0 || P.cns_lim >= 0.0) {
         gp.safe_eps = R.safe_eps;                       // copied into each Op_SAFE by add_SAFE; set first
+        gp.safe_signed13 = R.safe_signed13;
+        gp.safe_lifted = R.safe_lifted;
+        gp.safe_alpha_exact = P.safe_alpha_exact;
+        if (R.safe_lifted) gp.ensure_slack_abs(SAFE_SLACK_BLOCK, R.w_slack);   // first, as diffusion.py does
         if (P.pns_lim >= 0.0) {
             const SafeCoeffs s = pns_table();
             gp.add_SAFE(P.pns_lim, s.tau1, s.tau2, s.tau3, s.a1, s.a2, s.a3, s.stim_limit, s.g_scale, 0, R.w_pns);
@@ -397,7 +199,7 @@ int build_gparams(const Problem &P, const Recipe &R, GroptParams &gp) {
     }
 
     if (P.concomitant)
-        gp.add_concomitant(start_idx, true, R.w_concomitant, 0.1, 1.0, R.concomitant_project);
+        gp.add_concomitant(start_idx, true, R.w_concomitant, P.concomitant_tol, 1.0, P.concomitant_project);
     if (P.eddy_lam >= 0.0) {
         Eigen::VectorXd lam(1);
         lam(0) = P.eddy_lam;
@@ -474,7 +276,7 @@ void configure_solver(const Recipe &R, SolverGroptSDMM &solver) {
 
 void demo_diffusion(const std::string &recipe_path, const std::string &recipe_name) {
     const Problem P;
-    const Recipe R = recipe_path.empty() ? default_recipe() : load_recipe(recipe_path, recipe_name);
+    const Recipe R = recipe_path.empty() ? Recipe{} : load_recipe(recipe_path, recipe_name);
 
     GroptParams gp;
     build_gparams(P, R, gp);

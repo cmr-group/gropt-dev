@@ -5,12 +5,16 @@ Simplest call (gmax, smax, moment nulling and b-value only):
     from gropt.diffusion import DiffParams, solve
     res = solve(DiffParams(TE=60e-3, T_90=3e-3, T_180=5e-3, T_readout=16e-3))
     G = res["X"]
+
+The defaults are the tuned ``default`` recipe; ``available_recipes()`` lists the others, e.g.
+``solve(cfg, recipe="fast")``, or ``solve(cfg, recipe="best")`` to run several and keep the best.
 """
 
 from __future__ import annotations
 
 import copy
 import itertools
+import warnings
 from dataclasses import dataclass, replace
 from timeit import default_timer as timer
 from typing import TYPE_CHECKING
@@ -18,6 +22,12 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import gropt
+from gropt.diffusion_recipes import (
+    _read_library,
+    apply_recipe,
+    available_recipes,  # noqa: F401 -- re-exported, like iter_recipes
+    iter_recipes,
+)
 from gropt.readasc import SAFE_KEYS, asc_to_safe, check_safe_params, get_random_safe_params
 
 if TYPE_CHECKING:
@@ -34,6 +44,9 @@ class DiffParams:
     ``pns_lim`` / ``cns_lim``: a float, a per-sample array (length N, or one row per ``safe_test_axes``
     entry), or ``f(cfg, t)`` returning one for the sample times ``t``, re-evaluated for every TE (make it
     module-level for parallel sweeps). See :func:`safe_ops`.
+
+    The solve-knob defaults (``diffusion_recipes.RECIPE_FIELDS``) are the tuned ``default`` recipe; see
+    :func:`available_recipes` for the others.
     """
 
     # --- required timing [s] ---
@@ -51,7 +64,7 @@ class DiffParams:
 
     # --- slew rate ---
     smax: float = 200.0          # [T/m/s]
-    w_smax: float = 1.0
+    w_smax: float = 10.832717264505106
 
     # --- moments ---
     MMT: int = 0                 # null moments M0..M_MMT
@@ -65,7 +78,7 @@ class DiffParams:
     diff_mode: str = "gropt"        # "gropt" | "conventional" | "preencode"
     bval_mode: str = "obj"          # "obj" (maximize b) | constraint: "setval" | "minval" | "minval_max"
     bval_min: float = 100.0         # constraint modes: target b [s/mm^2]
-    bval_obj_weight: float = 1.0    # obj mode: magnitude of the normalized b-value pull
+    bval_obj_weight: float = 1.7034494007148022  # obj mode: magnitude of the normalized b-value pull
     bval_max_scale: float = 1.02    # minval_max: per-iteration b scale factor
     bval_pwl_quad: bool = False      # True: exact piecewise-linear b-value (see add_bvalue pwl_quad)
     w_bval: float = 1.0             # constraint modes only
@@ -77,16 +90,16 @@ class DiffParams:
     safe_test_axes: tuple[int, ...] = (0,)          # axes (x, y, z = 0, 1, 2) to be safe on, one op each
     safe_eps: float = 0.0                # softabs smoothing of SAFE |.| [T/m/s]; 0 = exact |.|
     safe_signed13: bool = False          # |.| of SAFE terms 1/3 in the prox, not the forward map
-    safe_lifted: bool = False            # lift LP2(|slew|) onto a slack u >= |slew| (Op_SAFE_Slack)
-    w_slack: float = 1.0                 # weight of the u >= |slew| coupling op (safe_lifted only)
-    safe_alpha_exact: bool = False       # True: raster-invariant filter (see GroptParams.safe_alpha_exact)
-    w_pns: float = 1.0
-    w_cns: float = 1.0
+    safe_lifted: bool = True             # lift LP2(|slew|) onto a slack u >= |slew| (Op_SAFE_Slack)
+    w_slack: float = 105.08823640819529  # weight of the u >= |slew| coupling op (safe_lifted only)
+    safe_alpha_exact: bool = True        # raster-invariant filter (see GroptParams.safe_alpha_exact)
+    w_pns: float = 12.366370987704867
+    w_cns: float = 57.339230929159065
 
     # --- optional constraints (None / False => off) ---
     concomitant: bool = False
     concomitant_tol: float = 0.1    # feasible when |E_pre/E_post - 1| <= tol; project=True still drives it to 1
-    w_concomitant: float = 1.0
+    w_concomitant: float = 4.371489218804275
     concomitant_project: bool = True
     concomitant_exact_quad: bool = True  # False: legacy raster-dependent rectangle sum of g^2
 
@@ -104,10 +117,10 @@ class DiffParams:
     w_jerk: float = 1.0
 
     # --- initial waveform (solve seed) ---
-    x0_mode: str = "diff_init"      # "diff_init" (built-in 1e-2 seed) | "const" | "sine"
-    x0_amp: float = 0.01            # seed amplitude on free samples (const, sine)
-    x0_invert: bool = True          # flip the seed sign after the 180
-    x0_periods: float = 1.0         # sine mode: periods per free run (zero at both ends)
+    x0_mode: str = "sine"           # "diff_init" (built-in 1e-2 seed) | "const" | "sine"
+    x0_amp: float = 0.08443255496637647  # seed amplitude on free samples (const, sine)
+    x0_invert: bool = False         # flip the seed sign after the 180
+    x0_periods: float = 2.0         # sine mode: periods per free run (zero at both ends)
     x0_project: bool = False        # pre-project the seed onto the moment null-space (M0..M_MMT = 0)
 
     def __post_init__(self):
@@ -129,9 +142,8 @@ class DiffParams:
 class SolverCfg:
     """Solver settings, tuned for diffusion b-value maximization.
 
-    These intentionally differ from the general C++ / ``gropt.solve()`` defaults: inexact CG
-    (``ils_tol=0.1``), a larger iteration budget, and more aggressive BB reweighting
-    (``rw_e_corr=0.2``, ``rw_scalelim=2.0``).
+    The defaults are the tuned ``default`` recipe (see :func:`available_recipes`), so they differ from the
+    general C++ / ``gropt.solve()`` defaults.
     """
 
     # outer loop
@@ -140,27 +152,27 @@ class SolverCfg:
     min_iter: int = 1
     obj_patience: int = 20          # obj mode: stop after N feasible iters with no improvement
     obj_rtol: float = 1e-4          # relative improvement threshold for obj_patience
-    gamma_x: float = 1.6            # over-relaxation of the X update
+    gamma_x: float = 1.165149741846207  # over-relaxation of the X update
 
     # inner (CG) solver
-    ils_tol: float = 0.1
-    ils_max_iter: int = 20
+    ils_tol: float = 0.07290432029478086
+    ils_max_iter: int = 31
     ils_min_iter: int = 2
-    ils_sigma: float = 1e-4         # proximal weight
+    ils_sigma: float = 0.0001554544663042038  # proximal weight
     ils_tik_lam: float = 0.0
 
     bb_reweight: bool = True        # BB per-operator adaptation
-    rw_interval: int = 8            # BB cadence: reweight every rw_interval outer iters
-    rw_e_corr: float = 0.2          # BB correlation threshold (Xu et al.); lower = more frequent updates
-    rw_scalelim: float = 2.0        # max weight change per BB step (1.0 = frozen)
+    rw_interval: int = 37           # BB cadence: reweight every rw_interval outer iters
+    rw_e_corr: float = 0.16079028465931097  # BB correlation threshold (Xu et al.); lower = updates more often
+    rw_scalelim: float = 4.991259555225381  # max weight change per BB step (1.0 = frozen)
     rw_eps: float = 1e-36           # safeguard floor for the correlation/norm guards
 
     grw: bool = True                # global reweighting: bump the most persistently infeasible op
-    grw_interval: int = 20          # grw cadence (only when grw)
-    grw_mod: float = 2.0            # grw multiplier (only when grw)
+    grw_interval: int = 31          # grw cadence (only when grw)
+    grw_mod: float = 6.005900533768388  # grw multiplier (only when grw)
     grw_balanced: bool = False      # rescale all weights to keep their geometric mean fixed
 
-    reproject_iterate: bool = True  # re-project onto the equality constraints each outer iteration
+    reproject_iterate: bool = False  # re-project onto the equality constraints each outer iteration
 
     # low-pass the iterate each outer iteration (suppresses high-frequency oscillation)
     cutoff_freq: float = -1.0       # [Hz]; <= 0 off
@@ -242,16 +254,19 @@ class SafeSource:
 # TE search
 # ===========================================================================
 def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | None = None,
-              mode: str = "minval", te_lo: float | None = None, te_hi: float | None = None,
-              te_tol: float | None = None, max_expand: int = 6, verbose: bool = False):
+              mode: str = "obj", te_lo: float | None = None, te_hi: float | None = None,
+              te_tol: float | None = None, max_expand: int = 6, verbose: bool = False, *,
+              recipe: str | None = None, library=None):
     """Smallest TE whose waveform reaches ``b >= target_b``, by monotonic bisection.
 
     Modes:
 
-    * ``"minval"`` (default): b-value constraint ``bval_min=target_b``; feasible if the solve converges.
-      Robust under tight constraints, but infeasible TEs run to ``max_iter`` and are slow.
-    * ``"obj"``: maximize b; feasible if converged and ``bvalue >= target_b``. Fast everywhere, but
-      b-maximization can fail under tight constraints (e.g. strict PNS), which over-estimates TE.
+    * ``"obj"`` (default): maximize b; feasible if ``bvalue >= target_b``. Fast, and with the tuned default
+      recipe robust under tight constraints (strict PNS) too.
+    * ``"minval"``: b-value constraint ``bval_min=target_b``. Infeasible TEs run to ``max_iter``, so it is
+      several times slower under PNS; the recipes are tuned for ``"obj"``.
+
+    Either way a TE counts as feasible only if the solve converged and its waveform passes :func:`verify`.
 
     Parameters
     ----------
@@ -262,7 +277,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
     target_b : float, optional
         b-value to reach [s/mm^2]; defaults to ``base_cfg.bvalue``.
     mode : str, optional
-        ``"minval"`` (default) or ``"obj"``, see above.
+        ``"obj"`` (default) or ``"minval"``, see above.
     te_lo, te_hi : float, optional
         Initial TE bracket [s]. Defaults: ``te_lo`` = the minimum physical TE (b~0 there, infeasible),
         ``te_hi`` = minimum physical TE + 80 ms.
@@ -273,6 +288,8 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
         Maximum number of times the bracket span is doubled while ``te_hi`` is infeasible. Default 6.
     verbose : bool, optional
         Print each evaluation.
+    recipe, library : optional
+        A named single recipe instead of ``scfg``, as in :func:`solve` (portfolios are not supported).
 
     Returns
     -------
@@ -287,7 +304,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
         search_time : wall-clock seconds for the whole search.
     """
     t_start = timer()
-    scfg = scfg or SolverCfg()
+    base_cfg, scfg = _with_recipe(base_cfg, scfg, recipe, library)
     target_b = base_cfg.bvalue if target_b is None else target_b
     if mode not in ("minval", "obj"):
         msg = f"te_search mode must be 'minval' or 'obj', got {mode!r}"
@@ -316,13 +333,11 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
         if m not in cache:
             n_solves += 1
             if mode == "minval":
-                # b >= target_b as a constraint; a converged solve is feasible
                 cfg = replace(base_cfg, TE=bin_solve_te(m), bval_mode="minval", bval_min=target_b)
             else:
-                # maximize b; a blow-up leaves converged=False and reads as infeasible
                 cfg = replace(base_cfg, TE=bin_solve_te(m), bval_mode="obj")
             res = solve(cfg, scfg)
-            ok = bool(res["converged"]) and res["bvalue"] >= 0.999 * target_b
+            ok = bool(res["converged"]) and res["bvalue"] >= 0.999 * target_b and verify(res, cfg)["feasible"]
             cache[m] = (ok, res)
             if verbose:
                 print(f"  TE={bin_start(m) * 1e3:6.2f} ms (N={m + 1}) -> b={res['bvalue']:8.1f} "
@@ -373,7 +388,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
 
 
 def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_weights: bool = True,
-          return_solver: bool = False):
+          return_solver: bool = False, *, recipe: str | None = None, library=None, parallel: bool = True):
     """Build + solve a single ``DiffParams``. The main entry point.
 
     Parameters
@@ -391,6 +406,15 @@ def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_
     return_solver : bool, optional
         If True, also return ``(solver, gp)`` for interactive inspection. The default keeps the return
         value picklable for parallel workers.
+    recipe : str, optional
+        A recipe or portfolio from :func:`available_recipes` (e.g. ``"fast"``, ``"best"``) in place of
+        ``scfg``. A portfolio runs its recipes and returns the highest-b result that passes :func:`verify`,
+        adding ``"recipe"`` (the winner), ``"verify"``, ``"portfolio"`` (a per-recipe table), ``"cfg"``
+        and ``"scfg"``.
+    library : str or pathlib.Path, optional
+        Recipe library file for ``recipe``; default the one shipped with gropt.
+    parallel : bool, optional
+        Portfolios only: solve the recipes in parallel processes (default) or one after another.
 
     Returns
     -------
@@ -398,7 +422,12 @@ def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_
         Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, aux, inv_vec, warmstart,
         solve_time [, debug, op_names].
     """
-    scfg = scfg or SolverCfg()
+    if recipe is not None and recipe in _read_library(library)["portfolios"]:
+        if warmstart is not None or return_solver:
+            msg = "a portfolio takes no warmstart or return_solver"
+            raise ValueError(msg)
+        return _solve_portfolio(cfg, recipe, library, parallel)
+    cfg, scfg = _with_recipe(cfg, scfg, recipe, library)
     gp, start_idx, op_weights = build_gparams(cfg)
     solver = make_solver(scfg)
     if warmstart is not None:
@@ -412,6 +441,41 @@ def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_
     if return_solver:
         return out, solver, gp
     return out
+
+
+def _with_recipe(cfg, scfg, recipe, library):
+    """``(cfg, scfg or SolverCfg())``, or a named single recipe applied to ``cfg``."""
+    if recipe is None:
+        return cfg, scfg or SolverCfg()
+    if scfg is not None:
+        msg = "pass either scfg or recipe, not both (apply_recipe returns a recipe's configs to adjust)"
+        raise ValueError(msg)
+    return apply_recipe(cfg, recipe, library=library)
+
+
+def _solve_portfolio(cfg, name, library, parallel):
+    """Solve with each member recipe; return the highest b that passes :func:`verify` (see :func:`solve`)."""
+    runs = list(iter_recipes(cfg, name, library=library))
+    results = sweep_points([(c, s) for _, c, s in runs], parallel=parallel, max_workers=len(runs))
+    rows, pick, pick_key = [], None, None
+    for (m, _, _), r in zip(runs, results, strict=True):
+        v = verify(r, cfg)
+        ok = bool(r.get("converged")) and v["feasible"]
+        rows.append({"recipe": m, "bvalue": r.get("bvalue", 0.0), "converged": bool(r.get("converged")),
+                     "feasible": v["feasible"], "max_ratio": v["max_ratio"],
+                     "solve_time": r.get("solve_time", np.nan), "error": r.get("error")})
+        key = (ok, r["bvalue"] if ok else -v["max_ratio"])      # a verified solve beats any unverified one
+        if r.get("X") is not None and (pick_key is None or key > pick_key):
+            pick, pick_key = (m, r, v), key
+    if pick is None:
+        errors = "; ".join(f"{x['recipe']}: {x['error']}" for x in rows)
+        msg = f"portfolio {name!r}: every recipe failed: {errors}"
+        raise RuntimeError(msg)
+    if not pick_key[0]:
+        warnings.warn(f"portfolio {name!r}: no recipe passed verify(); returning the least-violating result",
+                      stacklevel=3)
+    m, r, v = pick
+    return {**r, "recipe": m, "verify": v, "portfolio": rows}
 
 
 # ===========================================================================
@@ -873,7 +937,72 @@ def to_raster(res: dict, dt_tgt: float = 10e-6, N_out: int = -1):
             "dt": dt_tgt, "start_idx": start_idx}
 
 
-def continuation(steps, base_cfg: DiffParams, scfg: SolverCfg = None, keep_weights: bool = False):
+def verify(result: dict, cfg: DiffParams, *, raster_dt: float | None = 10e-6, rtol: float = 0.02):
+    """Re-check a solved waveform against every limit of ``cfg``; ``converged`` alone is not proof.
+
+    The solver can report convergence on a waveform that breaks a limit (after a blow-up it returns an
+    earlier iterate). This recomputes each limit's worst ratio (value / limit) from the waveform: gmax and
+    slew on the solve raster (linear resampling cannot raise them), PNS/CNS on the hardware raster with the
+    exact filter, and the concomitant balance with the exact piecewise-linear integral.
+
+    Parameters
+    ----------
+    result : dict
+        A result from :func:`solve` (needs ``X``, and ``inv_vec`` when ``cfg.concomitant``).
+    cfg : DiffParams
+        The problem it was solved for.
+    raster_dt : float or None, optional
+        Hardware raster [s] for PNS/CNS (default 10 us). None, or a ``cfg.dt`` that is not an integer
+        multiple of it, checks on the solve raster with the solve's own filter.
+    rtol : float, optional
+        Allowed relative excess over each limit. Default 0.02.
+
+    Returns
+    -------
+    dict
+        ``feasible`` (every ratio <= 1 + rtol and the waveform finite), ``max_ratio``, and ``g_ratio``,
+        ``s_ratio``, ``pns_ratio``, ``cns_ratio``, ``concomitant_ratio`` (NaN when that limit is off;
+        ``concomitant_ratio`` = ``|E_pre/E_post - 1| / concomitant_tol``).
+    """
+    keys = ("g_ratio", "s_ratio", "pns_ratio", "cns_ratio", "concomitant_ratio")
+    out = dict.fromkeys(keys, np.nan)
+    X = result.get("X")
+    g = None if X is None else np.ascontiguousarray(X, dtype=float).ravel()
+    if g is None or g.size < 2 or not np.all(np.isfinite(g)):
+        return {**out, "feasible": False, "max_ratio": np.inf}
+    out["g_ratio"] = np.abs(g).max() / cfg.gmax
+    out["s_ratio"] = np.abs(np.diff(g)).max() / cfg.dt / cfg.smax
+
+    ops = safe_ops(cfg, g.size)
+    if ops:
+        k = cfg.dt / raster_dt if raster_dt else 0.0
+        hw = round(k) >= 1 and abs(k - round(k)) < 1e-6
+        g_s, dt_s = (gropt.resample_waveform(g, cfg.dt, raster_dt), raster_dt) if hw else (g, cfg.dt)
+        t, t_s = np.arange(g.size) * cfg.dt, np.arange(g_s.size) * dt_s
+        for model, axis, lim, params in ops:
+            stim = gropt.get_SAFE(g_s, dt_s, new_first_axis=axis, demo_params=False, safe_params=params,
+                                  alpha_exact=hw or cfg.safe_alpha_exact)
+            lim_s = lim if np.ndim(lim) == 0 else np.interp(t_s, t, lim)
+            r = float(np.max(np.abs(stim) / lim_s))
+            out[f"{model}_ratio"] = np.fmax(out[f"{model}_ratio"], r)
+
+    if cfg.concomitant:
+        iv = result.get("inv_vec")
+        if iv is None:
+            return {**out, "feasible": False, "max_ratio": np.inf}
+        iv = np.asarray(iv, dtype=float).ravel()
+        seg = cfg.dt / 3.0 * (g[:-1] ** 2 + g[:-1] * g[1:] + g[1:] ** 2)   # exact integral of g^2
+        pre, post = seg[(iv[:-1] > 0) & (iv[1:] > 0)].sum(), seg[(iv[:-1] < 0) & (iv[1:] < 0)].sum()
+        q = pre / post if post > 0 else np.inf
+        out["concomitant_ratio"] = abs(q - 1.0) / cfg.concomitant_tol
+
+    out["max_ratio"] = float(np.nanmax([out[k] for k in keys]))
+    out["feasible"] = out["max_ratio"] <= 1.0 + rtol
+    return out
+
+
+def continuation(steps, base_cfg: DiffParams, scfg: SolverCfg = None, keep_weights: bool = False, *,
+                 recipe: str | None = None, library=None):
     """Run a sequential, warm-started continuation over a list of ``DiffParams`` overrides.
 
     Each step is a dict of overrides applied to ``base_cfg`` (e.g. a coarse-to-fine dt ramp
@@ -892,13 +1021,15 @@ def continuation(steps, base_cfg: DiffParams, scfg: SolverCfg = None, keep_weigh
     keep_weights : bool, optional
         False (default) resets carried weights to each step's ``weight_mod``; True carries the adapted
         weights (useful for a pure dt ramp).
+    recipe, library : optional
+        A named single recipe instead of ``scfg``, as in :func:`solve`.
 
     Returns
     -------
     list of dict
         The per-step result dicts (each as from :func:`solve`).
     """
-    scfg = scfg or SolverCfg()
+    base_cfg, scfg = _with_recipe(base_cfg, scfg, recipe, library)
     results = []
     ws = None
     for step in steps:
@@ -1296,7 +1427,7 @@ def sample_points(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_dist
 def sweep(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_grid=None, scfg_grid=None,
           warmstart: dict = None, keep_weights: bool = True, parallel: bool = True, max_workers: int = None,
           pool_timeout: float = 300.0, time_cutoff: float = None, max_failures: int = None,
-          is_failure=None, stop_when=None):
+          is_failure=None, stop_when=None, recipe: str | None = None, library=None):
     """Solve the cross product of ``cfg_grid`` x ``scfg_grid`` in parallel, one process per point.
 
     ``DiffParams`` and ``SolverCfg`` field names are disjoint, so one call can vary either or both::
@@ -1326,6 +1457,8 @@ def sweep(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_grid=None, s
         reaps it between notebook cells). Use the same value across calls and with :func:`warm_pool`.
     time_cutoff, max_failures, is_failure, stop_when : optional
         Early abandonment, as in :func:`sweep_points` (serial only).
+    recipe, library : optional
+        A named single recipe applied to the base configs instead of ``base_scfg``, as in :func:`solve`.
 
     Returns
     -------
@@ -1333,7 +1466,7 @@ def sweep(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_grid=None, s
         One result per point (cfg_grid outer, scfg_grid inner), each also carrying ``"cfg"`` and
         ``"scfg"``.
     """
-    base_scfg = base_scfg or SolverCfg()
+    base_cfg, base_scfg = _with_recipe(base_cfg, base_scfg, recipe, library)
     points = _grid_points(base_cfg, base_scfg, cfg_grid, scfg_grid)
     return sweep_points(points, warmstart=warmstart, keep_weights=keep_weights, parallel=parallel,
                         max_workers=max_workers, pool_timeout=pool_timeout,
