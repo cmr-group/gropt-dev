@@ -129,10 +129,8 @@ void Op_Slew::check(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
-    // Slew sample i on axis ax is g(i+1) - g(i). It is checked unless samples i-1, i and i+1 of that axis are
-    // all pinned by set_vals: a pinned-to-pinned step is not the solver's to fix. The combined (rot_variant
-    // false) norm is checked if any axis has a free sample there, so pinning one axis (e.g. gx = 0 during a
-    // bipolar) does not switch off the check for the others.
+    // Slew i of an axis is checked unless set_vals pins samples i-1..i+1 there; the combined norm is checked if
+    // any axis is free (pinning gx must not disable gy/gz).
     auto free_near = [&](int ax, int i) {
         const int base = ax * N;
         bool f = std::isnan(pdata->set_vals(base + i)) || std::isnan(pdata->set_vals(base + i + 1));
@@ -156,13 +154,15 @@ void Op_Slew::check(Eigen::VectorXd &X) {
             bool should_check = false;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) should_check = should_check || free_near(i_ax, i);
 
+            double upper_bound = (target + tol0);
+
             double val = 0.0;
             for (int i_ax = 0; i_ax < Naxis; i_ax++) {
                 val += X(i_ax * (N - 1) + i) * X(i_ax * (N - 1) + i);
             }
             val = sqrt(val);
 
-            if ((val > target + tol0) && should_check) {
+            if ((val > upper_bound) && should_check) {
                 is_feas = 0;
             }
         }

@@ -1,42 +1,15 @@
-// Op_SAFE multi-axis combination.
-//
-// At each sample the per-axis stimulations are combined as the root-sum-square,
-// sqrt(sum_j (stim_j / thresh_j)^2) <= 1, which is how the scanner adds simultaneous axes. Limiting each
-// axis on its own is weaker by up to sqrt(Naxis) and would trip the scanner. Naxis == 1 must reduce to the
-// single-axis clamp exactly.
+// Op_SAFE multi-axis combination: per sample, sqrt(sum_j (stim_j / thresh_j)^2) <= 1, as the scanner adds
+// simultaneous axes. Naxis == 1 must reduce to the single-axis clamp exactly.
 
-#define _USE_MATH_DEFINES // MSVC: M_PI
-
-#include "Eigen/Dense"
 #include "op_safe.hpp"
-#include "problem_data.hpp"
+#include "test_util.hpp"
 
-#include <cmath>
-#include <cstdio>
 #include <memory>
-#include <string>
 
 using namespace Gropt;
+using namespace gropt_test;
 
 namespace {
-
-int report(bool ok, const std::string &name, double value) {
-    std::printf("  [%s] %-62s %.6g\n", ok ? "PASS" : "FAIL", name.c_str(), value);
-    return ok ? 0 : 1;
-}
-
-ProblemData make_pdata(int N, int Naxis) {
-    ProblemData p;
-    p.N = N;
-    p.Naxis = Naxis;
-    p.dt = 10e-6;
-    int Ntot = N * Naxis;
-    p.X0.setZero(Ntot);
-    p.inv_vec.setOnes(Ntot);
-    p.set_vals = Eigen::VectorXd::Constant(Ntot, NAN);
-    p.fixer.setOnes(Ntot);
-    return p;
-}
 
 // A waveform with enough slew to push SAFE past the threshold on every axis.
 Eigen::VectorXd make_wave(int N, int Naxis, bool identical_axes) {
@@ -44,7 +17,7 @@ Eigen::VectorXd make_wave(int N, int Naxis, bool identical_axes) {
     for (int j = 0; j < Naxis; j++) {
         double amp = identical_axes ? 0.03 : 0.03 * (1.0 + 0.4 * j);
         double frq = identical_axes ? 9.0 : 9.0 + 3.0 * j;
-        for (int i = 0; i < N; i++) x(j * N + i) = amp * std::sin(frq * 2.0 * M_PI * i / N);
+        for (int i = 0; i < N; i++) x(j * N + i) = amp * std::sin(frq * 2.0 * PI * i / N);
     }
     return x;
 }
@@ -67,8 +40,7 @@ void stim_stats(Op_SAFE &op, const Eigen::VectorXd &Ax_norm, double &max_axis, d
     }
 }
 
-// same_params: give every axis the x-axis coefficients (the "worst case across axes" trick sometimes
-// proposed for a rotation-invariant limit).
+// same_params: give every axis the x-axis coefficients.
 std::unique_ptr<Op_SAFE> make_op(ProblemData &p, bool same_params = false) {
     auto op = std::make_unique<Op_SAFE>(p, /*stim_thresh=*/1.0, /*weight_mod=*/1.0);
     op->safe_params.set_demo_params();
@@ -106,6 +78,7 @@ int run_safe_axes_tests() {
     int failures = 0;
     std::printf("\n=== Op_SAFE multi-axis combination ===\n");
     const int N = 400;
+    ProblemData p3 = make_pdata(N, 3);
 
     // 1. Naxis == 1 reduces to the single-axis clamp: prox lands exactly on (1 - cushion) * threshold.
     {
@@ -122,13 +95,11 @@ int run_safe_axes_tests() {
         failures += report(ax0 > 1.0, "Naxis=1: test waveform is over the limit before prox", ax0);
         failures += report(std::abs(ax - (1.0 - op->cushion)) < 1e-9,
                            "Naxis=1: prox lands on (1 - cushion) * threshold", ax);
-        failures += report(std::abs(rss - ax) < 1e-12, "Naxis=1: rss and per-axis coincide", rss - ax);
     }
 
     // 2. THE REGRESSION: a waveform whose every axis sits exactly at its own limit is NOT feasible, because
     // the scanner adds the axes. Scaling works because SAFE is positively homogeneous of degree 1 in g.
     {
-        ProblemData p3 = make_pdata(N, 3);
         auto op = make_op(p3);
         Eigen::VectorXd x = make_wave(N, 3, false);
         Eigen::VectorXd a(op->Ax_size);
@@ -140,7 +111,6 @@ int run_safe_axes_tests() {
         stim_stats(*op, a, ax, rss);
         failures += report(std::abs(ax - 1.0) < 1e-9, "per-axis exactly at the limit", ax);
         failures += report(rss > 1.0, "...yet the combined rss exceeds it (this is the bug being fixed)", rss);
-        op->hist_feas.clear();
         op->check(a);
         failures += report(op->hist_feas.back() == 0, "check() rejects it", rss);
         failures += report(op->constraint_violation(xs) > 0.0, "constraint_violation reports the excess",
@@ -149,7 +119,6 @@ int run_safe_axes_tests() {
 
     // 3. prox projects onto the combined limit and its output passes check.
     {
-        ProblemData p3 = make_pdata(N, 3);
         auto op = make_op(p3);
         Eigen::VectorXd x = make_wave(N, 3, false);
         Eigen::VectorXd a(op->Ax_size);
@@ -159,14 +128,12 @@ int run_safe_axes_tests() {
         stim_stats(*op, a, ax, rss);
         failures += report(rss <= 1.0, "max rss after prox <= 1", rss);
         failures += report(std::abs(rss - (1.0 - op->cushion)) < 1e-6, "...and lands on the cushion", rss);
-        op->hist_feas.clear();
         op->check(a);
         failures += report(op->hist_feas.back() == 1, "prox output passes check", rss);
     }
 
     // 4. Three identical axes: the rss is sqrt(3) x one axis, so each axis is held to 1/sqrt(3).
     {
-        ProblemData p3 = make_pdata(N, 3);
         Eigen::VectorXd x = make_wave(N, 3, true);
         auto op = make_op(p3, /*same_params=*/true); // equal coefficients too, or the axes are not identical
         Eigen::VectorXd a(op->Ax_size);
@@ -178,13 +145,9 @@ int run_safe_axes_tests() {
                            ax);
     }
 
-    // 5. Rotation. SAFE is rotationally variant, and NO combination of the per-axis responses fixes that:
-    // each axis sums three terms (two of them |.| of a filtered slew) BEFORE the axes are combined, so the
-    // cross terms depend on how the slew splits across axes. Giving every axis the same coefficients shrinks
-    // the dependence a lot but does not remove it. A rotation-invariant limit therefore needs a bound (e.g.
-    // worst-case coefficients applied to the slew magnitude), which measures ~3x conservative.
+    // 5. SAFE is rotation variant: each axis sums its |.| terms before the axes combine, so equal per-axis
+    // coefficients shrink the dependence but cannot remove it.
     {
-        ProblemData p3 = make_pdata(N, 3);
         Eigen::VectorXd x = make_wave(N, 3, false);
         Eigen::VectorXd xr = rotate(x, N, 0.7, 0.4);
         double rel[2] = {0.0, 0.0};

@@ -1,6 +1,7 @@
 #ifndef PROBLEM_DATA_H
 #define PROBLEM_DATA_H
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -8,11 +9,8 @@
 
 namespace Gropt {
 
-// An auxiliary primal block appended after the waveform. Lifting a nonsmooth term (e.g. SAFE's
-// LP2(|slew|), via u >= |slew|) needs a variable the optimizer chooses, which cannot live inside an
-// operator: operators are maps FROM the primal. Blocks are registered BY NAME so that several operators
-// needing the same quantity share one -- the PNS and cardiac Op_SAFE both read one "abs_slew" block --
-// while a future constraint needing something else registers its own.
+// Auxiliary primal block after the waveform (e.g. a lifted SAFE's u >= |slew|); registered by name so
+// operators needing the same quantity share it.
 struct AuxBlock {
     std::string name;
     int offset = 0; // index of the block's first entry in the full primal vector
@@ -24,7 +22,7 @@ struct ProblemData {
     int Naxis = 1;
     double dt = 10e-6;
 
-    Eigen::VectorXd X0;       // Initial guess (waveform only; aux blocks are seeded by their operator)
+    Eigen::VectorXd X0;       // Initial guess
     Eigen::VectorXd inv_vec;  // Inversion vector (diffusion encoding sign flips)
     Eigen::VectorXd set_vals; // Fixed values (NaN = free); waveform only
     Eigen::VectorXd fixer;    // Binary mask over the FULL primal: 0 = fixed, 1 = free
@@ -33,14 +31,11 @@ struct ProblemData {
     std::vector<AuxBlock> aux;
 
     int n_wave() const { return N * Naxis; }
-
-    int n_aux() const {
-        int n = 0;
+    int n_total() const {
+        int n = n_wave();
         for (const auto &a : aux) n += a.size;
         return n;
     }
-
-    int n_total() const { return n_wave() + n_aux(); }
 
     // Offset of a registered block, or -1 if it was never declared.
     int aux_offset(const std::string &name) const {
@@ -50,20 +45,24 @@ struct ProblemData {
         return -1;
     }
 
-    int aux_size(const std::string &name) const {
+    // Register a block, or return the existing one of the same name (redeclaring another size throws).
+    int add_aux(const std::string &name, int size) {
         for (const auto &a : aux) {
-            if (a.name == name) return a.size;
+            if (a.name != name) continue;
+            if (a.size != size) {
+                throw std::invalid_argument("ProblemData::add_aux: block '" + name + "' already exists with size " +
+                                            std::to_string(a.size) + ", cannot redeclare it as " + std::to_string(size));
+            }
+            return a.offset;
         }
-        return 0;
+        if (size <= 0) throw std::invalid_argument("ProblemData::add_aux: size must be > 0");
+        aux.push_back({name, n_total(), size});
+        return aux.back().offset;
     }
-
-    // Register a block, or return the existing one of the same name. Declaring the same name with a
-    // different size is a programming error: the two operators disagree about what they are sharing.
-    int add_aux(const std::string &name, int size);
 
     void clear_aux() { aux.clear(); }
 };
 
-} // namespace Gropt
+}  // namespace Gropt
 
 #endif

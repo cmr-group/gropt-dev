@@ -9,7 +9,6 @@ set(GROPT_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/ils_cg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ils_nlcg.cpp
     ${CMAKE_CURRENT_LIST_DIR}/ils_bicgstabl.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/problem_data.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_bvalue.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_concomitant.cpp
@@ -22,6 +21,7 @@ set(GROPT_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/op_slack_abs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_eddy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_tv.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/raster.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_diffbasin.cpp
     ${CMAKE_CURRENT_LIST_DIR}/solver.cpp
     ${CMAKE_CURRENT_LIST_DIR}/solver_groptsdmm.cpp

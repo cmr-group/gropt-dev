@@ -5,6 +5,7 @@
 #include "spdlog/spdlog.h"
 
 #include "op_moment.hpp"
+#include "raster.hpp"
 
 namespace Gropt {
 
@@ -68,10 +69,19 @@ void Op_Moment::init() {
         i_stop = stop_idx + moment_axis * pdata->N;
     }
 
+    const double h_ms = 1000.0 * pdata->dt; // g in mT/m, time in ms
+    const int k_int = pwl_quad ? static_cast<int>(lround(moment_order)) : 0;
+    if (pwl_quad && (moment_order < 0.0 || fabs(moment_order - k_int) > 1e-12)) {
+        throw std::invalid_argument("Op_Moment: pwl_quad requires a non-negative whole moment_order");
+    }
+
     spec_norm2 = 0.0;
     for (int j = i_start; j < i_stop; j++) {
         double jj = j - moment_axis * pdata->N;
         double val = 1000.0 * 1000.0 * pdata->dt * pow((1000.0 * (pdata->dt * (jj - ref_idx))), moment_order);
+        if (pwl_quad) { // window end nodes get half a tent (matters if start/stop_idx cut a nonzero sample)
+            val = 1000.0 * pwl_moment_weight(k_int, h_ms * (jj - ref_idx), h_ms, j > i_start, j < i_stop - 1);
+        }
 
         A(0, j) = val * pdata->inv_vec(j);
         spec_norm2 += val * val;

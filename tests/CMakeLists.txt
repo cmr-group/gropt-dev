@@ -7,6 +7,7 @@ add_executable(gropt_tests
     test_aux_blocks.cpp
     test_slack_lift.cpp
     test_slew_check.cpp
+    test_raster.cpp
 )
 
 target_link_libraries(gropt_tests PRIVATE gropt_core)

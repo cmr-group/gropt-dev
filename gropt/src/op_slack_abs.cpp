@@ -43,7 +43,7 @@ void Op_SlackAbs::init() {
 
     Operator::init();
 
-    // Linear but not trivially normalized: D contributes ~2/dt. Measure it like Op_SAFE does.
+    // Linear but not unit-norm (u and D both enter each row): measure it like Op_SAFE does.
     spec_norm = estimate_self_spec_norm(30);
     spec_norm2 = spec_norm * spec_norm;
 
@@ -67,17 +67,11 @@ void Op_SlackAbs::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     // Adjoint of [u - dx ; u + dx]: u gets p + q, x gets the difference adjoint of (q - p).
     out.setZero();
     for (int j = 0; j < Naxis; j++) {
-        // slack part
         for (int i = 0; i < N; i++) {
-            out(u_offset + j * N + i) = X(2 * j * N + i) + X(2 * j * N + i + N);
+            out(u_offset + j * N + i) = X(2 * j * N + i) + X(2 * j * N + i + N); // slack: p + q
+            out(j * N + i) = X(2 * j * N + i + N) - X(2 * j * N + i);           // waveform: q - p, then D^T
         }
-        // waveform part: form (q - p), then apply D^T, which matches Op_SAFE's differentiator adjoint
-        for (int i = 0; i < N; i++) {
-            out(j * N + i) = X(2 * j * N + i + N) - X(2 * j * N + i);
-        }
-        for (int i = 0; i < N - 1; i++) {
-            out(j * N + i) = out(j * N + i) - out(j * N + i + 1);
-        }
+        for (int i = 0; i < N - 1; i++) out(j * N + i) -= out(j * N + i + 1);
     }
 }
 
@@ -102,7 +96,7 @@ void Op_SlackAbs::check(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
-    // Relative tolerance: the rows carry slew-sized numbers, so an absolute epsilon would be meaningless.
+    // Tolerance relative to the rows' magnitude, floored at 1.
     const double scale = X.cwiseAbs().maxCoeff();
     const int is_feas = (X.minCoeff() >= -1e-8 * std::max(scale, 1.0)) ? 1 : 0;
 

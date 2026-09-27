@@ -17,8 +17,10 @@ PROBLEM_FIELDS = {
     "TE", "T_90", "T_180", "T_readout", "T_pre", "dt", "diff_mode",                      # layout
     "gmax", "smax",                                                                      # hardware limits
     "MMT", "moment_tol", "pns_lim", "cns_lim", "safe_params", "concomitant", "eddy_lam", # constraints
+    "concomitant_tol",                                                                   # constraints
     "bvalue", "bval_mode", "bval_min",                                                   # objective / target
     "jerk_lam", "basin_same_sign", "basin_window", "basin_eps",                          # shape the waveform
+    "safe_alpha_exact", "concomitant_exact_quad", "moment_pwl_quad", "bval_pwl_quad",    # model accuracy
 }
 
 def _recipe_fields(cfg):

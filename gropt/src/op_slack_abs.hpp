@@ -2,16 +2,9 @@
 #define OP_SLACK_ABS_H
 
 /**
- * u >= |slew|, as the two linear rows u - Dx >= 0 and u + Dx >= 0. Op_SAFE_Slack reads u in place of
- * |slew| so its term 2 is linear; this operator is what keeps u honest. Tight without extra machinery:
- * every coefficient that sees u is non-negative, so the only pressure on u is downward.
- *
- * u is held in WAVEFORM units, u >= |x_i - x_{i-1}|, i.e. dt times the slew. Same bound, but the primal
- * is one vector whose proximal term weights every entry alike, and slew-sized numbers (~200) beside a
- * waveform of ~0.08 are 2500x out of scale -- the solve drives u to zero, the coupling can then only be
- * met by driving the waveform to zero too, and the reweighting chases it there. Op_SAFE_Slack divides
- * by dt when it reads the block.
- *
+ * u >= |slew| as the rows u - Dx >= 0 and u + Dx >= 0: keeps Op_SAFE_Slack's u honest, and tight because every
+ * coefficient that sees u is non-negative. u is in WAVEFORM units (u >= |x_i - x_{i-1}|): a slew-sized u beside
+ * a ~0.08 waveform is ~2500x out of scale for the shared proximal term and drives u, then x, to zero.
  * One instance serves every Op_SAFE_Slack sharing the block, so GroptParams adds it once.
  */
 

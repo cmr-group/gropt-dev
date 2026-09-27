@@ -21,12 +21,8 @@ void Operator::init() {
     Naxis = pdata->Naxis;
     dt = pdata->dt;
     Ntot = N * Naxis;
-    Ntot_all = pdata->n_total();
 
-    // Primal-space buffers are as long as THIS operator's view of the primal: the waveform, unless it
-    // declared an auxiliary block. forward_op hands it that slice and the add_* methods accumulate back
-    // into the same slice, so an operator written before auxiliary blocks existed still sees exactly the
-    // vector it always did -- including whole-vector expressions like `out = X`.
+    // Sized to this op's view of the primal (n_primal()); forward_op hands it that slice.
     x_temp.setZero(n_primal());
     Ax_temp.setZero(Ax_size);
 

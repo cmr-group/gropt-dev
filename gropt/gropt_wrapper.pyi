@@ -8,7 +8,7 @@ import numpy
 from numpy.typing import NDArray
 
 
-__build_date__: str = 'Sep 24 2026 16:31:58'
+__build_date__: str = 'Sep 27 2026 12:19:04'
 
 def set_log_level(level: int) -> None:
     """
@@ -178,7 +178,7 @@ class GroptParams:
     @property
     def safe_lifted(self) -> bool:
         """
-        Lift SAFE's abs-inside-the-filter term: add_SAFE builds an Op_SAFE_Slack reading an auxiliary u >= |slew| in place of LP2(|slew|), plus the Op_SlackAbs that keeps u honest, so that term is linear and never re-linearized. Every lifted SAFE shares one u block. Set before add_SAFE/add_SAFE_vec.
+        Lift SAFE's abs-inside-the-filter term onto an auxiliary u >= |slew| (Op_SAFE_Slack plus the Op_SlackAbs enforcing u), so it is never re-linearized; lifted SAFEs share one u. Set before add_SAFE/add_SAFE_vec.
         """
 
     @safe_lifted.setter
@@ -188,6 +188,15 @@ class GroptParams:
         """
         Add the Op_SlackAbs enforcing u >= |slew|, unless one is already present. add_SAFE calls this itself when safe_lifted is set; call it first only to fix the operator's position in the list (warm-start keys are positional).
         """
+
+    @property
+    def safe_alpha_exact(self) -> bool:
+        """
+        SAFE one-pole discretization. False (default): alpha = dt/(tau+dt), raster dependent (~8% low at 400 us). True: alpha = 1 - exp(-dt/tau), raster invariant, so the solve limits what the hardware sees. Set before add_SAFE/add_SAFE_vec.
+        """
+
+    @safe_alpha_exact.setter
+    def safe_alpha_exact(self, arg: bool, /) -> None: ...
 
     def vec_init_simple(self, N: int = -1, Naxis: int = -1, first_val: float = 0.0, last_val: float = 0.0) -> None:
         """
@@ -388,11 +397,11 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_concomitant(self, start_idx: int = 0, rot_variant: bool = True, weight_mod: float = 1.0, tol0: float = 0.1, target: float = 1.0, project: bool = False) -> None:
+    def add_concomitant(self, start_idx: int = 0, rot_variant: bool = True, weight_mod: float = 1.0, tol0: float = 0.1, target: float = 1.0, project: bool = False, exact_quad: bool = True) -> None:
         """
         Add a concomitant (pre/post-180 energy balance) constraint.
 
-        Constrains the ratio pos/neg of the gradient energy sum(g^2 * dt) before (pos)
+        Constrains the ratio pos/neg of the gradient energy integral of g^2 before (pos)
         and after (neg) the 180 to target +/- tol0. The constraint is nonconvex: a soft
         ADMM constraint by default, or a relinearized equality projection with
         project=True. The prox is the exact projection onto the ratio band.
@@ -414,6 +423,9 @@ class GroptParams:
             If True, enforce the linearized (SQP) balance via the equality projection
             each outer iteration; weight_mod is unused and tol0 only sets the
             feasibility check.
+        exact_quad : bool, optional
+            True (default) integrates g^2 exactly for the piecewise-linear waveform, so the
+            ratio is raster independent. False: the legacy rectangle sum, for older results.
         """
 
     def add_smax(self, smax: float = 80.0, rot_variant: bool = True, weight_mod: float = 1.0) -> None:
@@ -446,7 +458,7 @@ class GroptParams:
             Weighting factor for this constraint.
         """
 
-    def add_moment(self, order: float = 0, target: float = 0.0, tol: float = 1e-06, units: str = 'mT*ms/m', axis: int = 0, start_idx: int = -1, stop_idx: int = -1, ref_idx: int = 0, weight_mod: float = 1.0, project: bool = False, absolute_tol: bool = False) -> None:
+    def add_moment(self, order: float = 0, target: float = 0.0, tol: float = 1e-06, units: str = 'mT*ms/m', axis: int = 0, start_idx: int = -1, stop_idx: int = -1, ref_idx: int = 0, weight_mod: float = 1.0, project: bool = False, absolute_tol: bool = False, pwl_quad: bool = False) -> None:
         """
         Add a moment constraint.
 
@@ -478,6 +490,10 @@ class GroptParams:
         absolute_tol : bool, optional
             If True, tol is in this order's own units instead of scaled from M0 (e.g.
             for a nonzero M2 target). Default False.
+        pwl_quad : bool, optional
+            True: quadrature exact for the piecewise-linear waveform (see pwl_moment_weight).
+            False (default): rectangle rule sum(g * dt * t^order), off by a multiple of the
+            lower moments for order >= 2. Needs a whole order >= 0.
         """
 
     def add_SAFE(self, stim_thresh: float = 1.0, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None, weight_mod: float = 1.0) -> None:
@@ -544,7 +560,7 @@ class GroptParams:
             collinear rows; use eq_proj_solver = EqProjSolver.COD in that case.
         """
 
-    def add_bvalue(self, target: float = 100.0, tol: float = 1.0, start_idx0: int = -1, stop_idx0: int = -1, weight_mod: float = 1.0, mode: object = 2, max_scale: float = 1.01, as_objective: bool = False, linearize: bool = True) -> None:
+    def add_bvalue(self, target: float = 100.0, tol: float = 1.0, start_idx0: int = -1, stop_idx0: int = -1, weight_mod: float = 1.0, mode: object = 2, max_scale: float = 1.01, as_objective: bool = False, linearize: bool = True, pwl_quad: bool = False) -> None:
         """
         Add a b-value term (constraint by default, or a maximization objective).
 
@@ -569,6 +585,11 @@ class GroptParams:
             Per-iteration scale factor for mode='minval_max'.
         as_objective : bool, optional
             If True, maximize the b-value as an objective instead of constraining it.
+        pwl_quad : bool, optional
+            True: quadrature exact for the piecewise-linear waveform, so b does not depend on
+            the solve raster (costs 3x the Ax/dual memory here). False (default): cumsum for q
+            then a rectangle sum for integral q^2, high by ~gamma^2 (dt^2/4) integral(g^2)
+            (0.12% at 400 us). Off by default: it shifts every b-value target.
         linearize : bool, optional
             Objective only. True (default, recommended): linearized into the RHS
             (DCA), keeping the CG system positive-definite. False (experimental):
@@ -1321,7 +1342,7 @@ def estimate_individual_spec_norm(gparams: GroptParams, n_iters: int = 20, op_id
         Estimated spectral norm.
     """
 
-def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, true_safe: bool = True, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
+def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt: float, true_safe: bool = True, new_first_axis: int = 0, demo_params: bool = True, safe_params: object | None = None, alpha_exact: bool = False) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
     """
     Compute the SAFE (PNS) response for a single-axis gradient waveform.
 
@@ -1339,6 +1360,9 @@ def get_SAFE(G: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')
         Use the built-in demo SAFE parameters. Must be True if safe_params is None.
     safe_params : dict, optional
         Dictionary of SAFE parameters (see gropt.readasc).
+    alpha_exact : bool, optional
+        One-pole discretization. False (default): alpha = dt/(tau+dt), raster dependent.
+        True: alpha = 1 - exp(-dt/tau), raster invariant. See GroptParams.safe_alpha_exact.
 
     Returns
     -------
@@ -1377,6 +1401,79 @@ def low_freq_project(x: Annotated[NDArray[numpy.float64], dict(shape=(None,), or
     -------
     np.ndarray
         The projected copy of x.
+    """
+
+def pwl_moment_weight(k: int, T: float, h: float, has_left: bool = True, has_right: bool = True) -> float:
+    """
+    Exact moment quadrature weight for a piecewise-linear waveform.
+
+    The integral of the hat function at node time T times t^k: h and h*T for k < 2 (the
+    rectangle rule), then h*(T^2 + h^2/6), h*(T^3 + h^2 T/2), ...
+
+    Parameters
+    ----------
+    k : int
+        Moment order, >= 0.
+    T, h : float
+        Node time relative to the reference index, and sample spacing, in one time unit.
+    has_left, has_right : bool, optional
+        Whether each neighbouring node is inside the window (an end node carries half a tent).
+
+    Returns
+    -------
+    float
+        The weight, in (time unit)^(k+1).
+    """
+
+def resample_waveform(X: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt_src: float, dt_tgt: float, Naxis: int = 1, N_out: int = -1) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
+    """
+    Resample a waveform onto a finer raster, exactly.
+
+    When dt_src is an integer multiple of dt_tgt the target samples land on the same lines
+    the scanner plays, so gmax, slew and the nulled moments are exact and the b-value drops
+    ~0.1% (400 us -> 10 us). A smoothing interpolant or a staircase would change them.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Waveform, length Naxis*N, axis-major [T/m].
+    dt_src, dt_tgt : float
+        Solve and target raster [s]; dt_src must be an integer multiple of dt_tgt.
+    Naxis : int, optional
+        Number of axes.
+    N_out : int, optional
+        Samples per axis; -1 (default) is the natural (N-1)*R + 1, same duration. A larger
+        value zero-pads the end; a smaller one raises ValueError.
+
+    Returns
+    -------
+    np.ndarray
+        The resampled waveform, length Naxis*N_out.
+    """
+
+def resample_inv_vec(inv_vec: Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')], dt_src: float, dt_tgt: float, Naxis: int = 1, N_out: int = -1) -> Annotated[NDArray[numpy.float64], dict(shape=(None,), order='C')]:
+    """
+    Carry inv_vec onto the target raster, flipping sign at the same physical time.
+
+    Each source sign is held over its R target samples, so moments and b-values on the two
+    rasters stay comparable.
+
+    Parameters
+    ----------
+    inv_vec : np.ndarray
+        Source inv_vec, length Naxis*N, axis-major.
+    dt_src, dt_tgt : float
+        Source and target raster times [s].
+    Naxis : int, optional
+        Number of axes.
+    N_out : int, optional
+        Samples per axis in the result; -1 (default) = (N-1)*R + 1. Padding repeats the
+        last sign.
+
+    Returns
+    -------
+    np.ndarray
+        inv_vec on the target raster.
     """
 
 def test_eigen_assertions(test_type: int) -> None:

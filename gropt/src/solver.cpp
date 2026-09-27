@@ -60,7 +60,6 @@ void Solver::final_log(Eigen::VectorXd &X, SolveResult &result) {
 
         // Table values in the units of target/tol0: raw forward(), not the normalized forward_op().
         Eigen::VectorXd Ax_phys(op->Ax_size);
-        // raw forward() takes this operator's OWN view of the primal, not the caller's full vector
         Eigen::VectorXd x_view = X.head(op->n_primal());
         op->forward(x_view, Ax_phys);
 
@@ -100,9 +99,8 @@ WarmStart Solver::capture_warmstart(const Eigen::VectorXd &X) {
     w.N = gparams->N;
     w.Naxis = gparams->Naxis;
     w.dt = gparams->dt;
-    const int n_wave = gparams->pdata.n_wave();
-    w.X = X.head(n_wave);
-    w.fixer = gparams->pdata.fixer.head(n_wave);
+    w.X = X.head(gparams->pdata.n_wave());
+    w.fixer = gparams->pdata.fixer.head(gparams->pdata.n_wave());
     for (size_t i = 0; i < gparams->all_op.size() && i < ws.size(); i++) {
         Operator *op = gparams->all_op[i].get();
         OpWarmState st;

@@ -4,16 +4,9 @@
 /**
  * Constraint on the SAFE-model PNS prediction of the gradient waveform.
  *
- * At each sample the per-axis stimulations are combined as the root-sum-square,
- * sqrt(sum_j (stim_j / thresh_j)^2) <= 1, which is how the scanner adds simultaneous axes. Limiting each
- * axis on its own would be weaker by up to sqrt(Naxis) and would trip the scanner. Naxis == 1 reduces to
- * the single-axis clamp exactly.
- *
- * This is NOT rotationally invariant: the per-axis time constants, weights and limits differ, so rotating
- * the waveform changes the predicted PNS. Unlike gmax/slew -- where the constraint carries no per-axis
- * weighting, so the Euclidean norm really is invariant -- no norm of the per-axis SAFE responses is. Hence
- * rot_variant is required to be true (init() throws otherwise); a rotationally invariant limit needs a
- * worst-case-over-orientations bound, which this is not.
+ * Per sample the axes combine as the root-sum-square, sqrt(sum_j (stim_j / thresh_j)^2) <= 1, as the scanner
+ * adds them (per-axis limits would be up to sqrt(Naxis) weaker). Not rotationally invariant (per-axis
+ * constants differ), so rot_variant must be true.
  */
 
 #include "Eigen/Dense"
@@ -37,7 +30,12 @@ class SAFEParams {
     std::vector<double> stim_limit = std::vector<double>(3, 0.0);
     std::vector<double> g_scale = std::vector<double>(3, 0.0);
 
-    // Filter coefficients dt / (tau + dt), derived by calc_alphas(dt) rather than set by the user
+    // One-pole filter step. false: alpha = dt/(tau+dt), backward Euler as in the reference Matlab; raster
+    // dependent (~8% low at 400 us). true: 1 - exp(-dt/tau), exact for piecewise-linear waveforms and raster
+    // invariant (conservative; ~0.2% apart at 10 us).
+    bool alpha_exact = false;
+
+    // Filter coefficients, derived by calc_alphas(dt) rather than set by the user
     std::vector<double> alpha1 = std::vector<double>(3, 0.0);
     std::vector<double> alpha2 = std::vector<double>(3, 0.0);
     std::vector<double> alpha3 = std::vector<double>(3, 0.0);
@@ -68,6 +66,8 @@ class Op_SAFE : public Operator {
     void lowpass_T(Eigen::VectorXd &v, const std::vector<double> &alpha) const; // its adjoint
     void take_abs(Eigen::VectorXd &v, Eigen::VectorXd &signs) const;    // |.|, softabs or frozen sign
     void diff_T(Eigen::VectorXd &out) const;                            // D^T on the waveform block
+    void emit(Eigen::VectorXd &out) const;   // out = [a1 stim1; a2 stim2; a3 stim3] * g_scale / stim_limit
+    void absorb(const Eigen::VectorXd &X);   // its adjoint, into stim1/2/3
 
     Eigen::VectorXd stim1;
     Eigen::VectorXd stim2;
@@ -80,18 +80,17 @@ class Op_SAFE : public Operator {
     // Softabs smoothing of |.| [T/m/s]: |v| -> sqrt(v^2 + eps^2); 0 = exact |.|
     double safe_eps = 0.0;
 
-    // Emit terms 1 and 3 SIGNED and take their |.| in prox() instead. Their abs is OUTSIDE the filter, so
-    // the constraint at a sample depends on only a few per-sample coordinates and the projection can take
-    // the absolute values exactly -- no sign freezing for those terms, and no extra variable. Term 2
-    // cannot be done this way: its abs is inside the filter, so LP2(|S|) at a sample depends on every
-    // earlier one; removing THAT linearization needs the slack of Op_SAFE_Slack.
+    // Emit terms 1/3 signed; prox() takes their |.| exactly (abs outside the filter, no sign freezing).
+    // Term 2's abs is inside the filter, so it needs Op_SAFE_Slack instead.
     bool signed_terms13 = false;
 
     // Set during the inner CG: forward() applies the held signs1/2/3 linearly instead of |.|
     bool freeze_signs = false;
 
-    // Summed stimulation of one axis at one sample, from the n_terms blocks of X (Ax space).
+    // Summed stimulation of axis j at sample i, from the n_terms blocks of X (Ax space)
     double axis_stim(const Eigen::VectorXd &X, int j, int i) const;
+    // Same, for scoring (check, constraint_violation): |.| on signed terms 1/3 so they cannot cancel term 2
+    double stim_mag(const Eigen::VectorXd &X, int j, int i) const;
 
     Op_SAFE(const ProblemData &_pdata, double _stim_thresh, double _weight_mod);
     Op_SAFE(const ProblemData &_pdata, const Eigen::VectorXd &_stim_thresh_vec, double _weight_mod);

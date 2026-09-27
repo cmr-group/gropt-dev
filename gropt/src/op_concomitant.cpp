@@ -18,6 +18,49 @@ Op_Concomitant::Op_Concomitant(const ProblemData &_pdata, int _start_idx, bool _
     con_target = _target;
 }
 
+// pos/neg use disjoint samples so prox can rescale one side alone; exact_quad drops the interval
+// straddling the flip, which lies inside the zeroed 180 window.
+void Op_Concomitant::energies(const Eigen::VectorXd &X, double &pos, double &neg, Eigen::VectorXd *d_pos,
+                              Eigen::VectorXd *d_neg) const {
+    pos = 0.0;
+    neg = 0.0;
+    if (d_pos) d_pos->setZero(X.size());
+    if (d_neg) d_neg->setZero(X.size());
+
+    if (!exact_quad) { // legacy: rectangle sum over the flattened vector
+        for (int i = start_idx; i < X.size(); i++) {
+            if (pdata->inv_vec(i) > 0) {
+                pos += X(i) * X(i) * pdata->dt;
+                if (d_pos) (*d_pos)(i) = 2.0 * pdata->dt * X(i);
+            } else if (pdata->inv_vec(i) < 0) {
+                neg += X(i) * X(i) * pdata->dt;
+                if (d_neg) (*d_neg)(i) = 2.0 * pdata->dt * X(i);
+            }
+        }
+        return;
+    }
+
+    const int N = pdata->N;
+    const double dt = pdata->dt;
+    for (int ax = 0; ax < pdata->Naxis; ax++) {
+        const int off = ax * N;
+        const int i0 = (start_idx > off) ? start_idx - off : 0;
+        for (int i = i0; i < N - 1; i++) {
+            const double a = X(off + i);
+            const double b = X(off + i + 1);
+            const bool is_pos = pdata->inv_vec(off + i) > 0 && pdata->inv_vec(off + i + 1) > 0;
+            if (!is_pos && !(pdata->inv_vec(off + i) < 0 && pdata->inv_vec(off + i + 1) < 0)) continue;
+            const double seg = dt / 3.0 * (a * a + a * b + b * b);
+            Eigen::VectorXd *d = is_pos ? d_pos : d_neg;
+            (is_pos ? pos : neg) += seg;
+            if (d) {
+                (*d)(off + i) += dt / 3.0 * (2.0 * a + b);
+                (*d)(off + i + 1) += dt / 3.0 * (a + 2.0 * b);
+            }
+        }
+    }
+}
+
 void Op_Concomitant::init() {
     spdlog::trace("Op_Concomitant::init  N = {}", pdata->N);
 
@@ -38,18 +81,10 @@ void Op_Concomitant::append_eq_rows(std::vector<Eigen::VectorXd> &rows, std::vec
     if (!use_projection) return;
 
     // c is quadratic, so a·x0 = 2 c(x0) and the linearization c(x0) + a·(x - x0) = 0 becomes a·x = c(x0).
-    Eigen::VectorXd a = Eigen::VectorXd::Zero(x0.size());
-    double pos = 0.0;
-    double neg = 0.0;
-    for (int i = start_idx; i < x0.size(); i++) {
-        if (pdata->inv_vec(i) > 0) {
-            pos += x0(i) * x0(i) * pdata->dt;
-            a(i) = 2.0 * pdata->dt * x0(i);
-        } else if (pdata->inv_vec(i) < 0) {
-            neg += x0(i) * x0(i) * pdata->dt;
-            a(i) = -2.0 * target * pdata->dt * x0(i);
-        }
-    }
+    double pos = 0.0, neg = 0.0;
+    Eigen::VectorXd d_pos, d_neg;
+    energies(x0, pos, neg, &d_pos, &d_neg);
+    Eigen::VectorXd a = d_pos - target * d_neg;
 
     // Skip while the waveform is still essentially zero
     if (a.norm() < 1e-12) return;
@@ -70,16 +105,8 @@ void Op_Concomitant::prox(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
-    double pos = 0.0;
-    double neg = 0.0;
-
-    for (int i = start_idx; i < X.size(); i++) {
-        if (pdata->inv_vec(i) > 0) {
-            pos += X(i) * X(i) * pdata->dt;
-        } else if (pdata->inv_vec(i) < 0) {
-            neg += X(i) * X(i) * pdata->dt;
-        }
-    }
+    double pos = 0.0, neg = 0.0;
+    energies(X, pos, neg, nullptr, nullptr);
 
     double eps = 1e-12 * (pos + neg);
     if (pos > eps && neg > eps) {
@@ -121,16 +148,8 @@ void Op_Concomitant::check(Eigen::VectorXd &X) {
     }
     X.array() *= spec_norm;
 
-    double pos = 0.0;
-    double neg = 0.0;
-
-    for (int i = start_idx; i < X.size(); i++) {
-        if (pdata->inv_vec(i) > 0) {
-            pos += X(i) * X(i) * pdata->dt;
-        } else if (pdata->inv_vec(i) < 0) {
-            neg += X(i) * X(i) * pdata->dt;
-        }
-    }
+    double pos = 0.0, neg = 0.0;
+    energies(X, pos, neg, nullptr, nullptr);
 
     double eps = 1e-12 * (pos + neg);
     if (pos <= eps || neg <= eps) {

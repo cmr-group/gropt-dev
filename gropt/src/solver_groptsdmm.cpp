@@ -74,8 +74,8 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 
     LowFreqProjector lowfreq; // inactive unless cutoff_freq > 0
     if (cutoff_freq > 0.0) {
-        lowfreq.setup(gparams->N, gparams->Naxis, gparams->dt, cutoff_freq, gparams->pdata.fixer,
-                      cutoff_trans);
+        lowfreq.setup(gparams->N, gparams->Naxis, gparams->dt, cutoff_freq,
+                      gparams->pdata.fixer.head(gparams->pdata.n_wave()), cutoff_trans); // waveform runs only
     }
 
     // b-value operator (constraint or objective) for the per-iteration debug history
@@ -160,8 +160,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             Xhat = X;
         }
 
-        if (((Xhat.head(gparams->pdata.n_wave()).array().abs() > 10).any()) ||
-            (!Xhat.allFinite())) {
+        if (((Xhat.head(gparams->pdata.n_wave()).array().abs() > 10).any()) || (!Xhat.allFinite())) {
             spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         }
@@ -176,10 +175,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 
         // Low-pass the iterate until cutoff_iter (< 0 = always); re-project, since it changes the moments.
         if (lowfreq.active() && (cutoff_iter < 0 || iiter < cutoff_iter)) {
-            // The filter is defined on the waveform's free runs; auxiliary blocks have no such structure.
-            Eigen::VectorXd x_wave = X.head(gparams->pdata.n_wave());
-            lowfreq.project(x_wave);
-            X.head(gparams->pdata.n_wave()) = x_wave;
+            lowfreq.project(X);
             if (gparams->eq_proj.active) {
                 gparams->eq_proj.project_affine(X);
             }
@@ -276,8 +272,7 @@ Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
                           (ws_free_run_counts(warmstart.fixer, warmstart.Naxis) ==
                            ws_free_run_counts(gparams->pdata.fixer.head(n_wave), gparams->Naxis));
         if (compatible) {
-            // The fixer spans the auxiliary blocks, which are always free; comparing the whole thing would
-            // count their one long free run and reject every warm start.
+            // head(n_wave): the always-free aux blocks would add a free run and fail the layout match.
             X0_init = ws_resize_waveform(warmstart.X, warmstart.fixer, gparams->pdata.fixer.head(n_wave),
                                          gparams->pdata.set_vals, gparams->Naxis);
         } else {
@@ -289,11 +284,9 @@ Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
 
     // Grow to the full primal and let each operator seed the blocks it declared.
     if (X0_init.size() < gparams->pdata.n_total()) {
-        Eigen::VectorXd full = Eigen::VectorXd::Zero(gparams->pdata.n_total());
-        full.head(n_wave) = X0_init.head(n_wave);
-        for (auto &op : gparams->all_op) op->init_aux(full);
-        for (auto &op : gparams->all_obj) op->init_aux(full);
-        X0_init = full;
+        X0_init.conservativeResizeLike(Eigen::VectorXd::Zero(gparams->pdata.n_total())); // X0_init is n_wave long
+        for (auto &op : gparams->all_op) op->init_aux(X0_init);
+        for (auto &op : gparams->all_obj) op->init_aux(X0_init);
     }
     return X0_init;
 }

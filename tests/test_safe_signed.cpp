@@ -1,62 +1,21 @@
-// Op_SAFE::signed_terms13 -- terms 1 and 3 emitted signed, their |.| taken in prox() instead.
-//
-// Their abs is OUTSIDE the low-pass, so the constraint at a sample depends on only a few per-sample
-// coordinates and the projection can take the absolute values exactly. Term 2 cannot be done this way:
-// its abs is inside the filter, so LP2(|slew|) at a sample depends on every earlier one.
-//
-// The set is symmetric in every coordinate, so the projection keeps each sign and only shrinks
-// magnitudes. These tests pin that it agrees with the inherited prox wherever the two should agree, and
-// that it fixes the one place they differ.
+// Op_SAFE::signed_terms13: terms 1 and 3 emitted signed, their |.| taken in prox() instead. Their abs is
+// outside the low-pass, so the projection takes it exactly (term 2's is inside the filter, so it cannot).
+// The set is symmetric in every coordinate, so the projection keeps each sign and only shrinks magnitudes.
 
-#include "Eigen/Dense"
 #include "op_safe.hpp"
-#include "problem_data.hpp"
+#include "test_util.hpp"
 
-#include <cmath>
-#include <cstdio>
 #include <random>
-#include <string>
 
 using namespace Gropt;
-
-namespace {
-
-int report(bool ok, const std::string &name, double value) {
-    std::printf("  [%s] %-58s %.3e\n", ok ? "PASS" : "FAIL", name.c_str(), value);
-    std::fflush(stdout);
-    return ok ? 0 : 1;
-}
-
-ProblemData make_pdata(int N, int Naxis) {
-    ProblemData p;
-    p.N = N;
-    p.Naxis = Naxis;
-    p.dt = 20e-6;
-    const int Ntot = N * Naxis;
-    p.X0.setZero(Ntot);
-    p.inv_vec.setOnes(Ntot);
-    p.set_vals.setOnes(Ntot);
-    p.set_vals.array() *= NAN;
-    for (int j = 0; j < Naxis; j++) {
-        p.set_vals(j * N) = 0.0;
-        p.set_vals(j * N + N - 1) = 0.0;
-    }
-    p.fixer.setOnes(Ntot);
-    for (int j = 0; j < Naxis; j++) {
-        p.fixer(j * N) = 0.0;
-        p.fixer(j * N + N - 1) = 0.0;
-    }
-    return p;
-}
-
-} // namespace
+using namespace gropt_test;
 
 int run_safe_signed_tests() {
     std::printf("\nOp_SAFE signed terms 1 and 3\n");
     int failures = 0;
 
     const int N = 64, Naxis = 3;
-    ProblemData p = make_pdata(N, Naxis);
+    ProblemData p = make_pdata(N, Naxis, 20e-6, /*pin_ends=*/true);
 
     Op_SAFE plain(p, 1.0, 1.0);
     plain.safe_params.set_demo_params();
@@ -147,6 +106,34 @@ int run_safe_signed_tests() {
         sgn.prox(z);
         failures += report((z - phys / sn).cwiseAbs().maxCoeff() == 0.0,
                            "a feasible point is untouched", (z - phys / sn).cwiseAbs().maxCoeff());
+    }
+
+    // (5) Scoring must see |.| too: SAFE is even in G, so g and -g score alike, and signed scores like plain.
+    {
+        Eigen::VectorXd g = Eigen::VectorXd::Zero(N * Naxis);
+        for (int j = 0; j < Naxis; j++) {
+            for (int i = 1; i < N - 1; i++) {
+                g(j * N + i) = 0.04 * std::sin(3.0 * PI * i / (N - 1)) * (1.0 + 0.3 * j);
+            }
+        }
+        for (int it = 0; it < 40 && plain.constraint_violation(g) < 0.5; it++) g *= 2.0; // well over the limit
+        const Eigen::VectorXd gn = -g;
+        const double vp = plain.constraint_violation(g), vpn = plain.constraint_violation(gn);
+        const double vs = sgn.constraint_violation(g), vsn = sgn.constraint_violation(gn);
+        failures += report(vp > 0.1, "test waveform violates the limit", vp);
+        failures += report(std::abs(vp - vpn) <= 1e-12 * vp, "plain: violation(g) == violation(-g)", vp - vpn);
+        failures += report(std::abs(vs - vp) <= 1e-12 * vp, "signed: violation(g) == plain", vs - vp);
+        failures += report(std::abs(vsn - vp) <= 1e-12 * vp, "signed: violation(-g) == plain", vsn - vp);
+
+        auto feas = [](Op_SAFE &op, const Eigen::VectorXd &x) {
+            Eigen::VectorXd xx = x, ax(op.Ax_size);
+            op.forward_op(xx, ax);
+            op.check(ax);
+            return op.hist_feas.back();
+        };
+        const int feas_p = feas(plain, g), feas_s = feas(sgn, g), feas_sn = feas(sgn, gn);
+        failures += report(feas_p == 0 && feas_s == 0 && feas_sn == 0, "check(): violating g and -g are infeasible",
+                           feas_p + feas_s + feas_sn);
     }
 
     return failures;

@@ -197,6 +197,15 @@ int run_op_transpose_tests() {
                                            BVALUE_MODE_MINVAL,
                                            /*max_scale=*/1.01);
     };
+    auto make_bvalue_pwl = [](ProblemData &p) {
+        auto op = std::make_unique<Op_BValue>(p, /*bval_target=*/100.0, /*bval_tol0=*/10.0,
+                                              /*start_idx0=*/-1, /*stop_idx0=*/-1,
+                                              /*weight_mod=*/1.0,
+                                              BVALUE_MODE_MINVAL,
+                                              /*max_scale=*/1.01);
+        op->pwl_quad = true;
+        return op;
+    };
     auto make_tv1 = [](ProblemData &p) {
         return std::make_unique<Op_TV>(p, /*tv_lam=*/1.0, /*weight_mod=*/1.0, /*order=*/1);
     };
@@ -225,6 +234,7 @@ int run_op_transpose_tests() {
         return std::make_unique<Op_Slew>(p, /*smax=*/200.0, /*rot_variant=*/true, /*weight_mod=*/1.0);
     });
     failures += sweep_raw("Op_BValue", make_bvalue);
+    failures += sweep_raw("Op_BValue(pwl)", make_bvalue_pwl);
     failures += sweep_raw("Op_TV(1)", make_tv1);
     failures += sweep_raw("Op_TV(2)", make_tv2);
     failures += sweep_raw("Op_Eddy", make_eddy);
@@ -238,6 +248,7 @@ int run_op_transpose_tests() {
         return std::make_unique<Op_Slew>(p, /*smax=*/200.0, /*rot_variant=*/true, /*weight_mod=*/1.0);
     });
     failures += sweep_op_variants("Op_BValue", make_bvalue);
+    failures += sweep_op_variants("Op_BValue(pwl)", make_bvalue_pwl);
     failures += sweep_op_variants("Op_TV(1)", make_tv1);
     failures += sweep_op_variants("Op_TV(2)", make_tv2);
     failures += sweep_op_variants("Op_Eddy", make_eddy);

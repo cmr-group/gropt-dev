@@ -1,12 +1,10 @@
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 #include "spdlog/spdlog.h"
 
 #include "op_safe.hpp"
-
-#include <algorithm>
-#include <cmath>
-#include <vector>
 
 namespace Gropt {
 
@@ -134,7 +132,10 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
         if (!signed_terms13) take_abs(stim3, signs3);
     }
 
-    // Per axis j: out = [a1 stim1; a2 stim2; a3 stim3] * g_scale / stim_limit (n_terms blocks of N)
+    emit(out);
+}
+
+void Op_SAFE::emit(Eigen::VectorXd &out) const {
     for (int j = 0; j < Naxis; j++) {
         for (int i = 0; i < N; i++) {
             out(j * n_terms * N + i) =
@@ -149,7 +150,7 @@ void Op_SAFE::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     }
 }
 
-void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
+void Op_SAFE::absorb(const Eigen::VectorXd &X) {
 
     // Split and scale by a, stim_limit, g_scale
     for (int j = 0; j < Naxis; j++) {
@@ -164,6 +165,10 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
             }
         }
     }
+}
+
+void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
+    absorb(X);
 
     // term 1 applies its sign before the filter adjoint; term 2 after, mirroring the forward order
     if (!signed_terms13) stim1.array() *= signs1.array();
@@ -177,16 +182,8 @@ void Op_SAFE::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
         lowpass_T(stim3, safe_params.alpha3);
     }
 
-    for (int j = 0; j < Naxis; j++) {
-        for (int i = 0; i < N; i++) {
-            if (n_terms == 3) {
-                out(j * N + i) = stim1(j * N + i) + stim2(j * N + i) + stim3(j * N + i);
-            } else if (n_terms == 2) {
-                out(j * N + i) = stim1(j * N + i) + stim2(j * N + i);
-            }
-        }
-    }
-
+    out.head(Ntot) = stim1 + stim2;
+    if (n_terms == 3) out.head(Ntot) += stim3;
     diff_T(out); // out = D^T(stim1 + stim2 + stim3)
 }
 
@@ -196,27 +193,20 @@ double Op_SAFE::axis_stim(const Eigen::VectorXd &X, int j, int i) const {
     return v;
 }
 
-void Op_SAFE::prox_signed(Eigen::VectorXd &X) {
-    if (do_equil) {
-        X.array() /= eq_rows.array();
-    }
-    X.array() *= spec_norm;
+double Op_SAFE::stim_mag(const Eigen::VectorXd &X, int j, int i) const {
+    if (!signed_terms13) return axis_stim(X, j, i);
+    double v = 0.0;
+    for (int k = 0; k < n_terms; k++) v += std::abs(X(j * n_terms * N + i + k * N));
+    return v;
+}
 
-    // With terms 1 and 3 emitted signed, the set is
-    //     { y : sum_j ( (|y_j1| + |y_j2| + |y_j3|) / th_j )^2 <= upper^2 },
-    // symmetric in every coordinate, so the projection keeps each sign and only shrinks magnitudes: work
-    // with b = |y| and put the signs back at the end.
-    //
-    // With a multiplier lam >= 0 the KKT conditions shrink every term of an axis by the SAME amount
-    // delta_j (the equal share of the metric projection), floored at zero:
-    //     w_jk = max(b_jk - delta_j, 0),   delta_j = lam * s_j / th_j^2,   s_j = sum_k w_jk.
-    // Over the terms still above the floor (the active set A_j) that closes:
-    //     delta_j = lam B_j / (th_j^2 + lam n_j),   s_j = B_j th_j^2 / (th_j^2 + lam n_j),
-    // with B_j the sum and n_j the count of the active terms. Newton on lam, re-resolving A_j each step;
-    // with all terms active this reduces to Op_SAFE::prox's formula exactly.
+void Op_SAFE::prox_signed(Eigen::VectorXd &X) {
+    // Sign-symmetric set: project b = |y|, restore signs. KKT: w = max(b - delta_j, 0), delta_j = lam B_j /
+    // (th_j^2 + lam n_j) over the active terms (sum B_j, count n_j); Newton on lam, re-resolving the active
+    // set. With every term active this is prox()'s equal-share formula.
     const double upper = 1.0 - cushion;
     const int nt = n_terms;
-    std::vector<double> b(Naxis * nt), th(Naxis), B(Naxis), sgn(Naxis * nt);
+    std::vector<double> b(Naxis * nt), th(Naxis), B(Naxis);
     std::vector<int> nact(Naxis);
     std::vector<char> active(Naxis * nt);
 
@@ -228,7 +218,6 @@ void Op_SAFE::prox_signed(Eigen::VectorXd &X) {
             for (int k = 0; k < nt; k++) {
                 const double v = X(j * nt * N + i + k * N);
                 b[j * nt + k] = std::abs(v);
-                sgn[j * nt + k] = (v < 0.0) ? -1.0 : 1.0;
                 S += std::abs(v);
             }
             const double u = S / th[j];
@@ -240,12 +229,11 @@ void Op_SAFE::prox_signed(Eigen::VectorXd &X) {
         for (int it = 0; it < 30; it++) {
             // active set per axis at this lam (at most nt drops, since each round removes one or more)
             for (int j = 0; j < Naxis; j++) {
-                for (int k = 0; k < nt; k++) active[j * nt + k] = 1;
                 double Bj = 0.0;
-                int nj = 0;
+                int nj = nt;
                 for (int k = 0; k < nt; k++) {
+                    active[j * nt + k] = 1;
                     Bj += b[j * nt + k];
-                    nj++;
                 }
                 for (int round = 0; round < nt; round++) {
                     const double den = th[j] * th[j] + lam * nj;
@@ -286,73 +274,59 @@ void Op_SAFE::prox_signed(Eigen::VectorXd &X) {
             const double delta = (den > 0.0) ? lam * B[j] / den : 0.0;
             for (int k = 0; k < nt; k++) {
                 const double w = std::max(b[j * nt + k] - delta, 0.0);
-                X(j * nt * N + i + k * N) = sgn[j * nt + k] * w;
+                const int idx = j * nt * N + i + k * N;
+                X(idx) = (X(idx) < 0.0) ? -w : w; // X(idx) is still the input value here
             }
         }
     }
-
-    if (do_equil) {
-        X.array() *= eq_rows.array();
-    }
-    X.array() /= spec_norm;
 }
 
 void Op_SAFE::prox(Eigen::VectorXd &X) {
     spdlog::trace("Starting Op_SAFE::prox");
-
-    if (signed_terms13) { // terms 1 and 3 arrive signed; their |.| is taken in the projection
-        prox_signed(X);
-        return;
-    }
 
     if (do_equil) {
         X.array() /= eq_rows.array();
     }
     X.array() *= spec_norm;
 
-    // METRIC projection onto the combined limit at each sample -- the nearest point, not a rescaling.
-    //
-    // forward() has already folded a1..a3, g_scale and the |.| into the n_terms blocks, so the constraint
-    // sees each axis only through m_j = sum_b x_jb: the set is {x : sum_j (m_j / thresh_j)^2 <= upper^2},
-    // the preimage of a ball under a linear map. Only m may change, and since all n_terms blocks enter m
-    // with weight 1, the least-norm way to change it is an EQUAL SHARE to each block. Scaling every block
-    // by a common factor also lands on the boundary, but it moves the iterate ~20% farther in a direction
-    // ~30 deg off the projection, and ADMM's convergence rests on this being the true prox.
-    //
-    // m_j = m0_j / (1 + lam / thresh_j^2) with lam >= 0 from the KKT conditions; solve
-    // sum_j (m_j/thresh_j)^2 = upper^2 by Newton (one step when the thresholds are equal, the usual case).
+    // Metric projection (a common rescaling lands ~30 deg off the true prox). Only m_j = sum_b x_jb matters,
+    // so each block gets an equal share: m_j = m0_j / (1 + lam / thresh_j^2), Newton on lam.
     const double upper = 1.0 - cushion; // in units of "fraction of the limit"
 
-    std::vector<double> m(Naxis), th(Naxis);
-    for (int i = 0; i < N; i++) {
-        double ss = 0.0;
-        for (int j = 0; j < Naxis; j++) {
-            m[j] = axis_stim(X, j, i);
-            th[j] = stim_thresh_vec(j * N + i);
-            double u = m[j] / th[j];
-            ss += u * u;
-        }
-        if (sqrt(ss) <= upper) continue;
-
-        double lam = 0.0;
-        for (int it = 0; it < 50; it++) {
-            double f = -upper * upper, df = 0.0;
+    if (signed_terms13) {
+        prox_signed(X); // terms 1 and 3 arrive signed; their |.| is taken in the projection
+    } else {
+        std::vector<double> m(Naxis), th(Naxis);
+        for (int i = 0; i < N; i++) {
+            double ss = 0.0;
             for (int j = 0; j < Naxis; j++) {
-                const double t2 = th[j] * th[j];
-                const double d = 1.0 + lam / t2;
-                const double a = m[j] / (th[j] * d);
-                f += a * a;
-                df += -2.0 * a * a / (d * t2);
+                m[j] = axis_stim(X, j, i);
+                th[j] = stim_thresh_vec(j * N + i);
+                double u = m[j] / th[j];
+                ss += u * u;
             }
-            if (df >= 0.0) break; // f is strictly decreasing in lam; guard against round-off
-            const double next = lam - f / df;
-            const bool done = std::abs(next - lam) <= 1e-15 * (1.0 + std::abs(next));
-            lam = (next > 0.0) ? next : 0.5 * lam;
-            if (done || std::abs(f) <= 1e-15 * upper * upper) break;
-        }
-        for (int j = 0; j < Naxis; j++) {
-            const double share = (m[j] / (1.0 + lam / (th[j] * th[j])) - m[j]) / n_terms;
-            for (int b = 0; b < n_terms; b++) X(j * n_terms * N + i + b * N) += share;
+            if (sqrt(ss) <= upper) continue;
+
+            double lam = 0.0;
+            for (int it = 0; it < 50; it++) {
+                double f = -upper * upper, df = 0.0;
+                for (int j = 0; j < Naxis; j++) {
+                    const double t2 = th[j] * th[j];
+                    const double d = 1.0 + lam / t2;
+                    const double a = m[j] / (th[j] * d);
+                    f += a * a;
+                    df += -2.0 * a * a / (d * t2);
+                }
+                if (df >= 0.0) break; // f is strictly decreasing in lam; guard against round-off
+                const double next = lam - f / df;
+                const bool done = std::abs(next - lam) <= 1e-15 * (1.0 + std::abs(next));
+                lam = (next > 0.0) ? next : 0.5 * lam;
+                if (done || std::abs(f) <= 1e-15 * upper * upper) break;
+            }
+            for (int j = 0; j < Naxis; j++) {
+                const double share = (m[j] / (1.0 + lam / (th[j] * th[j])) - m[j]) / n_terms;
+                for (int b = 0; b < n_terms; b++) X(j * n_terms * N + i + b * N) += share;
+            }
         }
     }
 
@@ -375,7 +349,7 @@ void Op_SAFE::check(Eigen::VectorXd &X) {
     for (int i = 0; i < N; i++) {
         double ss = 0.0;
         for (int j = 0; j < Naxis; j++) {
-            double u = axis_stim(X, j, i) / stim_thresh_vec(j * N + i);
+            double u = stim_mag(X, j, i) / stim_thresh_vec(j * N + i);
             ss += u * u;
         }
         if (sqrt(ss) > 1.0) is_feas = 0;
@@ -418,14 +392,13 @@ double Op_SAFE::linearization_error(const Eigen::VectorXd &x_new) {
 }
 
 double Op_SAFE::constraint_violation(const Eigen::VectorXd &x_new) {
-    // max over samples of the fractional excess over the combined limit, sqrt(sum_j (stim_j/thresh_j)^2) - 1,
-    // matching check(); leaves the frozen-sign state unchanged.
+    // max over samples of the RSS excess over the limit, as check() scores it; frozen-sign state unchanged.
     Eigen::VectorXd xc = x_new;
     Eigen::VectorXd out(Ax_size);
     const bool saved = freeze_signs;
     const Eigen::VectorXd s1 = signs1, s2 = signs2, s3 = signs3;
     freeze_signs = false;
-    forward(xc, out);
+    Op_SAFE::forward(xc, out); // the unlifted model, also for Op_SAFE_Slack (reads only the waveform)
     signs1 = s1;
     signs2 = s2;
     signs3 = s3;
@@ -434,7 +407,7 @@ double Op_SAFE::constraint_violation(const Eigen::VectorXd &x_new) {
     for (int i = 0; i < N; i++) {
         double ss = 0.0;
         for (int j = 0; j < Naxis; j++) {
-            double u = axis_stim(out, j, i) / stim_thresh_vec(j * N + i);
+            double u = stim_mag(out, j, i) / stim_thresh_vec(j * N + i);
             ss += u * u;
         }
         double over = sqrt(ss) - 1.0;
@@ -504,10 +477,11 @@ void SAFEParams::swap_first_axes(int new_first_axis) {
 }
 
 void SAFEParams::calc_alphas(double dt) {
+    auto alpha = [&](double tau) { return alpha_exact ? (1.0 - exp(-dt / tau)) : (dt / (tau + dt)); };
     for (int i = 0; i < 3; i++) {
-        alpha1[i] = dt / (tau1[i] + dt);
-        alpha2[i] = dt / (tau2[i] + dt);
-        alpha3[i] = dt / (tau3[i] + dt);
+        alpha1[i] = alpha(tau1[i]);
+        alpha2[i] = alpha(tau2[i]);
+        alpha3[i] = alpha(tau3[i]);
     }
 }
 

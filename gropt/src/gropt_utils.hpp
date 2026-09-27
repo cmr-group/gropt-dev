@@ -12,13 +12,15 @@
 
 namespace Gropt {
 
-// SAFE PNS curve of G (axis-major), demo params
-Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis);
+// SAFE PNS curve of G (axis-major), demo params; alpha_exact: see SAFEParams::alpha_exact
+Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
+                               bool alpha_exact = false);
 // Same, custom params
 Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
                                const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3,
                                const Eigen::VectorXd &a1, const Eigen::VectorXd &a2, const Eigen::VectorXd &a3,
-                               const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale);
+                               const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
+                               bool alpha_exact = false);
 
 void test_eigen_assertions(int test_type);
 
