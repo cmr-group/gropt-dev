@@ -48,6 +48,10 @@ class Op_Moment : public Operator
 
         virtual void init();
 
+        // true: A from pwl_moment_weight() (raster.hpp), exact for the piecewise-linear waveform; the rectangle
+        // rule sum g_i dt t_i^k is off by a multiple of the lower moments for order >= 2. Needs a whole order.
+        bool pwl_quad = false;
+
         virtual void forward(Eigen::VectorXd &X, Eigen::VectorXd &out);
         virtual void transpose(Eigen::VectorXd &X, Eigen::VectorXd &out);
         virtual void prox(Eigen::VectorXd &X);

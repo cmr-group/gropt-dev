@@ -22,11 +22,12 @@ void Operator::init() {
     dt = pdata->dt;
     Ntot = N * Naxis;
 
-    x_temp.setZero(Ntot);
+    // Sized to this op's view of the primal (n_primal()); forward_op hands it that slice.
+    x_temp.setZero(n_primal());
     Ax_temp.setZero(Ax_size);
 
     eq_rows.setOnes(Ax_size);
-    eq_cols.setOnes(Ntot);
+    eq_cols.setOnes(n_primal());
 }
 
 void Operator::forward(Eigen::VectorXd &X, Eigen::VectorXd &out) {
@@ -39,10 +40,11 @@ void Operator::transpose(Eigen::VectorXd &X, Eigen::VectorXd &out) {
 
 void Operator::forward_op(Eigen::VectorXd &X, Eigen::VectorXd &out) {
 
+    // head(): the caller's primal may be longer than this operator's view of it.
     if (do_equil) {
-        x_temp.array() = X.array() * eq_cols.array();
+        x_temp.array() = X.head(x_temp.size()).array() * eq_cols.array();
     } else {
-        x_temp = X;
+        x_temp = X.head(x_temp.size());
     }
 
     forward(x_temp, out);
@@ -63,7 +65,7 @@ void Operator::transpose_op(Eigen::VectorXd &X, Eigen::VectorXd &out, bool apply
     transpose(Ax_temp, out);
 
     if (apply_fixer) {
-        out.array() *= pdata->fixer.array();
+        out.array() *= pdata->fixer.head(out.size()).array();
     }
     out.array() /= spec_norm;
 
@@ -75,7 +77,7 @@ void Operator::transpose_op(Eigen::VectorXd &X, Eigen::VectorXd &out, bool apply
 void Operator::transpose_op(Eigen::VectorXd &X, Eigen::VectorXd &out) { transpose_op(X, out, true); }
 
 double Operator::estimate_self_spec_norm(int n_iters) {
-    int Ntot_local = pdata->N * pdata->Naxis;
+    int Ntot_local = n_primal();
 
     // Fixed seed so spec_norm is reproducible
     std::mt19937 gen(1234567u);
@@ -112,7 +114,7 @@ void Operator::add_Atb(Eigen::VectorXd &b, const WorkspaceSolver &ws) {
     Ax_temp = ws.weight * ws.z0 - ws.y0;
 
     transpose_op(Ax_temp, x_temp);
-    b += x_temp;
+    b.head(n_primal()) += x_temp;
 
     spdlog::trace("Operator::add_Atb  end    name = {}", name);
 }
@@ -125,7 +127,7 @@ void Operator::add_AtAx(Eigen::VectorXd &X, Eigen::VectorXd &out, const Workspac
     forward_op(X, Ax_temp);
     transpose_op(Ax_temp, x_temp);
 
-    out.array() += ws.weight * x_temp.array();
+    out.head(n_primal()).array() += ws.weight * x_temp.array();
 
     spdlog::trace("Operator::add_AtAx  end    name = {}", name);
 }
@@ -139,7 +141,7 @@ void Operator::add_obj(Eigen::VectorXd &X, Eigen::VectorXd &out) {
     forward_op(X, Ax_temp);
     transpose_op(Ax_temp, x_temp);
 
-    out.array() += obj_weight * x_temp.array();
+    out.head(n_primal()).array() += obj_weight * x_temp.array();
 
     spdlog::trace("Operator::add_obj   name = {}  obj_weight = {:.1e}", name, obj_weight);
 }
@@ -160,7 +162,7 @@ void Operator::add_obj_rhs(Eigen::VectorXd &x0, Eigen::VectorXd &out, bool norma
         double n = x_temp.norm();
         if (n > 1e-300) scale /= n; // unit direction; magnitude = |obj_weight * obj_gate|
     }
-    out.array() += scale * x_temp.array();
+    out.head(n_primal()).array() += scale * x_temp.array();
 
     spdlog::trace("Operator::add_obj_rhs   name = {}  obj_weight = {:.1e}  normalize = {}", name, obj_weight,
                   normalize);

@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/map.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/vector.h>
@@ -14,6 +15,7 @@
 #include "gropt_utils.hpp"
 #include "equilibrate.hpp"
 #include "fft_tools.hpp"
+#include "raster.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -76,6 +78,9 @@ n_feval : int
     Total number of inner linear-solver iterations.
 dt : float
     Raster time of the waveform [s].
+aux : dict[str, np.ndarray]
+    Auxiliary primal blocks by name, empty unless a constraint declared one
+    (SAFE's lifting declares "abs_slew" = u >= |slew|). X stays the waveform.
 bvalue : float
     b-value of the returned waveform [s/mm^2] if the problem has a b-value term
     (constraint or objective), else 0.)doc"
@@ -87,6 +92,7 @@ bvalue : float
         .def_rw("n_feval", &Gropt::SolveResult::n_feval)
         .def_rw("dt", &Gropt::SolveResult::dt)
         .def_rw("bvalue", &Gropt::SolveResult::bvalue)
+        .def_rw("aux", &Gropt::SolveResult::aux)
         .def("__repr__", [](const Gropt::SolveResult &r) {
             return "SolveResult(converged=" + std::string(r.converged ? "True" : "False") +
                    ", n_iter=" + std::to_string(r.n_iter) +
@@ -134,6 +140,26 @@ R"doc(Problem definition: waveform layout, constraints, and objectives.)doc"
             "Softabs smoothing [T/m/s] for SAFE |.|: sqrt(v^2 + eps^2), slightly conservative; "
             "0 = exact (default). Set before add_SAFE/add_SAFE_vec; try ~1% of smax (e.g. 1-5 for "
             "smax = 200).")
+
+        .def_rw("safe_signed13", &Gropt::GroptParams::safe_signed13,
+            "Emit SAFE terms 1 and 3 signed and take their absolute values in the prox rather than the "
+            "forward map, dropping the sign freezing of those terms. Set before add_SAFE.")
+
+        .def_rw("safe_lifted", &Gropt::GroptParams::safe_lifted,
+            "Lift SAFE's abs-inside-the-filter term onto an auxiliary u >= |slew| (Op_SAFE_Slack plus "
+            "the Op_SlackAbs enforcing u), so it is never re-linearized; lifted SAFEs share one u. "
+            "Set before add_SAFE/add_SAFE_vec.")
+
+        .def("ensure_slack_abs", &Gropt::GroptParams::ensure_slack_abs,
+            "aux_name"_a = "abs_slew", "weight_mod"_a = 1.0,
+            "Add the Op_SlackAbs enforcing u >= |slew|, unless one is already present. add_SAFE calls "
+            "this itself when safe_lifted is set; call it first only to fix the operator's position in "
+            "the list (warm-start keys are positional).")
+
+        .def_rw("safe_alpha_exact", &Gropt::GroptParams::safe_alpha_exact,
+            "SAFE one-pole discretization. False (default): alpha = dt/(tau+dt), raster dependent "
+            "(~8% low at 400 us). True: alpha = 1 - exp(-dt/tau), raster invariant, so the solve "
+            "limits what the hardware sees. Set before add_SAFE/add_SAFE_vec.")
 
         // vec_init_simple
         .def("vec_init_simple", &Gropt::GroptParams::vec_init_simple,
@@ -353,10 +379,10 @@ weight_mod : float, optional
         // add_concomitant
         .def("add_concomitant", &Gropt::GroptParams::add_concomitant,
             "start_idx"_a = 0, "rot_variant"_a = true, "weight_mod"_a = 1.0, "tol0"_a = 0.1,
-            "target"_a = 1.0, "project"_a = false,
+            "target"_a = 1.0, "project"_a = false, "exact_quad"_a = true,
 R"doc(Add a concomitant (pre/post-180 energy balance) constraint.
 
-Constrains the ratio pos/neg of the gradient energy sum(g^2 * dt) before (pos)
+Constrains the ratio pos/neg of the gradient energy integral of g^2 before (pos)
 and after (neg) the 180 to target +/- tol0. The constraint is nonconvex: a soft
 ADMM constraint by default, or a relinearized equality projection with
 project=True. The prox is the exact projection onto the ratio band.
@@ -377,7 +403,10 @@ target : float, optional
 project : bool, optional
     If True, enforce the linearized (SQP) balance via the equality projection
     each outer iteration; weight_mod is unused and tol0 only sets the
-    feasibility check.)doc"
+    feasibility check.
+exact_quad : bool, optional
+    True (default) integrates g^2 exactly for the piecewise-linear waveform, so the
+    ratio is raster independent. False: the legacy rectangle sum, for older results.)doc"
         )
 
         // add_smax
@@ -417,6 +446,7 @@ weight_mod : float, optional
             "order"_a = 0, "target"_a = 0.0, "tol"_a = 1e-6, "units"_a = "mT*ms/m",
             "axis"_a = 0, "start_idx"_a = -1, "stop_idx"_a = -1, "ref_idx"_a = 0,
             "weight_mod"_a = 1.0, "project"_a = false, "absolute_tol"_a = false,
+            "pwl_quad"_a = false,
 R"doc(Add a moment constraint.
 
 Parameters
@@ -446,7 +476,11 @@ project : bool, optional
     ADMM penalty.
 absolute_tol : bool, optional
     If True, tol is in this order's own units instead of scaled from M0 (e.g.
-    for a nonzero M2 target). Default False.)doc"
+    for a nonzero M2 target). Default False.
+pwl_quad : bool, optional
+    True: quadrature exact for the piecewise-linear waveform (see pwl_moment_weight).
+    False (default): rectangle rule sum(g * dt * t^order), off by a multiple of the
+    lower moments for order >= 2. Needs a whole order >= 0.)doc"
         )
 
         // add_SAFE
@@ -520,7 +554,7 @@ Parameters
 ----------
 stim_thresh_vec : np.ndarray
     Per-sample stimulation limits as fractions of the SAFE threshold, length
-    Naxis*N. Any other length falls back to 1.0 everywhere, with a warning.
+    Naxis*N. Any other length raises ValueError at prepare().
 new_first_axis : int, optional
     Use the SAFE parameters of this axis (0, 1, 2) for the first gradient axis
     (swapped with axis 0).
@@ -569,7 +603,7 @@ project : bool, optional
         // add_bvalue
         .def("add_bvalue", [](Gropt::GroptParams &self, double target, double tol,
                               int start_idx0, int stop_idx0, double weight_mod,
-                              nb::object mode_obj, double max_scale, bool as_objective, bool linearize) {
+                              nb::object mode_obj, double max_scale, bool as_objective, bool linearize, bool pwl_quad) {
             int mode_int;
             if (nb::isinstance<nb::str>(mode_obj)) {
                 std::string mode_str = nb::cast<std::string>(mode_obj);
@@ -582,10 +616,10 @@ project : bool, optional
                 if (mode_int < 1 || mode_int > 3)
                     throw std::invalid_argument("Invalid mode integer. Must be 1, 2, or 3.");
             }
-            self.add_bvalue(target, tol, start_idx0, stop_idx0, weight_mod, mode_int, max_scale, as_objective, linearize);
+            self.add_bvalue(target, tol, start_idx0, stop_idx0, weight_mod, mode_int, max_scale, as_objective, linearize, pwl_quad);
         }, "target"_a = 100.0, "tol"_a = 1.0, "start_idx0"_a = -1, "stop_idx0"_a = -1,
            "weight_mod"_a = 1.0, "mode"_a = nb::int_(2), "max_scale"_a = 1.01, "as_objective"_a = false,
-           "linearize"_a = true,
+           "linearize"_a = true, "pwl_quad"_a = false,
 R"doc(Add a b-value term (constraint by default, or a maximization objective).
 
 Parameters
@@ -609,6 +643,11 @@ max_scale : float, optional
     Per-iteration scale factor for mode='minval_max'.
 as_objective : bool, optional
     If True, maximize the b-value as an objective instead of constraining it.
+pwl_quad : bool, optional
+    True: quadrature exact for the piecewise-linear waveform, so b does not depend on
+    the solve raster (costs 3x the Ax/dual memory here). False (default): cumsum for q
+    then a rectangle sum for integral q^2, high by ~gamma^2 (dt^2/4) integral(g^2)
+    (0.12% at 400 us). Off by default: it shifts every b-value target.
 linearize : bool, optional
     Objective only. True (default, recommended): linearized into the RHS
     (DCA), keeping the CG system positive-definite. False (experimental):
@@ -1285,7 +1324,7 @@ float
     // get_SAFE
     m.def("get_SAFE", [](Eigen::VectorXd G, double dt, bool true_safe,
                          int new_first_axis, bool demo_params,
-                         nb::object safe_params_obj) -> Eigen::VectorXd {
+                         nb::object safe_params_obj, bool alpha_exact) -> Eigen::VectorXd {
         int Naxis = 1;
 
         if (!safe_params_obj.is_none()) {
@@ -1299,15 +1338,15 @@ float
             Eigen::VectorXd stim_limit = nb::cast<Eigen::VectorXd>(sp["stim_limit"]);
             Eigen::VectorXd g_scale = nb::cast<Eigen::VectorXd>(sp["g_scale"]);
             return Gropt::get_SAFE_eigen(G, Naxis, dt, true_safe, new_first_axis,
-                                         tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
+                                         tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale, alpha_exact);
         } else {
             if (!demo_params) {
                 throw std::invalid_argument("If safe_params is None, demo_params must be True.");
             }
-            return Gropt::get_SAFE_eigen(G, Naxis, dt, true_safe, new_first_axis);
+            return Gropt::get_SAFE_eigen(G, Naxis, dt, true_safe, new_first_axis, alpha_exact);
         }
     }, "G"_a, "dt"_a, "true_safe"_a = true, "new_first_axis"_a = 0,
-       "demo_params"_a = true, "safe_params"_a = nb::none(),
+       "demo_params"_a = true, "safe_params"_a = nb::none(), "alpha_exact"_a = false,
 R"doc(Compute the SAFE (PNS) response for a single-axis gradient waveform.
 
 Parameters
@@ -1324,6 +1363,9 @@ demo_params : bool, optional
     Use the built-in demo SAFE parameters. Must be True if safe_params is None.
 safe_params : dict, optional
     Dictionary of SAFE parameters (see gropt.readasc).
+alpha_exact : bool, optional
+    One-pole discretization. False (default): alpha = dt/(tau+dt), raster dependent.
+    True: alpha = 1 - exp(-dt/tau), raster invariant. See GroptParams.safe_alpha_exact.
 
 Returns
 -------
@@ -1371,6 +1413,84 @@ Returns
 -------
 np.ndarray
     The projected copy of x.)doc"
+    );
+
+    // raster.hpp
+    m.def("pwl_moment_weight", &Gropt::pwl_moment_weight,
+        "k"_a, "T"_a, "h"_a, "has_left"_a = true, "has_right"_a = true,
+R"doc(Exact moment quadrature weight for a piecewise-linear waveform.
+
+The integral of the hat function at node time T times t^k: h and h*T for k < 2 (the
+rectangle rule), then h*(T^2 + h^2/6), h*(T^3 + h^2 T/2), ...
+
+Parameters
+----------
+k : int
+    Moment order, >= 0.
+T, h : float
+    Node time relative to the reference index, and sample spacing, in one time unit.
+has_left, has_right : bool, optional
+    Whether each neighbouring node is inside the window (an end node carries half a tent).
+
+Returns
+-------
+float
+    The weight, in (time unit)^(k+1).)doc"
+    );
+
+    m.def("resample_waveform", [](Eigen::VectorXd X, double dt_src, double dt_tgt, int Naxis,
+                                  int N_out) -> Eigen::VectorXd {
+        return Gropt::resample_waveform(X, Naxis, dt_src, dt_tgt, N_out);
+    }, "X"_a, "dt_src"_a, "dt_tgt"_a, "Naxis"_a = 1, "N_out"_a = -1,
+R"doc(Resample a waveform onto a finer raster, exactly.
+
+When dt_src is an integer multiple of dt_tgt the target samples land on the same lines
+the scanner plays, so gmax, slew and the nulled moments are exact and the b-value drops
+~0.1% (400 us -> 10 us). A smoothing interpolant or a staircase would change them.
+
+Parameters
+----------
+X : np.ndarray
+    Waveform, length Naxis*N, axis-major [T/m].
+dt_src, dt_tgt : float
+    Solve and target raster [s]; dt_src must be an integer multiple of dt_tgt.
+Naxis : int, optional
+    Number of axes.
+N_out : int, optional
+    Samples per axis; -1 (default) is the natural (N-1)*R + 1, same duration. A larger
+    value zero-pads the end; a smaller one raises ValueError.
+
+Returns
+-------
+np.ndarray
+    The resampled waveform, length Naxis*N_out.)doc"
+    );
+
+    m.def("resample_inv_vec", [](Eigen::VectorXd inv_vec, double dt_src, double dt_tgt, int Naxis,
+                                 int N_out) -> Eigen::VectorXd {
+        return Gropt::resample_inv_vec(inv_vec, Naxis, Gropt::raster_ratio(dt_src, dt_tgt), N_out);
+    }, "inv_vec"_a, "dt_src"_a, "dt_tgt"_a, "Naxis"_a = 1, "N_out"_a = -1,
+R"doc(Carry inv_vec onto the target raster, flipping sign at the same physical time.
+
+Each source sign is held over its R target samples, so moments and b-values on the two
+rasters stay comparable.
+
+Parameters
+----------
+inv_vec : np.ndarray
+    Source inv_vec, length Naxis*N, axis-major.
+dt_src, dt_tgt : float
+    Source and target raster times [s].
+Naxis : int, optional
+    Number of axes.
+N_out : int, optional
+    Samples per axis in the result; -1 (default) = (N-1)*R + 1. Padding repeats the
+    last sign.
+
+Returns
+-------
+np.ndarray
+    inv_vec on the target raster.)doc"
     );
 
     m.def("test_eigen_assertions", &Gropt::test_eigen_assertions,

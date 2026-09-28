@@ -5,19 +5,33 @@ Simplest call (gmax, smax, moment nulling and b-value only):
     from gropt.diffusion import DiffParams, solve
     res = solve(DiffParams(TE=60e-3, T_90=3e-3, T_180=5e-3, T_readout=16e-3))
     G = res["X"]
+
+The defaults are the tuned ``default`` recipe; ``available_recipes()`` lists the others, e.g.
+``solve(cfg, recipe="fast")``, or ``solve(cfg, recipe="best")`` to run several and keep the best.
 """
 
 from __future__ import annotations
 
 import copy
 import itertools
+import warnings
 from dataclasses import dataclass, replace
 from timeit import default_timer as timer
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 import gropt
-from gropt.readasc import asc_to_safe, get_random_safe_params
+from gropt.diffusion_recipes import (
+    _read_library,
+    apply_recipe,
+    available_recipes,  # noqa: F401 -- re-exported, like iter_recipes
+    iter_recipes,
+)
+from gropt.readasc import SAFE_KEYS, asc_to_safe, check_safe_params, get_random_safe_params
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 # ===========================================================================
@@ -25,7 +39,15 @@ from gropt.readasc import asc_to_safe, get_random_safe_params
 # ===========================================================================
 @dataclass(frozen=True)
 class DiffParams:
-    """Diffusion problem definition."""
+    """Diffusion problem definition.
+
+    ``pns_lim`` / ``cns_lim``: a float, a per-sample array (length N, or one row per ``safe_test_axes``
+    entry), or ``f(cfg, t)`` returning one for the sample times ``t``, re-evaluated for every TE (make it
+    module-level for parallel sweeps). See :func:`safe_ops`.
+
+    The solve-knob defaults (``diffusion_recipes.RECIPE_FIELDS``) are the tuned ``default`` recipe; see
+    :func:`available_recipes` for the others.
+    """
 
     # --- required timing [s] ---
     TE: float
@@ -42,12 +64,13 @@ class DiffParams:
 
     # --- slew rate ---
     smax: float = 200.0          # [T/m/s]
-    w_smax: float = 1.0
+    w_smax: float = 10.832717264505106
 
     # --- moments ---
     MMT: int = 0                 # null moments M0..M_MMT
     moment_project: bool = True  # exact null-space projection (recommended)
     moment_tol: float = 1e-5     # M0 tolerance; order k uses moment_tol * ||A_k|| / ||A_0||
+    moment_pwl_quad: bool = False  # True: exact piecewise-linear quadrature (see add_moment pwl_quad)
     w_moment: float = 1.0
 
     # --- diffusion ---
@@ -55,22 +78,30 @@ class DiffParams:
     diff_mode: str = "gropt"        # "gropt" | "conventional" | "preencode"
     bval_mode: str = "obj"          # "obj" (maximize b) | constraint: "setval" | "minval" | "minval_max"
     bval_min: float = 100.0         # constraint modes: target b [s/mm^2]
-    bval_obj_weight: float = 1.0    # obj mode: magnitude of the normalized b-value pull
+    bval_obj_weight: float = 1.7034494007148022  # obj mode: magnitude of the normalized b-value pull
     bval_max_scale: float = 1.02    # minval_max: per-iteration b scale factor
+    bval_pwl_quad: bool = False      # True: exact piecewise-linear b-value (see add_bvalue pwl_quad)
     w_bval: float = 1.0             # constraint modes only
 
     # --- SAFE, PNS, CNS ---
-    pns_lim: float | None = None         # SAFE PNS limit (1.0 = model stim_limit); None = off
-    cns_lim: float | None = None         # SAFE cardiac limit, same scale; None = off
-    safe_params: SafeSource | None = None   # SAFE model source; None = SafeSource() (random, seed 42)
+    pns_lim: float | np.ndarray | Callable | None = None   # PNS limit, 1.0 = model stim_limit; None = off
+    cns_lim: float | np.ndarray | Callable | None = None   # CNS limit, same forms; None = off
+    safe_params: SafeSource | tuple | None = None   # None = random (seed 42); (pns, cns) -> kind="params"
+    safe_test_axes: tuple[int, ...] = (0,)          # axes (x, y, z = 0, 1, 2) to be safe on, one op each
     safe_eps: float = 0.0                # softabs smoothing of SAFE |.| [T/m/s]; 0 = exact |.|
-    w_pns: float = 1.0
-    w_cns: float = 1.0
+    safe_signed13: bool = False          # |.| of SAFE terms 1/3 in the prox, not the forward map
+    safe_lifted: bool = True             # lift LP2(|slew|) onto a slack u >= |slew| (Op_SAFE_Slack)
+    w_slack: float = 105.08823640819529  # weight of the u >= |slew| coupling op (safe_lifted only)
+    safe_alpha_exact: bool = True        # raster-invariant filter (see GroptParams.safe_alpha_exact)
+    w_pns: float = 12.366370987704867
+    w_cns: float = 57.339230929159065
 
     # --- optional constraints (None / False => off) ---
     concomitant: bool = False
-    w_concomitant: float = 1.0
+    concomitant_tol: float = 0.1    # feasible when |E_pre/E_post - 1| <= tol; project=True still drives it to 1
+    w_concomitant: float = 4.371489218804275
     concomitant_project: bool = True
+    concomitant_exact_quad: bool = True  # False: legacy raster-dependent rectangle sum of g^2
 
     eddy_lam: float | None = None   # eddy time constant [s]
     w_eddy: float = 1.0
@@ -86,11 +117,22 @@ class DiffParams:
     w_jerk: float = 1.0
 
     # --- initial waveform (solve seed) ---
-    x0_mode: str = "diff_init"      # "diff_init" (built-in 1e-2 seed) | "const" | "sine"
-    x0_amp: float = 0.01            # seed amplitude on free samples (const, sine)
-    x0_invert: bool = True          # flip the seed sign after the 180
-    x0_periods: float = 1.0         # sine mode: periods per free run (zero at both ends)
+    x0_mode: str = "sine"           # "diff_init" (built-in 1e-2 seed) | "const" | "sine"
+    x0_amp: float = 0.08443255496637647  # seed amplitude on free samples (const, sine)
+    x0_invert: bool = False         # flip the seed sign after the 180
+    x0_periods: float = 2.0         # sine mode: periods per free run (zero at both ends)
     x0_project: bool = False        # pre-project the seed onto the moment null-space (M0..M_MMT = 0)
+
+    def __post_init__(self):
+        """Turn a (pns, cns) dict pair into SafeSource(kind="params"); check safe_test_axes."""
+        if isinstance(self.safe_params, (tuple, list)):
+            pns, cns = self.safe_params
+            object.__setattr__(self, "safe_params", SafeSource(kind="params", pns=pns, cns=cns))
+        axes = tuple(int(a) for a in np.atleast_1d(self.safe_test_axes))
+        if not axes or any(a not in (0, 1, 2) for a in axes):
+            msg = f"safe_test_axes must be a non-empty subset of (0, 1, 2), got {self.safe_test_axes!r}"
+            raise ValueError(msg)
+        object.__setattr__(self, "safe_test_axes", axes)
 
 
 # ===========================================================================
@@ -100,9 +142,8 @@ class DiffParams:
 class SolverCfg:
     """Solver settings, tuned for diffusion b-value maximization.
 
-    These intentionally differ from the general C++ / ``gropt.solve()`` defaults: inexact CG
-    (``ils_tol=0.1``), a larger iteration budget, and more aggressive BB reweighting
-    (``rw_e_corr=0.2``, ``rw_scalelim=2.0``).
+    The defaults are the tuned ``default`` recipe (see :func:`available_recipes`), so they differ from the
+    general C++ / ``gropt.solve()`` defaults.
     """
 
     # outer loop
@@ -111,27 +152,27 @@ class SolverCfg:
     min_iter: int = 1
     obj_patience: int = 20          # obj mode: stop after N feasible iters with no improvement
     obj_rtol: float = 1e-4          # relative improvement threshold for obj_patience
-    gamma_x: float = 1.6            # over-relaxation of the X update
+    gamma_x: float = 1.165149741846207  # over-relaxation of the X update
 
     # inner (CG) solver
-    ils_tol: float = 0.1
-    ils_max_iter: int = 20
+    ils_tol: float = 0.07290432029478086
+    ils_max_iter: int = 31
     ils_min_iter: int = 2
-    ils_sigma: float = 1e-4         # proximal weight
+    ils_sigma: float = 0.0001554544663042038  # proximal weight
     ils_tik_lam: float = 0.0
 
     bb_reweight: bool = True        # BB per-operator adaptation
-    rw_interval: int = 8            # BB cadence: reweight every rw_interval outer iters
-    rw_e_corr: float = 0.2          # BB correlation threshold (Xu et al.); lower = more frequent updates
-    rw_scalelim: float = 2.0        # max weight change per BB step (1.0 = frozen)
+    rw_interval: int = 37           # BB cadence: reweight every rw_interval outer iters
+    rw_e_corr: float = 0.16079028465931097  # BB correlation threshold (Xu et al.); lower = updates more often
+    rw_scalelim: float = 4.991259555225381  # max weight change per BB step (1.0 = frozen)
     rw_eps: float = 1e-36           # safeguard floor for the correlation/norm guards
 
     grw: bool = True                # global reweighting: bump the most persistently infeasible op
-    grw_interval: int = 20          # grw cadence (only when grw)
-    grw_mod: float = 2.0            # grw multiplier (only when grw)
+    grw_interval: int = 31          # grw cadence (only when grw)
+    grw_mod: float = 6.005900533768388  # grw multiplier (only when grw)
     grw_balanced: bool = False      # rescale all weights to keep their geometric mean fixed
 
-    reproject_iterate: bool = True  # re-project onto the equality constraints each outer iteration
+    reproject_iterate: bool = False  # re-project onto the equality constraints each outer iteration
 
     # low-pass the iterate each outer iteration (suppresses high-frequency oscillation)
     cutoff_freq: float = -1.0       # [Hz]; <= 0 off
@@ -158,15 +199,29 @@ class SolverCfg:
 # ===========================================================================
 @dataclass(frozen=True)
 class SafeSource:
-    """Hashable pointer to SAFE model parameters, resolved to ``(pns, cns)`` dicts by ``resolve``.
+    """Pointer to SAFE model parameters, resolved to ``(pns, cns)`` dicts by ``resolve``.
 
     * ``kind="random"`` -- synthetic params from ``seed`` (default).
     * ``kind="asc"``    -- params parsed from the scanner file ``asc_file`` (required).
+    * ``kind="params"`` -- the dicts ``pns`` / ``cns`` (either may be None), validated and copied
+      (see :func:`gropt.readasc.make_safe_params`). Not hashable.
     """
 
     kind: str = "random"
     seed: int = 42
     asc_file: str | None = None
+    pns: dict | None = None
+    cns: dict | None = None
+
+    def __post_init__(self):
+        """Validate and copy the dicts of a kind="params" source."""
+        if self.kind == "params":
+            if self.pns is None and self.cns is None:
+                msg = "SafeSource(kind='params') needs pns and/or cns"
+                raise ValueError(msg)
+            for name in ("pns", "cns"):
+                if getattr(self, name) is not None:
+                    object.__setattr__(self, name, check_safe_params(getattr(self, name)))
 
     def resolve(self):
         """Resolve the pointer to concrete SAFE parameter dicts.
@@ -188,6 +243,8 @@ class SafeSource:
                 msg = "SafeSource(kind='asc') requires asc_file"
                 raise ValueError(msg)
             return asc_to_safe(self.asc_file)
+        if self.kind == "params":
+            return self.pns, self.cns
         msg = f"Unknown SafeSource kind: {self.kind!r}"
         raise ValueError(msg)
 
@@ -197,16 +254,19 @@ class SafeSource:
 # TE search
 # ===========================================================================
 def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | None = None,
-              mode: str = "minval", te_lo: float | None = None, te_hi: float | None = None,
-              te_tol: float | None = None, max_expand: int = 6, verbose: bool = False):
+              mode: str = "obj", te_lo: float | None = None, te_hi: float | None = None,
+              te_tol: float | None = None, max_expand: int = 6, verbose: bool = False, *,
+              recipe: str | None = None, library=None):
     """Smallest TE whose waveform reaches ``b >= target_b``, by monotonic bisection.
 
     Modes:
 
-    * ``"minval"`` (default): b-value constraint ``bval_min=target_b``; feasible if the solve converges.
-      Robust under tight constraints, but infeasible TEs run to ``max_iter`` and are slow.
-    * ``"obj"``: maximize b; feasible if converged and ``bvalue >= target_b``. Fast everywhere, but
-      b-maximization can fail under tight constraints (e.g. strict PNS), which over-estimates TE.
+    * ``"obj"`` (default): maximize b; feasible if ``bvalue >= target_b``. Fast, and with the tuned default
+      recipe robust under tight constraints (strict PNS) too.
+    * ``"minval"``: b-value constraint ``bval_min=target_b``. Infeasible TEs run to ``max_iter``, so it is
+      several times slower under PNS; the recipes are tuned for ``"obj"``.
+
+    Either way a TE counts as feasible only if the solve converged and its waveform passes :func:`verify`.
 
     Parameters
     ----------
@@ -217,7 +277,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
     target_b : float, optional
         b-value to reach [s/mm^2]; defaults to ``base_cfg.bvalue``.
     mode : str, optional
-        ``"minval"`` (default) or ``"obj"``, see above.
+        ``"obj"`` (default) or ``"minval"``, see above.
     te_lo, te_hi : float, optional
         Initial TE bracket [s]. Defaults: ``te_lo`` = the minimum physical TE (b~0 there, infeasible),
         ``te_hi`` = minimum physical TE + 80 ms.
@@ -228,6 +288,8 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
         Maximum number of times the bracket span is doubled while ``te_hi`` is infeasible. Default 6.
     verbose : bool, optional
         Print each evaluation.
+    recipe, library : optional
+        A named single recipe instead of ``scfg``, as in :func:`solve` (portfolios are not supported).
 
     Returns
     -------
@@ -242,7 +304,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
         search_time : wall-clock seconds for the whole search.
     """
     t_start = timer()
-    scfg = scfg or SolverCfg()
+    base_cfg, scfg = _with_recipe(base_cfg, scfg, recipe, library)
     target_b = base_cfg.bvalue if target_b is None else target_b
     if mode not in ("minval", "obj"):
         msg = f"te_search mode must be 'minval' or 'obj', got {mode!r}"
@@ -271,13 +333,11 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
         if m not in cache:
             n_solves += 1
             if mode == "minval":
-                # b >= target_b as a constraint; a converged solve is feasible
                 cfg = replace(base_cfg, TE=bin_solve_te(m), bval_mode="minval", bval_min=target_b)
             else:
-                # maximize b; a blow-up leaves converged=False and reads as infeasible
                 cfg = replace(base_cfg, TE=bin_solve_te(m), bval_mode="obj")
             res = solve(cfg, scfg)
-            ok = bool(res["converged"]) and res["bvalue"] >= 0.999 * target_b
+            ok = bool(res["converged"]) and res["bvalue"] >= 0.999 * target_b and verify(res, cfg)["feasible"]
             cache[m] = (ok, res)
             if verbose:
                 print(f"  TE={bin_start(m) * 1e3:6.2f} ms (N={m + 1}) -> b={res['bvalue']:8.1f} "
@@ -328,7 +388,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
 
 
 def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_weights: bool = True,
-          return_solver: bool = False):
+          return_solver: bool = False, *, recipe: str | None = None, library=None, parallel: bool = True):
     """Build + solve a single ``DiffParams``. The main entry point.
 
     Parameters
@@ -346,14 +406,28 @@ def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_
     return_solver : bool, optional
         If True, also return ``(solver, gp)`` for interactive inspection. The default keeps the return
         value picklable for parallel workers.
+    recipe : str, optional
+        A recipe or portfolio from :func:`available_recipes` (e.g. ``"fast"``, ``"best"``) in place of
+        ``scfg``. A portfolio runs its recipes and returns the highest-b result that passes :func:`verify`,
+        adding ``"recipe"`` (the winner), ``"verify"``, ``"portfolio"`` (a per-recipe table), ``"cfg"``
+        and ``"scfg"``.
+    library : str or pathlib.Path, optional
+        Recipe library file for ``recipe``; default the one shipped with gropt.
+    parallel : bool, optional
+        Portfolios only: solve the recipes in parallel processes (default) or one after another.
 
     Returns
     -------
     dict  (or ``(dict, solver, gp)`` if ``return_solver``)
-        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, warmstart, solve_time
-        [, debug, op_names].
+        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, aux, inv_vec, warmstart,
+        solve_time [, debug, op_names].
     """
-    scfg = scfg or SolverCfg()
+    if recipe is not None and recipe in _read_library(library)["portfolios"]:
+        if warmstart is not None or return_solver:
+            msg = "a portfolio takes no warmstart or return_solver"
+            raise ValueError(msg)
+        return _solve_portfolio(cfg, recipe, library, parallel)
+    cfg, scfg = _with_recipe(cfg, scfg, recipe, library)
     gp, start_idx, op_weights = build_gparams(cfg)
     solver = make_solver(scfg)
     if warmstart is not None:
@@ -367,6 +441,41 @@ def solve(cfg: DiffParams, scfg: SolverCfg = None, warmstart: dict = None, keep_
     if return_solver:
         return out, solver, gp
     return out
+
+
+def _with_recipe(cfg, scfg, recipe, library):
+    """``(cfg, scfg or SolverCfg())``, or a named single recipe applied to ``cfg``."""
+    if recipe is None:
+        return cfg, scfg or SolverCfg()
+    if scfg is not None:
+        msg = "pass either scfg or recipe, not both (apply_recipe returns a recipe's configs to adjust)"
+        raise ValueError(msg)
+    return apply_recipe(cfg, recipe, library=library)
+
+
+def _solve_portfolio(cfg, name, library, parallel):
+    """Solve with each member recipe; return the highest b that passes :func:`verify` (see :func:`solve`)."""
+    runs = list(iter_recipes(cfg, name, library=library))
+    results = sweep_points([(c, s) for _, c, s in runs], parallel=parallel, max_workers=len(runs))
+    rows, pick, pick_key = [], None, None
+    for (m, _, _), r in zip(runs, results, strict=True):
+        v = verify(r, cfg)
+        ok = bool(r.get("converged")) and v["feasible"]
+        rows.append({"recipe": m, "bvalue": r.get("bvalue", 0.0), "converged": bool(r.get("converged")),
+                     "feasible": v["feasible"], "max_ratio": v["max_ratio"],
+                     "solve_time": r.get("solve_time", np.nan), "error": r.get("error")})
+        key = (ok, r["bvalue"] if ok else -v["max_ratio"])      # a verified solve beats any unverified one
+        if r.get("X") is not None and (pick_key is None or key > pick_key):
+            pick, pick_key = (m, r, v), key
+    if pick is None:
+        errors = "; ".join(f"{x['recipe']}: {x['error']}" for x in rows)
+        msg = f"portfolio {name!r}: every recipe failed: {errors}"
+        raise RuntimeError(msg)
+    if not pick_key[0]:
+        warnings.warn(f"portfolio {name!r}: no recipe passed verify(); returning the least-violating result",
+                      stacklevel=3)
+    m, r, v = pick
+    return {**r, "recipe": m, "verify": v, "portfolio": rows}
 
 
 # ===========================================================================
@@ -471,6 +580,56 @@ def suggest_moment_tol(cfg: DiffParams, cushion: float = 10.0):
                 "N_free": n_free, "A0_norm": a0_norm, "G_norm_est": g_norm_est}
 
 
+def safe_ops(cfg: DiffParams, N: int):
+    """List the SAFE constraints ``cfg`` builds: one per model and distinct tested axis.
+
+    Parameters
+    ----------
+    cfg : DiffParams
+        Problem definition (``pns_lim``, ``cns_lim``, ``safe_params``, ``safe_test_axes``).
+    N : int
+        Waveform samples (``gp.N``; ``int((TE - T_readout) / dt) + 1`` for ``diff_mode="gropt"``).
+
+    Returns
+    -------
+    list of tuple
+        ``(model, axis, limit, params)``: ``"pns"`` / ``"cns"``, the ``new_first_axis``, a float or
+        length-N limit, and the SAFE dict. Axes repeating an earlier one's coefficients and limit are dropped.
+
+    Raises
+    ------
+    ValueError
+        On a limit of the wrong shape or <= 0, or a limit whose model ``safe_params`` lacks.
+    """
+    if cfg.pns_lim is None and cfg.cns_lim is None:
+        return []
+    pns_params, cns_params = (cfg.safe_params or SafeSource()).resolve()
+    axes = cfg.safe_test_axes
+    t = np.arange(N) * cfg.dt
+    ops = []
+    for model, lim_src, params in (("pns", cfg.pns_lim, pns_params), ("cns", cfg.cns_lim, cns_params)):
+        if lim_src is None:
+            continue
+        if params is None:
+            msg = f"{model}_lim is set but safe_params has no {model} model"
+            raise ValueError(msg)
+        lim = np.asarray(lim_src(cfg, t) if callable(lim_src) else lim_src, dtype=float)
+        if lim.shape not in ((), (N,), (len(axes), N)):
+            msg = f"{model}_lim has shape {lim.shape}; expected a scalar, ({N},) or ({len(axes)}, {N})"
+            raise ValueError(msg)
+        if not (np.all(np.isfinite(lim)) and np.all(lim > 0)):
+            msg = f"{model}_lim must be finite and > 0"
+            raise ValueError(msg)
+        rows = [float(lim)] * len(axes) if lim.ndim == 0 else list(np.broadcast_to(lim, (len(axes), N)))
+        seen = set()
+        for axis, row in zip(axes, rows, strict=True):
+            key = (tuple(params[k][axis] for k in SAFE_KEYS), np.asarray(row).tobytes())
+            if key not in seen:
+                seen.add(key)
+                ops.append((model, axis, row, params))
+    return ops
+
+
 def build_gparams(cfg: DiffParams):
     """Build a ``GroptParams`` from a ``DiffParams``.
 
@@ -518,22 +677,32 @@ def build_gparams(cfg: DiffParams):
 
     for m in range(cfg.MMT + 1):
         gp.add_moment(m, 0.0, start_idx=start_idx, tol=cfg.moment_tol,
-                      weight_mod=cfg.w_moment, project=cfg.moment_project)
+                      weight_mod=cfg.w_moment, project=cfg.moment_project,
+                      pwl_quad=cfg.moment_pwl_quad)
         op_weights.append(cfg.w_moment)
 
-    # SAFE (PNS / cardiac), both from one source (default: random params)
-    if cfg.pns_lim is not None or cfg.cns_lim is not None:
-        pns_params, cns_params = (cfg.safe_params or SafeSource()).resolve()
+    # SAFE (PNS / CNS): one op per model and tested axis, see safe_ops
+    ops = safe_ops(cfg, gp.N)
+    if ops:
         gp.safe_eps = cfg.safe_eps  # copied into each Op_SAFE by add_SAFE; must be set first
-        if cfg.pns_lim is not None:
-            gp.add_SAFE(cfg.pns_lim, safe_params=pns_params, weight_mod=cfg.w_pns)
-            op_weights.append(cfg.w_pns)
-        if cfg.cns_lim is not None:
-            gp.add_SAFE(cfg.cns_lim, safe_params=cns_params, weight_mod=cfg.w_cns)
-            op_weights.append(cfg.w_cns)
+        gp.safe_signed13 = cfg.safe_signed13
+        gp.safe_lifted = cfg.safe_lifted
+        gp.safe_alpha_exact = cfg.safe_alpha_exact
+        if cfg.safe_lifted:
+            # up front for a deterministic op order (op_weights is zipped positionally)
+            gp.ensure_slack_abs(weight_mod=cfg.w_slack)
+            op_weights.append(cfg.w_slack)
+        for model, axis, lim, params in ops:
+            w = cfg.w_pns if model == "pns" else cfg.w_cns
+            if np.ndim(lim) == 0:
+                gp.add_SAFE(lim, new_first_axis=axis, safe_params=params, weight_mod=w)
+            else:
+                gp.add_SAFE_vec(lim, new_first_axis=axis, safe_params=params, weight_mod=w)
+            op_weights.append(w)
 
     if cfg.concomitant:
-        gp.add_concomitant(start_idx=start_idx, project=cfg.concomitant_project, weight_mod=cfg.w_concomitant)
+        gp.add_concomitant(start_idx=start_idx, project=cfg.concomitant_project, tol0=cfg.concomitant_tol,
+                           weight_mod=cfg.w_concomitant, exact_quad=cfg.concomitant_exact_quad)
         op_weights.append(cfg.w_concomitant)
     if cfg.eddy_lam is not None:
         gp.add_eddy(cfg.eddy_lam, weight_mod=cfg.w_eddy, project=cfg.eddy_project)
@@ -551,11 +720,13 @@ def build_gparams(cfg: DiffParams):
 
     # b-value: objective (maximize) or constraint
     if cfg.bval_mode == "obj":
-        gp.add_bvalue(as_objective=True, start_idx0=start_idx, weight_mod=cfg.bval_obj_weight)
+        gp.add_bvalue(as_objective=True, start_idx0=start_idx, weight_mod=cfg.bval_obj_weight,
+                      pwl_quad=cfg.bval_pwl_quad)
         gp.normalize_obj = True
     else:
         gp.add_bvalue(cfg.bval_min, mode=cfg.bval_mode, start_idx0=start_idx,
-                      weight_mod=cfg.w_bval, max_scale=cfg.bval_max_scale)
+                      weight_mod=cfg.w_bval, max_scale=cfg.bval_max_scale,
+                      pwl_quad=cfg.bval_pwl_quad)
         op_weights.append(cfg.w_bval)
 
     # optional custom seed (None keeps the diff_init seed)
@@ -688,7 +859,7 @@ def apply_fresh_weights(warmstart: dict, op_weights: dict) -> dict:
 # ===========================================================================
 # Run helpers
 # ===========================================================================
-def _result_dict(cfg: DiffParams, r, solver, scfg: SolverCfg, gp=None, start_idx=0):
+def _result_dict(cfg: DiffParams, r, solver, scfg: SolverCfg, gp, start_idx=0):
     """Assemble a plain, picklable result dict, always carrying a warm-start snapshot for chaining.
 
     Parameters
@@ -701,15 +872,15 @@ def _result_dict(cfg: DiffParams, r, solver, scfg: SolverCfg, gp=None, start_idx
         The solver, queried for the warm-start snapshot (and debug info if enabled).
     scfg : SolverCfg
         Solver settings; ``extra_debug`` gates the debug payload.
-    gp : gropt.GroptParams, optional
-        Params object, used only to attach ``op_names`` when debugging.
+    gp : gropt.GroptParams
+        Params object, for ``inv_vec`` and (when debugging) ``op_names``.
     start_idx : int, optional
         Moment/inv_vec offset carried into the result (0 for gropt/conventional).
 
     Returns
     -------
     dict
-        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, warmstart
+        Keys: TE, dt, start_idx, bvalue, converged, n_iter, n_feval, X, aux, inv_vec, warmstart
         [, debug, op_names].
     """
     out = {
@@ -722,14 +893,118 @@ def _result_dict(cfg: DiffParams, r, solver, scfg: SolverCfg, gp=None, start_idx
         "n_feval": int(r.n_feval),
         "X": np.asarray(r.X),
         "warmstart": solver.get_warmstart(),
+        # aux primal blocks (e.g. SAFE lifting's "abs_slew"); X stays the waveform alone
+        "aux": {k: np.asarray(v) for k, v in r.aux.items()},
+        "inv_vec": np.asarray(gp.getvec_inv_vec()),  # needed by to_raster
     }
     if scfg.extra_debug:
         out["debug"] = solver.get_debug()
-        if gp is not None:
-            out["op_names"] = gp.get_op_names()
+        out["op_names"] = gp.get_op_names()
     return out
 
-def continuation(steps, base_cfg: DiffParams, scfg: SolverCfg = None, keep_weights: bool = False):
+# ===========================================================================
+# Hardware raster
+# ===========================================================================
+def to_raster(res: dict, dt_tgt: float = 10e-6, N_out: int = -1):
+    """Move a solved waveform onto the hardware raster.
+
+    Exact when ``res["dt"]`` is a multiple of ``dt_tgt`` (the scanner plays the linear interpolant): gmax,
+    slew and nulled moments are unchanged, b drops ~0.1% (400 -> 10 us). RF gaps keep the solve raster's
+    rounded, always-wider positions (RF-safe, ~4.9% b at 400 us). Resamples only; re-check constraints
+    (e.g. ``gropt.get_SAFE``) separately.
+
+    Parameters
+    ----------
+    res : dict
+        A result from :func:`solve` (needs ``X``, ``dt``, ``inv_vec``, ``start_idx``).
+    dt_tgt : float, optional
+        Hardware raster [s]. ``res["dt"]`` must be an integer multiple of it.
+    N_out : int, optional
+        Samples in the result, as in :func:`gropt.resample_waveform` (-1 natural; larger zero-pads).
+
+    Returns
+    -------
+    dict
+        ``X`` and ``inv_vec`` on the target raster, plus ``dt`` and ``start_idx``.
+    """
+    dt_src = float(res["dt"])
+    X = np.ascontiguousarray(res["X"], dtype=float)
+    iv = np.ascontiguousarray(res["inv_vec"], dtype=float)
+    start_idx = round(int(res.get("start_idx", 0)) * dt_src / dt_tgt)
+
+    return {"X": gropt.resample_waveform(X, dt_src, dt_tgt, N_out=N_out),
+            "inv_vec": gropt.resample_inv_vec(iv, dt_src, dt_tgt, N_out=N_out),
+            "dt": dt_tgt, "start_idx": start_idx}
+
+
+def verify(result: dict, cfg: DiffParams, *, raster_dt: float | None = 10e-6, rtol: float = 0.02):
+    """Re-check a solved waveform against every limit of ``cfg``, independently of the solver.
+
+    ``converged`` means the operators' own checks passed on the solve raster, which is not always what the
+    scanner sees (with ``safe_alpha_exact=False`` coarse-raster SAFE under-reports) and trusts each check to
+    be right. This recomputes each limit's worst ratio (value / limit) from the waveform: gmax and slew on
+    the solve raster (linear resampling cannot raise them), PNS/CNS on the hardware raster with the exact
+    filter, and the concomitant balance with the exact piecewise-linear integral. A feasible but poor
+    waveform (an early iterate returned after a blow-up) passes; compare b-values to catch that.
+
+    Parameters
+    ----------
+    result : dict
+        A result from :func:`solve` (needs ``X``, and ``inv_vec`` when ``cfg.concomitant``).
+    cfg : DiffParams
+        The problem it was solved for.
+    raster_dt : float or None, optional
+        Hardware raster [s] for PNS/CNS (default 10 us). None, or a ``cfg.dt`` that is not an integer
+        multiple of it, checks on the solve raster with the solve's own filter.
+    rtol : float, optional
+        Allowed relative excess over each limit. Default 0.02.
+
+    Returns
+    -------
+    dict
+        ``feasible`` (every ratio <= 1 + rtol and the waveform finite), ``max_ratio``, and ``g_ratio``,
+        ``s_ratio``, ``pns_ratio``, ``cns_ratio``, ``concomitant_ratio`` (NaN when that limit is off;
+        ``concomitant_ratio`` = ``|E_pre/E_post - 1| / concomitant_tol``).
+    """
+    keys = ("g_ratio", "s_ratio", "pns_ratio", "cns_ratio", "concomitant_ratio")
+    out = dict.fromkeys(keys, np.nan)
+    X = result.get("X")
+    g = None if X is None else np.ascontiguousarray(X, dtype=float).ravel()
+    if g is None or g.size < 2 or not np.all(np.isfinite(g)):
+        return {**out, "feasible": False, "max_ratio": np.inf}
+    out["g_ratio"] = np.abs(g).max() / cfg.gmax
+    out["s_ratio"] = np.abs(np.diff(g)).max() / cfg.dt / cfg.smax
+
+    ops = safe_ops(cfg, g.size)
+    if ops:
+        k = cfg.dt / raster_dt if raster_dt else 0.0
+        hw = round(k) >= 1 and abs(k - round(k)) < 1e-6
+        g_s, dt_s = (gropt.resample_waveform(g, cfg.dt, raster_dt), raster_dt) if hw else (g, cfg.dt)
+        t, t_s = np.arange(g.size) * cfg.dt, np.arange(g_s.size) * dt_s
+        for model, axis, lim, params in ops:
+            stim = gropt.get_SAFE(g_s, dt_s, new_first_axis=axis, demo_params=False, safe_params=params,
+                                  alpha_exact=hw or cfg.safe_alpha_exact)
+            lim_s = lim if np.ndim(lim) == 0 else np.interp(t_s, t, lim)
+            r = float(np.max(np.abs(stim) / lim_s))
+            out[f"{model}_ratio"] = np.fmax(out[f"{model}_ratio"], r)
+
+    if cfg.concomitant:
+        iv = result.get("inv_vec")
+        if iv is None:
+            return {**out, "feasible": False, "max_ratio": np.inf}
+        iv = np.asarray(iv, dtype=float).ravel()
+        seg = cfg.dt / 3.0 * (g[:-1] ** 2 + g[:-1] * g[1:] + g[1:] ** 2)   # exact integral of g^2
+        pre, post = seg[(iv[:-1] > 0) & (iv[1:] > 0)].sum(), seg[(iv[:-1] < 0) & (iv[1:] < 0)].sum()
+        q = pre / post if post > 0 else np.inf
+        out["concomitant_ratio"] = abs(q - 1.0) / cfg.concomitant_tol
+
+    out["max_ratio"] = float(np.nanmax([out[k] for k in keys]))
+    out["feasible"] = out["max_ratio"] <= 1.0 + rtol
+    return out
+
+
+def continuation(steps, base_cfg: DiffParams, scfg: SolverCfg = None, keep_weights: bool = False, *,
+                 recipe: str | None = None, library=None):
     """Run a sequential, warm-started continuation over a list of ``DiffParams`` overrides.
 
     Each step is a dict of overrides applied to ``base_cfg`` (e.g. a coarse-to-fine dt ramp
@@ -748,13 +1023,15 @@ def continuation(steps, base_cfg: DiffParams, scfg: SolverCfg = None, keep_weigh
     keep_weights : bool, optional
         False (default) resets carried weights to each step's ``weight_mod``; True carries the adapted
         weights (useful for a pure dt ramp).
+    recipe, library : optional
+        A named single recipe instead of ``scfg``, as in :func:`solve`.
 
     Returns
     -------
     list of dict
         The per-step result dicts (each as from :func:`solve`).
     """
-    scfg = scfg or SolverCfg()
+    base_cfg, scfg = _with_recipe(base_cfg, scfg, recipe, library)
     results = []
     ws = None
     for step in steps:
@@ -897,7 +1174,7 @@ def _map_parallel(fn, arglist, max_workers, parallel, pool_timeout):
             return [f.result() for f in [ex.submit(fn, *args) for args in arglist]]
 
 
-def _map_serial_cutoff(fn, arglist, time_cutoff, max_failures):
+def _map_serial_cutoff(fn, arglist, time_cutoff, max_failures, *, is_failure=None, stop_when=None):
     """Map ``fn`` over ``arglist`` serially, abandoning the rest once a cutoff is crossed.
 
     Parameters
@@ -911,6 +1188,8 @@ def _map_serial_cutoff(fn, arglist, time_cutoff, max_failures):
     max_failures : int or None
         Abandon once more than this many points fail; None disables the failure cutoff.
         ``max_failures=0`` bails on the first failure.
+    is_failure, stop_when : callable, optional
+        As in :func:`sweep_points`, with ``k`` indexing ``arglist``.
 
     Returns
     -------
@@ -920,16 +1199,17 @@ def _map_serial_cutoff(fn, arglist, time_cutoff, max_failures):
     """
     t0 = timer()
     out, n_fail, stop = [], 0, False
-    for args in arglist:
+    for k, args in enumerate(arglist):
         if stop:
             out.append(None)
             continue
         r = fn(*args)
         out.append(r)
-        if (not r.get("converged", False)) or ("error" in r):
+        if ("error" in r) or (is_failure(k, r) if is_failure else not r.get("converged", False)):
             n_fail += 1
         if (time_cutoff is not None and timer() - t0 > time_cutoff) or \
-           (max_failures is not None and n_fail > max_failures):
+           (max_failures is not None and n_fail > max_failures) or \
+           (stop_when is not None and stop_when(k, r)):
             stop = True
     return out
 
@@ -1002,7 +1282,7 @@ def _cfg_timing_error(cfg: DiffParams):
 
 def sweep_points(points, *, warmstart: dict = None, keep_weights: bool = True, parallel: bool = True,
                  max_workers: int = None, pool_timeout: float = 300.0, robust: bool = True,
-                 time_cutoff: float = None, max_failures: int = None):
+                 time_cutoff: float = None, max_failures: int = None, is_failure=None, stop_when=None):
     """Solve an explicit list of points in parallel (the list-based version of :func:`sweep`).
 
     Use this when the points are not a Cartesian grid, e.g. random samples from :func:`sample_points`.
@@ -1024,6 +1304,13 @@ def sweep_points(points, *, warmstart: dict = None, keep_weights: bool = True, p
         Abandon the sweep once more than this many points have failed (not converged or errored); ``0``
         stops at the first failure. Serial only. Unreached points are returned with
         ``error="abandoned"`` so the list stays full length.
+    is_failure : callable, optional
+        ``is_failure(i, r) -> bool``: what counts toward ``max_failures``, with ``i`` the point's index
+        in ``points`` and ``r`` its result. Default: not converged. Errored points always count. E.g. to
+        also count collapsed b-values against a reference: ``lambda i, r: r["bvalue"] < 0.5 * b_ref[i]``.
+    stop_when : callable, optional
+        ``stop_when(i, r) -> bool``, called after each point (``i`` its index in ``points``); True abandons
+        the rest, e.g. once a running score can no longer reach a target. Serial only.
 
     Returns
     -------
@@ -1034,9 +1321,9 @@ def sweep_points(points, *, warmstart: dict = None, keep_weights: bool = True, p
     pts = [(cfg, scfg or SolverCfg()) for (cfg, scfg) in pts]
     fn = _solve_safe if robust else solve
 
-    early = time_cutoff is not None or max_failures is not None
+    early = time_cutoff is not None or max_failures is not None or stop_when is not None
     if early and parallel:
-        msg = "time_cutoff / max_failures require parallel=False (early abandonment is serial)"
+        msg = "time_cutoff / max_failures / stop_when require parallel=False (early abandonment is serial)"
         raise ValueError(msg)
 
     # robust mode: never dispatch timings that would abort the C++ process
@@ -1044,7 +1331,10 @@ def sweep_points(points, *, warmstart: dict = None, keep_weights: bool = True, p
     live = [i for i, e in enumerate(errs) if e is None]
     live_args = [(pts[i][0], pts[i][1], warmstart, keep_weights) for i in live]
     if early:
-        solved = _map_serial_cutoff(fn, live_args, time_cutoff, max_failures)
+        fail_k = None if is_failure is None else (lambda k, r: is_failure(live[k], r))  # live -> point index
+        stop_k = None if stop_when is None else (lambda k, r: stop_when(live[k], r))
+        solved = _map_serial_cutoff(fn, live_args, time_cutoff, max_failures,
+                                    is_failure=fail_k, stop_when=stop_k)
     else:
         solved = _map_parallel(fn, live_args, max_workers, parallel, pool_timeout)
 
@@ -1138,7 +1428,8 @@ def sample_points(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_dist
 
 def sweep(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_grid=None, scfg_grid=None,
           warmstart: dict = None, keep_weights: bool = True, parallel: bool = True, max_workers: int = None,
-          pool_timeout: float = 300.0, time_cutoff: float = None, max_failures: int = None):
+          pool_timeout: float = 300.0, time_cutoff: float = None, max_failures: int = None,
+          is_failure=None, stop_when=None, recipe: str | None = None, library=None):
     """Solve the cross product of ``cfg_grid`` x ``scfg_grid`` in parallel, one process per point.
 
     ``DiffParams`` and ``SolverCfg`` field names are disjoint, so one call can vary either or both::
@@ -1166,8 +1457,10 @@ def sweep(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_grid=None, s
     pool_timeout : float, optional
         loky only: idle seconds before the worker pool is reaped (default 300; loky's own 10 s default
         reaps it between notebook cells). Use the same value across calls and with :func:`warm_pool`.
-    time_cutoff, max_failures : optional
+    time_cutoff, max_failures, is_failure, stop_when : optional
         Early abandonment, as in :func:`sweep_points` (serial only).
+    recipe, library : optional
+        A named single recipe applied to the base configs instead of ``base_scfg``, as in :func:`solve`.
 
     Returns
     -------
@@ -1175,9 +1468,10 @@ def sweep(base_cfg: DiffParams, base_scfg: SolverCfg = None, *, cfg_grid=None, s
         One result per point (cfg_grid outer, scfg_grid inner), each also carrying ``"cfg"`` and
         ``"scfg"``.
     """
-    base_scfg = base_scfg or SolverCfg()
+    base_cfg, base_scfg = _with_recipe(base_cfg, base_scfg, recipe, library)
     points = _grid_points(base_cfg, base_scfg, cfg_grid, scfg_grid)
     return sweep_points(points, warmstart=warmstart, keep_weights=keep_weights, parallel=parallel,
                         max_workers=max_workers, pool_timeout=pool_timeout,
-                        time_cutoff=time_cutoff, max_failures=max_failures)
+                        time_cutoff=time_cutoff, max_failures=max_failures, is_failure=is_failure,
+                        stop_when=stop_when)
 

@@ -11,7 +11,7 @@ ILS_NLCG::ILS_NLCG(GroptParams &_gparams, double _sigma, int _n_iter, double _ti
 {
     name = "NLCG";
 
-    int size = gparams->N * gparams->Naxis;
+    int size = gparams->pdata.n_total(); // the primal spans the auxiliary blocks
     b.setZero(size);
     Ax.setZero(size);
     x0.setZero(size);

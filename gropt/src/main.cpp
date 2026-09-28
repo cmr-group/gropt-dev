@@ -7,8 +7,8 @@ void demo_diffusion(const std::string &recipe_path, const std::string &recipe_na
 
 // Usage: gropt [recipe.json [recipe_name]]
 //   no args           -> the built-in default recipe
-//   recipe.json       -> the first recipe in that library file
-//   recipe.json NAME  -> that named recipe
+//   recipe.json       -> its "default" role (the shipped gropt/diffusion_recipes.json), else its first recipe
+//   recipe.json NAME  -> that named recipe or role
 int main(int argc, char **argv){
     spdlog::set_level(spdlog::level::debug);
     const std::string recipe_path = (argc > 1) ? argv[1] : "";

@@ -51,22 +51,26 @@ static ProblemData make_safe_pdata(const Eigen::VectorXd &G, int Naxis, double d
     return pdata;
 }
 
-Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis) {
+Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
+                               bool alpha_exact) {
     ProblemData pdata = make_safe_pdata(G, Naxis, dt);
     Op_SAFE opF(pdata, 1.0, 1.0);
     opF.safe_params.set_demo_params();
     opF.safe_params.swap_first_axes(new_first_axis);
+    opF.safe_params.alpha_exact = alpha_exact;
     return get_SAFE_compute(G, Naxis, dt, opF);
 }
 
 Eigen::VectorXd get_SAFE_eigen(const Eigen::VectorXd &G, int Naxis, double dt, bool true_safe, int new_first_axis,
                                const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3,
                                const Eigen::VectorXd &a1, const Eigen::VectorXd &a2, const Eigen::VectorXd &a3,
-                               const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale) {
+                               const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
+                               bool alpha_exact) {
     ProblemData pdata = make_safe_pdata(G, Naxis, dt);
     Op_SAFE opF(pdata, 1.0, 1.0);
     opF.safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     opF.safe_params.swap_first_axes(new_first_axis);
+    opF.safe_params.alpha_exact = alpha_exact;
     return get_SAFE_compute(G, Naxis, dt, opF);
 }
 

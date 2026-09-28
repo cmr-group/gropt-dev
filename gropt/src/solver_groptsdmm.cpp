@@ -74,8 +74,8 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 
     LowFreqProjector lowfreq; // inactive unless cutoff_freq > 0
     if (cutoff_freq > 0.0) {
-        lowfreq.setup(gparams->N, gparams->Naxis, gparams->dt, cutoff_freq, gparams->pdata.fixer,
-                      cutoff_trans);
+        lowfreq.setup(gparams->N, gparams->Naxis, gparams->dt, cutoff_freq,
+                      gparams->pdata.fixer.head(gparams->pdata.n_wave()), cutoff_trans); // waveform runs only
     }
 
     // b-value operator (constraint or objective) for the per-iteration debug history
@@ -160,7 +160,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
             Xhat = X;
         }
 
-        if (((Xhat.array().abs() > 10).any()) || (Xhat.array().isNaN().any())) {
+        if (((Xhat.head(gparams->pdata.n_wave()).array().abs() > 10).any()) || (!Xhat.allFinite())) {
             spdlog::error("Large values detected in Xhat at iteration {:d}. Stopping solver.", iiter);
             break;
         }
@@ -238,7 +238,11 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
     }
     result.n_iter = iiter;
     result.dt = gparams->dt;
-    final_log(result.X, result);
+    final_log(result.X, result); // reads the full primal: the operators see their auxiliary blocks
+    for (const auto &a : gparams->pdata.aux) {
+        result.aux[a.name] = result.X.segment(a.offset, a.size);
+    }
+    result.X = result.X.head(gparams->pdata.n_wave()).eval();
 
     // Copy the inner-solver histories before ils_solver is freed.
     if (extra_debug) {
@@ -257,6 +261,7 @@ SolveResult SolverGroptSDMM::solve(GroptParams &_gparams) {
 // --- solve() helpers ----------------------------------------------------------------------------- //
 
 Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
+    const int n_wave = gparams->pdata.n_wave();
     // Warm start: resize the snapshot waveform onto this grid (see warmstart.hpp). Start cold if its
     // axes or free/fixed layout don't match.
     Eigen::VectorXd X0_init = gparams->pdata.X0;
@@ -265,15 +270,23 @@ Eigen::VectorXd SolverGroptSDMM::resolve_initial_primal() {
                           (warmstart.X.size() == warmstart.fixer.size()) &&
                           (warmstart.fixer.size() % warmstart.Naxis == 0) &&
                           (ws_free_run_counts(warmstart.fixer, warmstart.Naxis) ==
-                           ws_free_run_counts(gparams->pdata.fixer, gparams->Naxis));
+                           ws_free_run_counts(gparams->pdata.fixer.head(n_wave), gparams->Naxis));
         if (compatible) {
-            X0_init = ws_resize_waveform(warmstart.X, warmstart.fixer, gparams->pdata.fixer,
+            // head(n_wave): the always-free aux blocks would add a free run and fail the layout match.
+            X0_init = ws_resize_waveform(warmstart.X, warmstart.fixer, gparams->pdata.fixer.head(n_wave),
                                          gparams->pdata.set_vals, gparams->Naxis);
         } else {
             spdlog::warn("Warm start incompatible (Naxis, size, or free-segment count mismatch); "
                          "ignoring it and starting cold.");
             warmstart.active = false;
         }
+    }
+
+    // Grow to the full primal and let each operator seed the blocks it declared.
+    if (X0_init.size() < gparams->pdata.n_total()) {
+        X0_init.conservativeResizeLike(Eigen::VectorXd::Zero(gparams->pdata.n_total())); // X0_init is n_wave long
+        for (auto &op : gparams->all_op) op->init_aux(X0_init);
+        for (auto &op : gparams->all_obj) op->init_aux(X0_init);
     }
     return X0_init;
 }
@@ -335,7 +348,7 @@ void SolverGroptSDMM::record_debug(Eigen::VectorXd &X, Op_BValue *bval_op) {
 
         op->x_temp.setZero();
         op->transpose_op(w.y1, op->x_temp);
-        Aty.array() += op->x_temp.array();
+        Aty.head(op->n_primal()).array() += op->x_temp.array();
         con_pull_vec.push_back(op->x_temp.norm());
 
         weight_vec.push_back(w.weight);

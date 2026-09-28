@@ -8,7 +8,7 @@ from . import debug_plotting
 from . import readasc
 from .gropt_wrapper import *
 from .gropt_wrapper import __build_date__
-from .readasc import get_random_safe_params
+from .readasc import get_random_safe_params, make_safe_params
 from .utils import demo, setup_logging
 
 set_log_level(3)  # warn

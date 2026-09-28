@@ -357,3 +357,58 @@ def get_random_safe_params(rng_seed: int = 42) -> tuple[dict, dict]:
     }
 
     return params_pns, params_cns
+
+
+SAFE_KEYS = ('tau1', 'tau2', 'tau3', 'a1', 'a2', 'a3', 'stim_limit', 'g_scale')
+
+
+def check_safe_params(params: dict) -> dict:
+    """Validate a SAFE parameter dict and return a clean copy.
+
+    Parameters
+    ----------
+    params : dict
+        ``SAFE_KEYS`` (taus in s), each one value (every axis) or three (x, y, z); other keys are dropped.
+
+    Returns
+    -------
+    dict
+        Each key as a new length-3 float array.
+
+    Raises
+    ------
+    ValueError
+        On a missing, negative or non-finite value, a wrong count, ``stim_limit`` or ``g_scale`` <= 0, or a
+        tau over 0.1 s (likely given in ms).
+    """
+    out = {}
+    for k in SAFE_KEYS:
+        v = np.asarray(params.get(k, np.nan), dtype=float).ravel()
+        if v.size not in (1, 3) or not np.all(np.isfinite(v) & (v >= 0)):
+            msg = f"SAFE param {k!r} needs 1 or 3 finite values >= 0, got {params.get(k)!r}"
+            raise ValueError(msg)
+        out[k] = np.resize(v, 3)  # a copy; one value repeats for every axis
+    if np.any(out['stim_limit'] <= 0) or np.any(out['g_scale'] <= 0):
+        msg = "SAFE params stim_limit and g_scale must be > 0"
+        raise ValueError(msg)
+    if max(out[k].max() for k in ('tau1', 'tau2', 'tau3')) > 0.1:
+        msg = "SAFE time constants are in seconds; a value over 0.1 s looks like milliseconds"
+        raise ValueError(msg)
+    return out
+
+
+def make_safe_params(*, tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale) -> dict:
+    """Build a SAFE parameter dict by hand, e.g. from a datasheet.
+
+    Parameters
+    ----------
+    tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale : float or array_like
+        One value (every axis) or three (x, y, z); taus in s, ``stim_limit`` in T/m/s.
+
+    Returns
+    -------
+    dict
+        Validated params (:func:`check_safe_params`), usable wherever a ``safe_params`` dict is.
+    """
+    return check_safe_params({'tau1': tau1, 'tau2': tau2, 'tau3': tau3, 'a1': a1, 'a2': a2, 'a3': a3,
+                              'stim_limit': stim_limit, 'g_scale': g_scale})

@@ -32,6 +32,10 @@ class Operator
     int N;
     int Naxis;
     int Ntot;
+
+    // Only an operator touching an aux block sees the full primal; all others get the waveform alone.
+    bool uses_aux = false;
+    int n_primal() const { return uses_aux ? pdata->n_total() : Ntot; }
     double dt;
     int Ax_size;
 
@@ -101,6 +105,11 @@ class Operator
     // ||true(x_new) - frozen_linear(x_new)|| / ||true(x_new)||, 0 for linear ops; call while frozen.
     // Used by LinearizationErrorMonitor to reject steps that leave a nonlinear op's valid region.
     virtual double linearization_error(const Eigen::VectorXd &x_new) { return 0.0; }
+
+    // Register aux blocks (ProblemData::add_aux); called in prepare() before any init(). Shared by name.
+    virtual void declare_aux(ProblemData & /*pd*/) {}
+    // Seed this operator's aux block(s) of the initial primal (default: zero).
+    virtual void init_aux(Eigen::VectorXd & /*X_full*/) {}
 
     // Worst-sample true (nonlinear) constraint overage at x_new, 0 when feasible; only Op_SAFE implements it.
     // Used by FeasibilityMonitor and the objective gate.

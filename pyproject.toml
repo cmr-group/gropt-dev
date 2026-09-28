@@ -1,6 +1,6 @@
 [project]
 name = "gropt"
-version = "2.0.0rc15"
+version = "2.0.0rc16"
 requires-python = ">=3.10"
 dependencies = ["numpy"]
 
@@ -70,6 +70,7 @@ rebuild-test = { cmd = "python -m pip install --no-build-isolation -v -e . -C cm
 # editing CMake files.
 rebuild-fast = "python -m pip install --no-build-isolation -e . -C cmake.define.GROPT_EIGEN_ASSERTIONS=ON"
 test-cpp = "cmake -S . -B build-tests -DGROPT_BUILD_TESTS=ON -DGROPT_EIGEN_ASSERTIONS=ON && cmake --build build-tests --config Release && ctest --test-dir build-tests --output-on-failure -C Release"
+test-py = "python tests/test_diffusion_recipes.py"
 
 [tool.pixi.dependencies]
 ipykernel = "<7"

@@ -17,8 +17,11 @@ set(GROPT_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/op_moment.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_slew.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_safe.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/op_safe_slack.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/op_slack_abs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_eddy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_tv.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/raster.cpp
     ${CMAKE_CURRENT_LIST_DIR}/op_diffbasin.cpp
     ${CMAKE_CURRENT_LIST_DIR}/solver.cpp
     ${CMAKE_CURRENT_LIST_DIR}/solver_groptsdmm.cpp

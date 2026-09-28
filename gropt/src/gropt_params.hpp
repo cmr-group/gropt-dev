@@ -4,6 +4,7 @@
 #include "Eigen/Dense"
 #include <iostream>
 #include <memory>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,8 @@ struct SolveResult {
     int n_feval = 0;        // total inner linear-solver iterations
     double dt = 0.0;
     double bvalue = 0.0;    // b-value of X if a b-value operator is present, else 0
+    // Aux primal blocks by name (ProblemData::add_aux), e.g. "abs_slew"; X stays the waveform alone.
+    std::map<std::string, Eigen::VectorXd> aux;
 };
 
 // Exact projection onto {x : M x = t} for linear-equality constraints flagged project=true.
@@ -159,6 +162,11 @@ class GroptParams {
     // SAFE softabs smoothing [T/m/s] (see Op_SAFE::safe_eps); copied into each Op_SAFE by add_SAFE, so set it first.
     double safe_eps = 0.0;
 
+    // Copied into each Op_SAFE by add_SAFE (like safe_eps), so set them first.
+    bool safe_lifted = false;      // Op_SAFE_Slack: u >= |slew| (one shared Op_SlackAbs) instead of LP2(|slew|)
+    bool safe_signed13 = false;    // terms 1/3 emitted signed, |.| taken in the prox
+    bool safe_alpha_exact = false; // dt-independent filter (see SAFEParams::alpha_exact)
+
     // Equality projector for project=true constraints, built in prepare(). eq_proj_dynamic: some projected
     // operator has iterate-dependent rows, so the solver rebuilds it every outer iteration.
     EqualityProjection eq_proj;
@@ -211,9 +219,13 @@ class GroptParams {
     void add_smax_vec(const Eigen::VectorXd &smax_vec, bool rot_variant, double weight_mod);
     // rot_variant is currently ignored: the energy balance is always computed across all axes.
     void add_concomitant(int start_idx, bool rot_variant, double weight_mod, double tol0 = 0.1,
-                         double target = 1.0, bool project = false);
+                         double target = 1.0, bool project = false, bool exact_quad = true);
     void add_moment(double order, double target, double tol0, std::string units, int moment_axis, int start_idx0,
-                    int stop_idx0, int ref_idx0, double weight_mod, bool project = false, bool absolute_tol = false);
+                    int stop_idx0, int ref_idx0, double weight_mod, bool project = false, bool absolute_tol = false,
+                    bool pwl_quad = false);
+
+    // Add the single Op_SlackAbs backing a lifted SAFE block, unless one is already present.
+    void ensure_slack_abs(const std::string &aux_name, double weight_mod = 1.0);
 
     void add_SAFE(double stim_thresh, int new_first_axis, double weight_mod);
     void add_SAFE(double stim_thresh, const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2,
@@ -230,7 +242,8 @@ class GroptParams {
     void add_eddy(const Eigen::VectorXd &lam, double tol, double weight_mod, bool project = false);
 
     void add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod, int mode,
-                    double max_scale, bool as_objective = false, bool linearize = true);
+                    double max_scale, bool as_objective = false, bool linearize = true,
+                    bool pwl_quad = false);
     void add_TV(double tv_lam, double weight_mod, int order = 1);
 
     void add_diff_basin(double window_time, double eps_factor, double gmax, double weight_mod = 1.0,
@@ -248,8 +261,6 @@ class GroptParams {
     // pdata.fixer from set_vals: 1.0 where free (NaN), 0.0 where fixed.
     void rebuild_fixer_from_set_vals();
 };
-
-Eigen::VectorXd linear_interpolate(const Eigen::VectorXd &in, int out_size);
 
 } // namespace Gropt
 

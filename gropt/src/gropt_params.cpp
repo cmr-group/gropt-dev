@@ -12,6 +12,8 @@
 #include "op_identity.hpp"
 #include "op_moment.hpp"
 #include "op_safe.hpp"
+#include "op_safe_slack.hpp"
+#include "op_slack_abs.hpp"
 #include "op_slew.hpp"
 #include "op_tv.hpp"
 
@@ -20,7 +22,9 @@ namespace Gropt {
 GroptParams::GroptParams() {}
 
 void GroptParams::rebuild_fixer_from_set_vals() {
-    pdata.fixer.setOnes(pdata.set_vals.size());
+    // Spans the full primal. Aux blocks stay free: a slack's slew is pinned only where both ends are, and a
+    // loose slack is merely conservative.
+    pdata.fixer.setOnes(pdata.n_total());
     for (int i = 0; i < pdata.set_vals.size(); i++) {
         if (!std::isnan(pdata.set_vals(i))) {
             pdata.fixer(i) = 0.0;
@@ -330,6 +334,12 @@ void GroptParams::prepare() {
         vec_init_simple(-1, -1, 0.0, 0.0);
     }
 
+    // Aux blocks before any init(), which sizes buffers from the total; rebuilt so re-prepares don't accumulate.
+    pdata.clear_aux();
+    for (auto &op : all_op) op->declare_aux(pdata);
+    for (auto &op : all_obj) op->declare_aux(pdata);
+    rebuild_fixer_from_set_vals(); // resize the mask now that the total length is known
+
     for (int i = 0; i < all_op.size(); i++) {
         all_op[i]->init();
     }
@@ -408,10 +418,10 @@ void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
         return;
     }
 
-    Eigen::MatrixXd M(k, Ntot);
+    Eigen::MatrixXd M = Eigen::MatrixXd::Zero(k, pdata.n_total()); // aux columns stay zero
     Eigen::VectorXd t(k);
     for (int r = 0; r < k; r++) {
-        M.row(r) = rows[r].transpose();
+        M.row(r).head(rows[r].size()) = rows[r].transpose();
         t(r) = targets[r];
     }
     eq_proj.build(M, t, pdata.fixer, eq_proj_solver, eq_proj_rcond);
@@ -436,65 +446,91 @@ void GroptParams::build_eq_proj(const Eigen::VectorXd &x0, bool do_log) {
 }
 
 void GroptParams::add_concomitant(int start_idx, bool rot_variant, double weight_mod, double tol0,
-                                  double target, bool project) {
+                                  double target, bool project, bool exact_quad) {
     auto op = std::make_unique<Op_Concomitant>(pdata, start_idx, rot_variant, weight_mod, tol0, target);
     op->use_projection = project; // relinearized equality projection instead of the ADMM band
+    op->exact_quad = exact_quad;  // false = legacy rectangle sum, for comparison
     all_op.push_back(std::move(op));
 }
 
 void GroptParams::add_moment(double order, double target, double tol0, std::string units, int moment_axis,
                              int start_idx0, int stop_idx0, int ref_idx0, double weight_mod, bool project,
-                             bool absolute_tol) {
+                             bool absolute_tol, bool pwl_quad) {
     auto op = std::make_unique<Op_Moment>(pdata, order, target, tol0, units, moment_axis, start_idx0, stop_idx0,
                                           ref_idx0, weight_mod);
     op->use_projection = project;      // exact equality projection instead of ADMM
     op->absolute_tol = absolute_tol;   // tol in this order's units instead of scaled from the M0 tol
+    op->pwl_quad = pwl_quad;           // exact piecewise-linear quadrature instead of the rectangle rule
     all_op.push_back(std::move(op));
 }
 
+// Lifted SAFE reads the shared u >= |slew| block in place of LP2(|slew|).
+template <typename T> static std::unique_ptr<Op_SAFE> new_SAFE(GroptParams &gp, const T &thresh, double w) {
+    if (gp.safe_lifted) return std::make_unique<Op_SAFE_Slack>(gp.pdata, thresh, w, SAFE_SLACK_BLOCK);
+    return std::make_unique<Op_SAFE>(gp.pdata, thresh, w);
+}
+
+static void push_SAFE(GroptParams &gp, std::unique_ptr<Op_SAFE> op, double w) {
+    op->signed_terms13 = gp.safe_signed13;
+    op->safe_params.alpha_exact = gp.safe_alpha_exact;
+    gp.all_op.push_back(std::move(op));
+    if (gp.safe_lifted) gp.ensure_slack_abs(SAFE_SLACK_BLOCK, w);
+}
+
+void GroptParams::ensure_slack_abs(const std::string &aux_name, double weight_mod) {
+    // One coupling operator per block, however many lifted SAFE constraints read it: u >= |slew|
+    // is a statement about the waveform, so the PNS and cardiac models share it.
+    for (const auto &op : all_op) {
+        auto *sa = dynamic_cast<Op_SlackAbs *>(op.get());
+        if (sa != nullptr && sa->aux_block() == aux_name) return;
+    }
+    all_op.push_back(std::make_unique<Op_SlackAbs>(pdata, aux_name, weight_mod));
+}
+
 void GroptParams::add_SAFE(double stim_thresh, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
+    auto op_F = new_SAFE(*this, stim_thresh, weight_mod);
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
-    all_op.push_back(std::move(op_F));
+    push_SAFE(*this, std::move(op_F), weight_mod);
 }
 
 void GroptParams::add_SAFE(double stim_thresh, const Eigen::VectorXd &tau1, const Eigen::VectorXd &tau2,
                            const Eigen::VectorXd &tau3, const Eigen::VectorXd &a1, const Eigen::VectorXd &a2,
                            const Eigen::VectorXd &a3, const Eigen::VectorXd &stim_limit, const Eigen::VectorXd &g_scale,
                            int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh, weight_mod);
+    auto op_F = new_SAFE(*this, stim_thresh, weight_mod);
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
-    all_op.push_back(std::move(op_F));
+    push_SAFE(*this, std::move(op_F), weight_mod);
 }
 
 void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
+    auto op_F = new_SAFE(*this, stim_thresh_vec, weight_mod);
     op_F->safe_params.set_demo_params();
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
-    all_op.push_back(std::move(op_F));
+    push_SAFE(*this, std::move(op_F), weight_mod);
 }
 
 void GroptParams::add_SAFE_vec(const Eigen::VectorXd &stim_thresh_vec, const Eigen::VectorXd &tau1,
                                const Eigen::VectorXd &tau2, const Eigen::VectorXd &tau3, const Eigen::VectorXd &a1,
                                const Eigen::VectorXd &a2, const Eigen::VectorXd &a3, const Eigen::VectorXd &stim_limit,
                                const Eigen::VectorXd &g_scale, int new_first_axis, double weight_mod) {
-    auto op_F = std::make_unique<Op_SAFE>(pdata, stim_thresh_vec, weight_mod);
+    auto op_F = new_SAFE(*this, stim_thresh_vec, weight_mod);
     op_F->safe_params.set_params(tau1, tau2, tau3, a1, a2, a3, stim_limit, g_scale);
     op_F->safe_params.swap_first_axes(new_first_axis);
     op_F->safe_eps = safe_eps;
-    all_op.push_back(std::move(op_F));
+    push_SAFE(*this, std::move(op_F), weight_mod);
 }
 
 void GroptParams::add_bvalue(double target, double tol, int start_idx0, int stop_idx0, double weight_mod, int mode,
-                             double max_scale, bool as_objective, bool linearize) {
+                             double max_scale, bool as_objective, bool linearize, bool pwl_quad) {
 
     auto op = std::make_unique<Op_BValue>(pdata, target, tol, start_idx0, stop_idx0, weight_mod,
                                           static_cast<BVALUE_MODE>(mode), max_scale);
+    op->pwl_quad = pwl_quad; // exact quadrature for the piecewise-linear waveform; see Op_BValue
     if (as_objective) {
         op->linearize_obj = linearize;    // -||A x||^2 is concave: linearize into the RHS (DCA)
         all_obj.push_back(std::move(op)); // maximized via obj_weight = -weight_mod
@@ -548,35 +584,6 @@ double GroptParams::get_output_bvalue(const Eigen::VectorXd &X) {
     opB.init();
     Eigen::VectorXd X_copy = X;
     return opB.get_bvalue(X_copy);
-}
-
-Eigen::VectorXd linear_interpolate(const Eigen::VectorXd &in, int out_size) {
-    int in_size = in.size();
-    if (out_size >= in_size) {
-        return in;
-    }
-    if (out_size <= 1) { // the endpoint map below divides by out_size - 1
-        return (out_size == 1) ? Eigen::VectorXd::Constant(1, in(in_size / 2)) : Eigen::VectorXd();
-    }
-
-    Eigen::VectorXd out(out_size);
-    double scale = static_cast<double>(in_size - 1) / (out_size - 1);
-
-    for (int i = 0; i < out_size; ++i) {
-        double in_idx_float = i * scale;
-        int idx0 = static_cast<int>(floor(in_idx_float));
-        int idx1 = idx0 + 1;
-
-        if (idx1 >= in_size) { // Should only happen for the last element
-            out(i) = in(in_size - 1);
-        } else {
-            double val0 = in(idx0);
-            double val1 = in(idx1);
-            double frac = in_idx_float - idx0;
-            out(i) = val0 * (1.0 - frac) + val1 * frac;
-        }
-    }
-    return out;
 }
 
 } // namespace Gropt
