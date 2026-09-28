@@ -938,12 +938,14 @@ def to_raster(res: dict, dt_tgt: float = 10e-6, N_out: int = -1):
 
 
 def verify(result: dict, cfg: DiffParams, *, raster_dt: float | None = 10e-6, rtol: float = 0.02):
-    """Re-check a solved waveform against every limit of ``cfg``; ``converged`` alone is not proof.
+    """Re-check a solved waveform against every limit of ``cfg``, independently of the solver.
 
-    The solver can report convergence on a waveform that breaks a limit (after a blow-up it returns an
-    earlier iterate). This recomputes each limit's worst ratio (value / limit) from the waveform: gmax and
-    slew on the solve raster (linear resampling cannot raise them), PNS/CNS on the hardware raster with the
-    exact filter, and the concomitant balance with the exact piecewise-linear integral.
+    ``converged`` means the operators' own checks passed on the solve raster, which is not always what the
+    scanner sees (with ``safe_alpha_exact=False`` coarse-raster SAFE under-reports) and trusts each check to
+    be right. This recomputes each limit's worst ratio (value / limit) from the waveform: gmax and slew on
+    the solve raster (linear resampling cannot raise them), PNS/CNS on the hardware raster with the exact
+    filter, and the concomitant balance with the exact piecewise-linear integral. A feasible but poor
+    waveform (an early iterate returned after a blow-up) passes; compare b-values to catch that.
 
     Parameters
     ----------

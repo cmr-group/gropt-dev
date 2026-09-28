@@ -47,9 +47,10 @@ same files, including the shipped `gropt/diffusion_recipes.json` (portfolios are
 
 ## Checking a waveform
 
-`converged` alone does not prove a waveform is within its limits: after a numerical blow-up the solver can return
-an earlier iterate. `verify(result, cfg)` recomputes every limit from the waveform (PNS/CNS on the 10 us hardware
-raster) and returns the worst ratio per limit and `feasible`.
+`converged` means the solver's own constraint checks passed on the solve raster. `verify(result, cfg)` re-checks
+every limit independently from the waveform, as the scanner plays it (PNS/CNS on the 10 us hardware raster, exact
+concomitant integral), and returns the worst ratio per limit and `feasible`. It guards against a coarse-raster
+model that under-reports (`safe_alpha_exact=False`) or a faulty check; `te_search` and portfolios require it.
 
 ## API
 
