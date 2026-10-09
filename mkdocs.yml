@@ -12,28 +12,22 @@ theme:
     code: JetBrains Mono
   icon:
     repo: fontawesome/brands/github
-  # follow the system light/dark setting, with a toggle in the header
+  # starts from the system light/dark setting; the header button flips it (the icon shows the other mode)
   palette:
-    - media: "(prefers-color-scheme)"
-      primary: custom
-      accent: custom
-      toggle:
-        icon: material/brightness-auto
-        name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: custom
       accent: custom
       toggle:
-        icon: material/brightness-7
+        icon: material/weather-night
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: custom
       accent: custom
       toggle:
-        icon: material/brightness-4
-        name: Switch to system preference
+        icon: material/weather-sunny
+        name: Switch to light mode
   features:
     - announce.dismiss
     - navigation.tabs
