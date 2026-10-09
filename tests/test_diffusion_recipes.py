@@ -19,9 +19,10 @@ PNS = gd.DiffParams(TE=80e-3, T_90=3e-3, T_180=5e-3, T_readout=16e-3, dt=200e-6,
                     pns_lim=0.8, cns_lim=0.8)
 CONC = gd.DiffParams(TE=60e-3, T_90=3e-3, T_180=5e-3, T_readout=16e-3, dt=400e-6, gmax=0.19, MMT=2,
                      concomitant=True, concomitant_tol=0.01)
-# b per role on PNS / CONC, recorded 2026-09-27; chaotic in the last digits, so compared at 2%
-REF_B = {"default": (1606.98, 525.09), "best_single": (1609.11, 525.12), "fast": (1608.21, 525.22),
-         "fastest": (1603.87, 524.83), "soft_concomitant": (1609.22, 527.34)}
+# b per role on PNS / CONC, recorded 2026-09-27; chaotic in the last digits, so compared at 2%. CONC
+# re-recorded 2026-10-08: diff_init's on-grid rounding fix gives it N = 111 (was 110, a float truncation).
+REF_B = {"default": (1606.98, 571.40), "best_single": (1609.11, 571.32), "fast": (1608.21, 570.97),
+         "fastest": (1603.87, 571.35), "soft_concomitant": (1609.22, 573.97)}
 
 
 def test_every_field_classified():

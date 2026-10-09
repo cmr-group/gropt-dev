@@ -19,6 +19,16 @@
 
 namespace Gropt {
 
+namespace {
+// t / dt in samples, snapped to the nearest integer when within 1e-9 of it, so a time that is on the grid
+// rounds the same way however it was computed (TE = 0.0622 vs 0.016 + 115.5 * 4e-4 gave different RF gaps).
+double grid_units(double t, double dt) {
+    const double x = t / dt;
+    const double r = std::round(x);
+    return std::abs(x - r) < 1e-9 ? r : x;
+}
+} // namespace
+
 GroptParams::GroptParams() {}
 
 void GroptParams::rebuild_fixer_from_set_vals() {
@@ -131,12 +141,12 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
     double T_readout = _T_readout;
     double TE = _TE;
 
-    N = (int)((TE - T_readout) / dt) + 1;
+    N = (int)grid_units(TE - T_readout, dt) + 1;
     Ntot = N * Naxis;
 
     spdlog::trace("diff_init N: {}", N);
 
-    int ind_inv = (int)(TE / 2.0 / dt);
+    int ind_inv = (int)grid_units(TE / 2.0, dt);
     pdata.inv_vec.setOnes(N);
     for (int i = ind_inv; i < N; i++) {
         pdata.inv_vec(i) = -1.0;
@@ -145,9 +155,9 @@ void GroptParams::diff_init(double _dt, double _TE, double _T_90, double _T_180,
     spdlog::trace("diff_init ind_inv: {}", ind_inv);
 
     int ind_90_end, ind_180_start, ind_180_end;
-    ind_90_end = ceil(T_90 / dt);
-    ind_180_start = floor((TE / 2.0 - T_180 / 2.0) / dt);
-    ind_180_end = ceil((TE / 2.0 + T_180 / 2.0) / dt);
+    ind_90_end = ceil(grid_units(T_90, dt));
+    ind_180_start = floor(grid_units(TE / 2.0 - T_180 / 2.0, dt));
+    ind_180_end = ceil(grid_units(TE / 2.0 + T_180 / 2.0, dt));
 
     spdlog::trace("diff_init inds: {}   {}   {}", ind_90_end, ind_180_start, ind_180_end);
 
@@ -187,21 +197,21 @@ int GroptParams::diff_init_preencode(double _dt, double _TE, double _T_90, doubl
     double T_readout = _T_readout;
     double TE = _TE;
 
-    int N_pre = floor(_T_pre / dt);
+    int N_pre = floor(grid_units(_T_pre, dt));
 
-    N = N_pre + (int)((TE - T_readout) / dt) + 1;
+    N = N_pre + (int)grid_units(TE - T_readout, dt) + 1;
     Ntot = N * Naxis;
 
-    int ind_inv = N_pre + (int)(TE / 2.0 / dt);
+    int ind_inv = N_pre + (int)grid_units(TE / 2.0, dt);
     pdata.inv_vec.setOnes(N);
     for (int i = ind_inv; i < N; i++) {
         pdata.inv_vec(i) = -1.0;
     }
 
     int ind_90_end, ind_180_start, ind_180_end;
-    ind_90_end = N_pre + ceil(T_90 / dt);
-    ind_180_start = N_pre + floor((TE / 2.0 - T_180 / 2.0) / dt);
-    ind_180_end = N_pre + ceil((TE / 2.0 + T_180 / 2.0) / dt);
+    ind_90_end = N_pre + ceil(grid_units(T_90, dt));
+    ind_180_start = N_pre + floor(grid_units(TE / 2.0 - T_180 / 2.0, dt));
+    ind_180_end = N_pre + ceil(grid_units(TE / 2.0 + T_180 / 2.0, dt));
 
     pdata.set_vals.setOnes(N);
     pdata.set_vals.array() *= NAN;
@@ -241,18 +251,18 @@ void GroptParams::diff_init_deadtime(double _dt, double _TE, double _T_90, doubl
     double T_readout = _T_readout;
     double TE = _TE;
 
-    N = (int)((TE - T_readout) / dt) + 1;
+    N = (int)grid_units(TE - T_readout, dt) + 1;
     Ntot = N * Naxis;
 
-    int ind_inv = (int)(TE / 2.0 / dt);
+    int ind_inv = (int)grid_units(TE / 2.0, dt);
     pdata.inv_vec.setOnes(N);
     for (int i = ind_inv; i < N; i++) {
         pdata.inv_vec(i) = -1.0;
     }
 
     int ind_90_end, ind_180_start, ind_180_end;
-    ind_90_end = ceil(T_90 / dt);
-    ind_180_end = ceil((TE / 2.0 + T_180 / 2.0) / dt);
+    ind_90_end = ceil(grid_units(T_90, dt));
+    ind_180_end = ceil(grid_units(TE / 2.0 + T_180 / 2.0, dt));
 
     int live_time = N - ind_180_end;
     ind_180_start = ind_90_end + live_time - 1;

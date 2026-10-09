@@ -9,6 +9,7 @@ add_executable(gropt_tests
     test_slew_check.cpp
     test_raster.cpp
     test_diffusion_recipe.cpp
+    test_diff_init.cpp
 )
 
 target_link_libraries(gropt_tests PRIVATE gropt_core)
