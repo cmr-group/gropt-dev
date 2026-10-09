@@ -294,7 +294,8 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
     Returns
     -------
     dict with keys:
-        TE        : smallest feasible TE [s] (bin start; None if none found in the expanded bracket).
+        TE        : smallest feasible TE [s], the one ``result`` was solved at (the middle of its dt bin;
+                    None if none found in the expanded bracket).
         N         : the sample count at that TE (``int((TE - T_readout)/dt) + 1``), or None.
         cfg       : ``base_cfg`` at the found TE (original bval_mode etc.), e.g. for
                     ``plot_diff(out["cfg"], out["result"])`` or a re-solve. None if not found.
@@ -318,9 +319,6 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
     def grid_index(te):
         return int((te - t_ro) / dt)          # matches diff_init's int() truncation
 
-    def bin_start(m):
-        return t_ro + m * dt                  # smallest TE giving grid index m (N = m + 1)
-
     def bin_solve_te(m):
         return t_ro + (m + 0.5) * dt          # canonical in-bin TE (robustly maps back to m)
 
@@ -340,7 +338,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
             ok = bool(res["converged"]) and res["bvalue"] >= 0.999 * target_b and verify(res, cfg)["feasible"]
             cache[m] = (ok, res)
             if verbose:
-                print(f"  TE={bin_start(m) * 1e3:6.2f} ms (N={m + 1}) -> b={res['bvalue']:8.1f} "
+                print(f"  TE={bin_solve_te(m) * 1e3:6.2f} ms (N={m + 1}) -> b={res['bvalue']:8.1f} "
                       f"conv={res['converged']!s:5} {'feasible' if ok else 'infeasible'}", flush=True)
         return cache[m]
 
@@ -353,8 +351,9 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
         te_hi = min_te + 80e-3
 
     def out(m, res):
-        # cfg keeps base_cfg's bval_mode etc., at the bin-start TE
-        return {"TE": bin_start(m), "N": m + 1, "cfg": replace(base_cfg, TE=bin_start(m)),
+        # the TE that was solved: the RF gaps and 180 move within a dt bin, so the bin start is a different
+        # problem. cfg keeps base_cfg's bval_mode etc.
+        return {"TE": bin_solve_te(m), "N": m + 1, "cfg": replace(base_cfg, TE=bin_solve_te(m)),
                 "result": res, "n_solves": n_solves, "bracket": (te_lo, te_hi),
                 "search_time": timer() - t_start}
 
