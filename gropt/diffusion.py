@@ -267,6 +267,8 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
       several times slower under PNS; the recipes are tuned for ``"obj"``.
 
     Either way a TE counts as feasible only if the solve converged and its waveform passes :func:`verify`.
+    The b-value uses the exact piecewise-linear quadrature (``bval_pwl_quad=True``, also set in the returned
+    ``cfg``), so ``b >= target_b`` still holds for the waveform on the hardware raster (:func:`to_raster`).
 
     Parameters
     ----------
@@ -306,6 +308,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
     """
     t_start = timer()
     base_cfg, scfg = _with_recipe(base_cfg, scfg, recipe, library)
+    base_cfg = replace(base_cfg, bval_pwl_quad=True)   # the rectangle rule reads b high on a coarse raster
     target_b = base_cfg.bvalue if target_b is None else target_b
     if mode not in ("minval", "obj"):
         msg = f"te_search mode must be 'minval' or 'obj', got {mode!r}"
