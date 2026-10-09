@@ -55,9 +55,10 @@ model that under-reports (`safe_alpha_exact=False`) or a faulty check; `te_searc
 ## Minimum TE and sweeps
 
 `te_search(cfg, target_b=...)` finds the shortest TE whose waveform reaches the target b-value by bisection over
-TE, using a single recipe (`recipe="fast"` roughly halves the search time). TE is quantized to `dt`: the returned
-`TE` is the start of the bin the answer falls in, and `result` was solved at `result["TE"]`, a little later in the
-same bin, so use `replace(cfg, TE=out["result"]["TE"])` to re-solve or plot it.
+TE, using a single recipe (`recipe="fast"` roughly halves the search time). TE is quantized to `dt`, so the search
+runs over the `dt` bins and solves each in its middle; the returned `TE` and `cfg` are the ones `result` was solved
+for, so `cfg` re-solves to the same waveform. It uses the exact piecewise-linear b-value (`bval_pwl_quad=True`), so
+`b >= target_b` also holds once `to_raster` moves the waveform to the hardware raster.
 
 `sweep(cfg, cfg_grid={...}, scfg_grid={...})` solves every combination of the listed `DiffParams` and `SolverCfg`
 values, in parallel processes by default; `sweep_points` takes an explicit list of points instead.
@@ -66,7 +67,8 @@ values, in parallel processes by default; `sweep_points` takes an explicit list 
 
 Solve on a coarse raster (100 to 400 us) and move the result to the 10 us hardware raster with `to_raster`. The
 resampling is exact, since the scanner plays the linear interpolant; the cost of a coarse raster is that the RF
-gaps are rounded outward to its grid (about 2% of b at 200 us, 5% at 400 us).
+gaps are rounded outward to its grid (about 1% of b at 200 us, 5% at 400 us). The solver's own `bvalue` uses a
+rectangle rule that reads slightly high on a coarse raster; `bval_pwl_quad=True` makes it exact.
 
 ## Under the hood
 
