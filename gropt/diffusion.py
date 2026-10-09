@@ -335,7 +335,7 @@ def te_search(base_cfg: DiffParams, scfg: SolverCfg = None, target_b: float | No
             else:
                 cfg = replace(base_cfg, TE=bin_solve_te(m), bval_mode="obj")
             res = solve(cfg, scfg)
-            ok = bool(res["converged"]) and res["bvalue"] >= 0.999 * target_b and verify(res, cfg)["feasible"]
+            ok = bool(res["converged"]) and res["bvalue"] >= target_b and verify(res, cfg)["feasible"]
             cache[m] = (ok, res)
             if verbose:
                 print(f"  TE={bin_solve_te(m) * 1e3:6.2f} ms (N={m + 1}) -> b={res['bvalue']:8.1f} "
