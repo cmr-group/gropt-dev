@@ -1,0 +1,16 @@
+nav:
+  - simple_example.ipynb
+  - Moments:
+      - moments/flow_encoding.ipynb
+      - moments/nonzero_ends.ipynb
+  - Objectives:
+      - objective_functions/regularizations.ipynb
+  - Hardware:
+      - hardware/pns.ipynb
+      - hardware/multi_axis.ipynb
+  - Solvers:
+      - solvers/solver_control.ipynb
+  - Diffusion:
+      - diffusion/diffusion.ipynb
+      - diffusion/diffusion_te.ipynb
+      - diffusion/diffusion_constraint.ipynb
