@@ -306,7 +306,8 @@ def plot_waves(
     dt : float
         Raster time [s].
     inv_vec : ndarray, optional
-        Per-sample refocusing sign (+1/-1); by default flips at ``start_idx + floor(TE / dt / 2)``.
+        Per-sample refocusing sign (+1/-1); by default flips at ``start_idx + floor(TE / dt / 2)``, or
+        all +1 when ``TE`` is 0.
     TE : float, optional
         Echo time [s].
     gmax, smax : float, optional
@@ -366,8 +367,9 @@ def plot_waves(
 
     if inv_vec is None:
         inv_vec = np.ones(g.size)
-        tINV = start_idx + int(np.floor(TE / dt / 2.0))
-        inv_vec[tINV:] = -1
+        if TE > 0:  # no refocusing pulse without a TE
+            tINV = start_idx + int(np.floor(TE / dt / 2.0))
+            inv_vec[tINV:] = -1
 
     tt_ms = np.arange(g.size) * dt * 1e3
 
