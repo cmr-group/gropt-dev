@@ -52,6 +52,29 @@ every limit independently from the waveform, as the scanner plays it (PNS/CNS on
 concomitant integral), and returns the worst ratio per limit and `feasible`. It guards against a coarse-raster
 model that under-reports (`safe_alpha_exact=False`) or a faulty check; `te_search` and portfolios require it.
 
+## Minimum TE and sweeps
+
+`te_search(cfg, target_b=...)` finds the shortest TE whose waveform reaches the target b-value by bisection over
+TE, using a single recipe (`recipe="fast"` roughly halves the search time). TE is quantized to `dt`: the returned
+`TE` is the start of the bin the answer falls in, and `result` was solved at `result["TE"]`, a little later in the
+same bin, so use `replace(cfg, TE=out["result"]["TE"])` to re-solve or plot it.
+
+`sweep(cfg, cfg_grid={...}, scfg_grid={...})` solves every combination of the listed `DiffParams` and `SolverCfg`
+values, in parallel processes by default; `sweep_points` takes an explicit list of points instead.
+
+## Solve raster and hardware raster
+
+Solve on a coarse raster (100 to 400 us) and move the result to the 10 us hardware raster with `to_raster`. The
+resampling is exact, since the scanner plays the linear interpolant; the cost of a coarse raster is that the RF
+gaps are rounded outward to its grid (about 2% of b at 200 us, 5% at 400 us).
+
+## Under the hood
+
+`build_gparams(cfg)` returns the `GroptParams` that `solve` builds, and `make_solver(scfg)` the configured
+`SolverGroptSDMM`, so you can add your own constraints and keep the tuned settings. See the
+[examples](../examples/diffusion/diffusion.ipynb), including the
+[low-level API](../examples/diffusion/diffusion_constraint.ipynb).
+
 ## API
 
 ::: gropt.diffusion.solve
@@ -78,11 +101,47 @@ model that under-reports (`safe_alpha_exact=False`) or a faulty check; `te_searc
     options:
         heading_level: 3
 
+::: gropt.diffusion.sweep
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.sweep_points
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.to_raster
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.continuation
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.dt_schedule
+    options:
+        heading_level: 3
+
 ::: gropt.diffusion.DiffParams
     options:
         heading_level: 3
 
 ::: gropt.diffusion.SolverCfg
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.SafeSource
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.safe_ops
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.build_gparams
+    options:
+        heading_level: 3
+
+::: gropt.diffusion.make_solver
     options:
         heading_level: 3
 

@@ -6,6 +6,7 @@ nav:
       - Constraints: python/constraints.md
       - Solving: python/solvers.md
       - Diffusion: python/diffusion.md
+      - Utilities: python/utilities.md
   - Examples:
       - "examples/"
   - Math:

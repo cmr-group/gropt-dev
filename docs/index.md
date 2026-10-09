@@ -42,7 +42,19 @@ Which produces the waveform:
 
 ![Output of intro code example](img/intro_output.png)
 
+## What It Can Do
+
+- **Hardware limits**: gradient amplitude and slew rate, per axis or rotation invariant, constant or varying
+  over time; PNS and cardiac stimulation with the SAFE model.
+- **Waveform properties**: gradient moments of any order over any window, exactly or within a tolerance;
+  b-value; eddy currents; concomitant-field balance.
+- **Layout**: any number of samples and axes, with any samples fixed (nonzero end values, RF gaps, plateaus).
+- **Objectives**: b-value maximization, minimum energy, and total-variation regularization.
+- **Diffusion**: `gropt.diffusion` builds spin-echo diffusion problems from a short description and solves them
+  with settings tuned over many problems, with TE searches and parameter sweeps.
+
 ## Next Steps
 
 - [Python API Reference](python/gropt_py.md) — full documentation of the Python wrapper
-- [Examples](examples/) — Jupyter notebooks demonstrating common use cases
+- [Examples](examples/simple_example.ipynb) — Jupyter notebooks demonstrating common use cases, starting with
+  this quick start
