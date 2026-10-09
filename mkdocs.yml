@@ -4,14 +4,49 @@ repo_url: https://github.com/cmr-group/gropt-dev
 
 theme:
   name: material
+  custom_dir: overrides
+  logo: img/gropt_logo_header.png
+  favicon: img/favicon.png
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+  # follow the system light/dark setting, with a toggle in the header
   palette:
-    scheme: slate
-    primary: custom
+    - media: "(prefers-color-scheme)"
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
   features:
+    - announce.dismiss
     - navigation.tabs
+    - navigation.sections
     - navigation.instant
+    - navigation.instant.progress
+    - navigation.footer
     - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
     - content.code.copy
+    - content.code.annotate
 
 markdown_extensions:
   - admonition
@@ -36,7 +71,7 @@ extra_javascript:
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 hooks:
-  - mkdocs_hooks.py
+  - overrides/hooks.py
 
 plugins:
     - mkdocs-jupyter

@@ -7,7 +7,5 @@ nav:
       - Solving: python/solvers.md
       - Diffusion: python/diffusion.md
       - Utilities: python/utilities.md
-  - Examples:
-      - "examples/"
-  - Math:
-      - "math/"
+  - Examples: examples/
+  - Math: math/

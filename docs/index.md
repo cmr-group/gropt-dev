@@ -8,8 +8,7 @@ The main workhorse of the package are the optimization routines written in C++, 
 pip install --pre gropt
 ```
 
-!!! note
-    GrOpt 2.0 is currently in pre-release. The `--pre` flag is required for now — an official release is coming shortly.
+GrOpt 2.0 is in pre-release, so the `--pre` flag is needed for now.
 
 ## Quick Start
 

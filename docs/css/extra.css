@@ -1,6 +1,43 @@
+/* Stanford cardinal header; links amber on dark, cardinal on light */
 [data-md-color-primary="custom"] {
   --md-primary-fg-color: #8C1515;
+  --md-primary-fg-color--light: #B1040E;
+  --md-primary-fg-color--dark: #6B0F0F;
   --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #ffffffb3;
+}
+
+[data-md-color-accent="custom"] {
   --md-accent-fg-color: #ffa726;
+  --md-accent-fg-color--transparent: #ffa7261a;
+}
+
+[data-md-color-scheme="slate"][data-md-color-primary="custom"] {
   --md-typeset-a-color: #ffa726;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"] {
+  --md-typeset-a-color: #8C1515;
+}
+
+[data-md-color-scheme="default"][data-md-color-accent="custom"] {
+  --md-accent-fg-color: #c66900;
+  --md-accent-fg-color--transparent: #c669001a;
+}
+
+/* The wordmark logo already reads "GrOpt": a little larger, and the site name hidden next to it on wide
+   screens (below 76.25em Material hides the header logo, so the name stays there). */
+.md-header__button.md-logo {
+  margin: 0 0.2rem;
+  padding: 0.2rem;
+}
+
+.md-header__button.md-logo img {
+  height: 2rem;
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-header__title .md-header__topic:first-child {
+    visibility: hidden;
+  }
 }
