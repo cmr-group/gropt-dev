@@ -2,6 +2,10 @@ site_name: GrOpt
 site_url: https://cmr-group.github.io/gropt-dev/
 repo_url: https://github.com/cmr-group/gropt-dev
 
+# figure scripts live next to their images
+exclude_docs: |
+  img/*.py
+
 theme:
   name: material
   custom_dir: overrides
@@ -44,6 +48,11 @@ theme:
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.details
   - pymdownx.arithmatex:
       generic: true

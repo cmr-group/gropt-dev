@@ -86,3 +86,81 @@
     visibility: hidden;
   }
 }
+
+/* Buttons: Material colors them with the primary (header) color, which is now a neutral gray */
+[data-md-color-primary="custom"] {
+  --gropt-button: var(--gropt-cardinal);
+}
+
+.md-typeset .md-button {
+  color: var(--md-typeset-a-color);
+  border-color: currentcolor;
+}
+
+.md-typeset .md-button--primary,
+.md-typeset .md-button:focus,
+.md-typeset .md-button:hover {
+  background-color: var(--gropt-button);
+  border-color: var(--gropt-button);
+  color: #ffffff;
+}
+
+/* Home page */
+.gropt-hero {
+  text-align: center;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.gropt-hero__logo {
+  width: 20rem;
+  max-width: 75%;
+}
+
+.md-typeset h1.gropt-hero__tagline {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--md-default-fg-color);
+  max-width: 36rem;
+  margin: 1.2rem auto 0.8rem;
+}
+
+.gropt-hero__sub {
+  color: var(--md-default-fg-color--light);
+  max-width: 40rem;
+  margin: 0 auto 1.4rem !important;
+}
+
+.gropt-hero .md-button {
+  margin: 0.2rem 0.3rem;
+}
+
+.gropt-hero code {
+  font-size: 0.85rem;
+  padding: 0.35em 0.8em;
+}
+
+.md-typeset .gropt-figure {
+  max-width: 100%;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.md-typeset .gropt-figure figcaption {
+  max-width: 44rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.4rem;
+}
+
+@media screen and (max-width: 44.9375em) {
+  .md-typeset h1.gropt-hero__tagline {
+    font-size: 1.3rem;
+  }
+
+  .gropt-hero__logo {
+    width: 13rem;
+  }
+}
