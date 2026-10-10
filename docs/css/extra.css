@@ -1,10 +1,32 @@
-/* Stanford cardinal header; links amber on dark, cardinal on light */
-[data-md-color-primary="custom"] {
-  --md-primary-fg-color: #8C1515;
-  --md-primary-fg-color--light: #B1040E;
-  --md-primary-fg-color--dark: #6B0F0F;
-  --md-primary-bg-color: #ffffff;
-  --md-primary-bg-color--light: #ffffffb3;
+/* Neutral header (light grey on light pages, charcoal on dark) with a cardinal accent line under it, so the
+   logo's red trapezoid stands out. Links cardinal on light, amber on dark. */
+:root {
+  --gropt-cardinal: #8C1515;
+  --gropt-tan: #D4C298;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"] {
+  --md-primary-fg-color: #f3f4f6;          /* header and tabs background */
+  --md-primary-fg-color--light: #f9fafb;
+  --md-primary-fg-color--dark: #e5e7eb;
+  --md-primary-bg-color: #2b2b2b;          /* header text and icons */
+  --md-primary-bg-color--light: #2b2b2bb3;
+  --md-typeset-a-color: var(--gropt-cardinal);
+  --gropt-active-tab: var(--gropt-cardinal);
+  --gropt-search-bg: #ffffff;
+  --gropt-line: 3px solid var(--gropt-cardinal);
+}
+
+[data-md-color-scheme="slate"][data-md-color-primary="custom"] {
+  --md-primary-fg-color: #2a2d36;
+  --md-primary-fg-color--light: #353945;
+  --md-primary-fg-color--dark: #1f2229;
+  --md-primary-bg-color: #e8e8e8;
+  --md-primary-bg-color--light: #e8e8e8b3;
+  --md-typeset-a-color: #ffa726;
+  --gropt-active-tab: var(--gropt-tan);
+  --gropt-search-bg: #ffffff14;
+  --gropt-line: 2px solid #6b1818;   /* quieter on charcoal */
 }
 
 [data-md-color-accent="custom"] {
@@ -12,17 +34,40 @@
   --md-accent-fg-color--transparent: #ffa7261a;
 }
 
-[data-md-color-scheme="slate"][data-md-color-primary="custom"] {
-  --md-typeset-a-color: #ffa726;
-}
-
-[data-md-color-scheme="default"][data-md-color-primary="custom"] {
-  --md-typeset-a-color: #8C1515;
-}
-
 [data-md-color-scheme="default"][data-md-color-accent="custom"] {
   --md-accent-fg-color: #c66900;
   --md-accent-fg-color--transparent: #c669001a;
+}
+
+/* Material styles the header search box and repo link for a dark (colored) bar; follow the header colors */
+.md-header .md-search__form,
+.md-header .md-search__form:hover {
+  background-color: var(--gropt-search-bg);
+}
+
+.md-header .md-search__input,
+.md-header .md-search__input::placeholder,
+.md-header .md-search__icon,
+.md-header .md-source,
+.md-header .md-header__button {
+  color: var(--md-primary-bg-color);
+}
+
+/* Accent line: under the tabs, or under the header where the tabs are hidden (narrow screens) */
+.md-tabs {
+  border-bottom: var(--gropt-line);
+}
+
+@media screen and (max-width: 76.2344em) {
+  .md-header {
+    border-bottom: var(--gropt-line);
+  }
+}
+
+.md-tabs__item--active .md-tabs__link {
+  color: var(--gropt-active-tab);
+  font-weight: 600;
+  opacity: 1;
 }
 
 /* The wordmark logo already reads "GrOpt": a little larger, and the site name hidden next to it on wide
