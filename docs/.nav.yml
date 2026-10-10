@@ -1,11 +1,17 @@
 nav:
-  - GrOpt: index.md
-  - Python:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting_started/installation.md
+      - Quick start: examples/simple_example.ipynb
+  - Examples: examples/
+  - API reference:
       - Overview: python/gropt_py.md
-      - Problem Init: python/problem.md
+      - Problem setup: python/problem.md
       - Constraints: python/constraints.md
       - Solving: python/solvers.md
       - Diffusion: python/diffusion.md
       - Utilities: python/utilities.md
-  - Examples: examples/
-  - Math: math/
+  - Background:
+      - OSQP: math/osqp.md
+      - PARSDMM: math/parsdmm.md
+      - Comparison: math/comparing.md

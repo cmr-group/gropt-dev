@@ -1,5 +1,4 @@
 nav:
-  - simple_example.ipynb
   - Moments:
       - moments/flow_encoding.ipynb
       - moments/nonzero_ends.ipynb
