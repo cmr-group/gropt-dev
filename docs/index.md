@@ -126,12 +126,11 @@ waveform = result.X          # [T/m]
 
 ## Citing GrOpt
 
-<!-- TODO(citation): written from memory; check it and add volume, pages and DOI before publishing. -->
-
 If GrOpt is useful in your work, please cite:
 
-M. Loecher, M. J. Middione, D. B. Ennis. *A gradient optimization toolbox for general purpose time-optimal MRI
-gradient waveform design.* Magnetic Resonance in Medicine, 2020.
+Loecher M, Middione MJ, Ennis DB. A gradient optimization toolbox for general purpose time-optimal MRI gradient
+waveform design. *Magn Reson Med.* 2020; 84: 3234–3245.
+[doi:10.1002/mrm.28384](https://doi.org/10.1002/mrm.28384)
 
 ??? quote "BibTeX"
 
@@ -140,6 +139,11 @@ gradient waveform design.* Magnetic Resonance in Medicine, 2020.
       author  = {Loecher, Michael and Middione, Matthew J. and Ennis, Daniel B.},
       title   = {A gradient optimization toolbox for general purpose time-optimal {MRI} gradient waveform design},
       journal = {Magnetic Resonance in Medicine},
-      year    = {2020}
+      volume  = {84},
+      number  = {6},
+      pages   = {3234--3245},
+      year    = {2020},
+      doi     = {10.1002/mrm.28384},
+      url     = {https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.28384}
     }
     ```
