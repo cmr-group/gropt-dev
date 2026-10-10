@@ -56,7 +56,8 @@ markdown_extensions:
   - pymdownx.details
   - pymdownx.arithmatex:
       generic: true
-  - toc
+  - toc:
+      toc_depth: 3   # long member lists (solver options) stay out of the page TOC
   - tables
   - pymdownx.highlight:
       anchor_linenums: true
@@ -85,11 +86,17 @@ plugins:
           python:
             options:
               docstring_style: numpy
-              show_root_heading: true
-              separate_signature: true
-              show_signature_annotations: true
-              show_labels: false
-              show_root_toc_entry: false
               allow_inspection: false
+              heading_level: 3
+              show_root_heading: true
+              show_root_full_path: false
+              show_root_toc_entry: true
+              show_symbol_type_heading: true
+              show_symbol_type_toc: true
+              separate_signature: true
+              show_signature_annotations: false   # types are in the parameter tables
+              show_labels: false
               show_source: false
+              members_order: source
+              filters: ["!^_"]
 

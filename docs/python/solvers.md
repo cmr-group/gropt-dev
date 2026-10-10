@@ -1,71 +1,52 @@
-## Convenience Function
+## Solve and Result
+
+`gropt.solve()` solves with a new `SolverGroptSDMM` and a few of its settings; it returns a `SolveResult`.
 
 ::: gropt.solve
-    options:
-        heading_level: 3
-
-## SolveResult
 
 ::: gropt.SolveResult
-    options:
-        filters: ["!^_"]
-        heading_level: 3
 
 ## SolverGroptSDMM
 
-The default solver. The options shared with `SolverOSQP` (iteration limits, the inner linear solver, debug histories and warm starts) are listed with it. See the [solver control example](../examples/solvers/solver_control.ipynb).
+The default solver. Every option is a property, listed in the table below and described after it; the options
+shared with `SolverOSQP` (iteration limits, the inner linear solver, debug histories and warm starts) are included.
+See the [solver control example](../examples/solvers/solver_control.ipynb).
 
 ::: gropt.SolverGroptSDMM
     options:
-        filters: ["!^_"]
+        show_root_heading: false
         inherited_members: true
-        heading_level: 3
+        summary: true
+        heading_level: 4
 
 ## SolverOSQP
 
 ::: gropt.SolverOSQP
     options:
-        filters: ["!^_"]
-        heading_level: 3
+        show_root_heading: false
+        summary: true
+        heading_level: 4
 
 ## Convergence Plots
 
 With `solver.extra_debug = True`, `solver.get_debug()` returns per-iteration histories, which these functions plot.
 
 ::: gropt.debug_plotting.plot_convergence
-    options:
-        heading_level: 3
 
 ::: gropt.debug_plotting.scrub_hist_X
-    options:
-        heading_level: 3
 
 ::: gropt.debug_plotting.scrub_hist_X_widget
-    options:
-        heading_level: 3
 
 ::: gropt.debug_plotting.scrub_hist_X_mpl
-    options:
-        heading_level: 3
 
 ## Equilibration
 
 ::: gropt.equilibrate
-    options:
-        heading_level: 3
 
 ::: gropt.estimate_row_col_norms
-    options:
-        heading_level: 3
 
 ::: gropt.rescale_eq_vecs
-    options:
-        heading_level: 3
 
 ::: gropt.estimate_spec_norm
-    options:
-        heading_level: 3
 
 ::: gropt.estimate_individual_spec_norm
-    options:
-        heading_level: 3

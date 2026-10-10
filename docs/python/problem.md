@@ -1,15 +1,19 @@
+::: gropt.GroptParams
+    options:
+        members: false
+        heading_level: 2
+
 ## Helper Functions
 
 These helper functions set all necessary parameters to define the problem.  They define some common usage patterns for optimization, such as fully optimized waveforms that start and end at 0 (`vec_init_simple`), or the optimization of diffusion waveforms (`diff_init`).
 
-::: gropt.GroptParams
-    options:
-        members:
-            - vec_init_simple
-            - diff_init
-            - diff_init_deadtime
-            - diff_init_preencode
-        heading_level: 3
+::: gropt.GroptParams.vec_init_simple
+
+::: gropt.GroptParams.diff_init
+
+::: gropt.GroptParams.diff_init_deadtime
+
+::: gropt.GroptParams.diff_init_preencode
 
 ## Direct Setup
 
@@ -53,28 +57,26 @@ is not changed, so call `vec_init_simple()` or a `diff_init` variant first (see 
 - **set_vals** (*np.ndarray*): length `N` (sets `Naxis = 1`) or shape `(Naxis, N)`. NaN = free, finite value =
   fixed to that value.
 
-::: gropt.GroptParams
-    options:
-        members:
-            - getvec_set_vals
-            - getvec_fixer
-            - getvec_inv_vec
-            - getvec_X0
-            - set_ils_solver
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.getvec_set_vals
+
+::: gropt.GroptParams.getvec_fixer
+
+::: gropt.GroptParams.getvec_inv_vec
+
+::: gropt.GroptParams.getvec_X0
+
+::: gropt.GroptParams.set_ils_solver
 
 ## Operators
 
 Each `add_*` call adds an operator. `solve()` prepares them automatically; these functions inspect them.
 
-::: gropt.GroptParams
-    options:
-        members:
-            - prepare
-            - get_op_names
-            - get_op_keys
-            - print_op_details
-            - reset_op_weights
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.prepare
+
+::: gropt.GroptParams.get_op_names
+
+::: gropt.GroptParams.get_op_keys
+
+::: gropt.GroptParams.print_op_details
+
+::: gropt.GroptParams.reset_op_weights

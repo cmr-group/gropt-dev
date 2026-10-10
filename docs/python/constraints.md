@@ -6,47 +6,33 @@ enforces them exactly on every iteration by a null-space projection; this is usu
 (per-operator BB and global reweighting, see [Solving](solvers.md)), so the starting weights mostly change how
 quickly a solve converges rather than its result.
 
+All of these are methods or properties of `GroptParams`.
+
 ## Gradient Amplitude
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_gmax
-            - add_gmax_vec
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_gmax
+
+::: gropt.GroptParams.add_gmax_vec
 
 ## Slew Rate
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_smax
-            - add_smax_vec
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_smax
+
+::: gropt.GroptParams.add_smax_vec
 
 ## Moments
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_moment
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_moment
 
 ## b-value
 
 The b-value can be a constraint, or with `as_objective=True` an objective to maximize (see also [Diffusion](diffusion.md)).
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_bvalue
-            - normalize_obj
-            - add_diff_basin
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_bvalue
+
+::: gropt.GroptParams.normalize_obj
+
+::: gropt.GroptParams.add_diff_basin
 
 ## PNS (SAFE-model)
 
@@ -54,70 +40,44 @@ PNS parameters can be loaded from an .asc file using the `gropt.readasc.asc_to_s
 
 With several gradient axes, `add_SAFE` limits the root-sum-square of the per-axis stimulation. The `safe_*` properties change how the model is discretized and solved; set them before `add_SAFE`. See the [PNS example](../examples/hardware/pns.ipynb).
 
-::: gropt.readasc.asc_to_safe
-    options:
-        heading_level: 3
+::: gropt.GroptParams.add_SAFE
 
-::: gropt.readasc.make_safe_params
-    options:
-        heading_level: 3
-
-::: gropt.readasc.get_random_safe_params
-    options:
-        heading_level: 3
-
-::: gropt.GroptParams
-    options:
-        members:
-            - add_SAFE
-            - add_SAFE_vec
-            - safe_alpha_exact
-            - safe_lifted
-            - safe_eps
-            - safe_signed13
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_SAFE_vec
 
 ::: gropt.get_SAFE
-    options:
-        heading_level: 3
+
+::: gropt.readasc.asc_to_safe
+
+::: gropt.readasc.make_safe_params
+
+::: gropt.readasc.get_random_safe_params
+
+::: gropt.GroptParams.safe_alpha_exact
+
+::: gropt.GroptParams.safe_lifted
+
+::: gropt.GroptParams.safe_eps
+
+::: gropt.GroptParams.safe_signed13
 
 ## Eddy Currents
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_eddy
-            - eq_proj_solver
-            - eq_proj_rcond
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_eddy
+
+::: gropt.GroptParams.eq_proj_solver
+
+::: gropt.GroptParams.eq_proj_rcond
 
 ## Concomitant Fields
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_concomitant
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_concomitant
 
 ## Total Variation
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_TV
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_TV
 
 ## Objectives
 
 With only constraints, the solver returns the first feasible waveform it reaches. An objective chooses among the feasible waveforms: `add_obj_identity` (minimum energy) and the b-value objective above. See the [regularization example](../examples/objective_functions/regularizations.ipynb).
 
-::: gropt.GroptParams
-    options:
-        members:
-            - add_obj_identity
-        heading_level: 3
-        show_root_heading: false
+::: gropt.GroptParams.add_obj_identity

@@ -80,77 +80,39 @@ rectangle rule that reads slightly high on a coarse raster; `bval_pwl_quad=True`
 ## API
 
 ::: gropt.diffusion.solve
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.available_recipes
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.apply_recipe
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.iter_recipes
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.verify
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.te_search
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.sweep
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.sweep_points
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.to_raster
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.continuation
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.dt_schedule
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.DiffParams
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.SolverCfg
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.SafeSource
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.safe_ops
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.build_gparams
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion.make_solver
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion_recipes.save_recipe
-    options:
-        heading_level: 3
 
 ::: gropt.diffusion_recipes.load_recipe
-    options:
-        heading_level: 3

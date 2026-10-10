@@ -4,14 +4,19 @@ import posixpath
 import re
 
 _IPYNB_HREF = re.compile(r'href="([^":#?]+\.ipynb)(#[^"]*)?"')
+# Sphinx roles in docstrings (:func:`name`) render as ":func:<code>name</code>"
+_SPHINX_ROLE = re.compile(r':(?:func|meth|class|attr|mod|obj|data|exc):(?=<code>)')
 
 
 def on_page_content(html, page, config, files):
-    """Point relative .ipynb links inside a rendered notebook at the linked notebook's page.
+    """Clean up rendered pages.
 
-    mkdocs-jupyter renders notebooks after MkDocs' own link handling, so a link like
-    ``moments/flow_encoding.ipynb`` (correct on GitHub and in Jupyter) would 404 on the site.
+    - Drop Sphinx role prefixes in API docstrings (mkdocstrings does not resolve them), keeping the name as code.
+    - Point relative .ipynb links inside a rendered notebook at the linked notebook's page: mkdocs-jupyter renders
+      notebooks after MkDocs' own link handling, so a link like ``moments/flow_encoding.ipynb`` (correct on GitHub
+      and in Jupyter) would 404 on the site.
     """
+    html = _SPHINX_ROLE.sub('', html)
     if not page.file.src_uri.endswith('.ipynb'):
         return html
 
