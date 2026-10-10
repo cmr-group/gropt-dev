@@ -51,77 +51,129 @@ class DiffParams:
 
     # --- required timing [s] ---
     TE: float
+    """Echo time [s]."""
     T_90: float
+    """Excitation RF time after t = 0 [s] (half the pulse duration)."""
     T_180: float
+    """Refocusing RF pulse duration [s], centered at TE/2."""
     T_readout: float
+    """Readout time before TE [s]; the waveform ends at TE - T_readout."""
     dt: float = 400e-6
+    """Solve raster time [s]."""
 
-    T_pre: float | None = None   # preencode only
+    T_pre: float | None = None
+    """Pre-encoding period [s], for ``diff_mode="preencode"`` only."""
 
     # --- gradient amplitude ---
-    gmax: float = 0.08           # [T/m]
+    gmax: float = 0.08
+    """Gradient amplitude limit [T/m]."""
     w_gmax: float = 1.0
+    """Initial ADMM weight of the gradient limit. Recipe setting."""
 
     # --- slew rate ---
-    smax: float = 200.0          # [T/m/s]
+    smax: float = 200.0
+    """Slew rate limit [T/m/s]."""
     w_smax: float = 10.832717264505106
+    """Initial ADMM weight of the slew limit. Recipe setting."""
 
     # --- moments ---
-    MMT: int = 0                 # null moments M0..M_MMT
-    moment_project: bool = True  # exact null-space projection (recommended)
-    moment_tol: float = 1e-5     # M0 tolerance; order k uses moment_tol * ||A_k|| / ||A_0||
-    moment_pwl_quad: bool = False  # True: exact piecewise-linear quadrature (see add_moment pwl_quad)
+    MMT: int = 0
+    """Null the moments M0 up to M_MMT."""
+    moment_project: bool = True
+    """Enforce the moments exactly by null-space projection (recommended). Recipe setting."""
+    moment_tol: float = 1e-5
+    """M0 tolerance; order k uses ``moment_tol * ||A_k|| / ||A_0||``."""
+    moment_pwl_quad: bool = False
+    """Exact piecewise-linear moment quadrature (see ``add_moment(pwl_quad=...)``)."""
     w_moment: float = 1.0
+    """Initial ADMM weight of the moment constraints. Recipe setting."""
 
     # --- diffusion ---
-    bvalue: float = 1000.0          # target b [s/mm^2] (te_search default)
-    diff_mode: str = "gropt"        # "gropt" | "conventional" | "preencode"
-    bval_mode: str = "obj"          # "obj" (maximize b) | constraint: "setval" | "minval" | "minval_max"
-    bval_min: float = 100.0         # constraint modes: target b [s/mm^2]
-    bval_obj_weight: float = 1.7034494007148022  # obj mode: magnitude of the normalized b-value pull
-    bval_max_scale: float = 1.02    # minval_max: per-iteration b scale factor
-    bval_pwl_quad: bool = False      # True: exact piecewise-linear b-value (see add_bvalue pwl_quad)
-    w_bval: float = 1.0             # constraint modes only
+    bvalue: float = 1000.0
+    """Target b-value [s/mm^2]; the default ``target_b`` of :func:`te_search`."""
+    diff_mode: str = "gropt"
+    """Layout: ``"gropt"``, ``"conventional"`` (symmetric, with dead time) or ``"preencode"``."""
+    bval_mode: str = "obj"
+    """``"obj"`` maximizes b; ``"setval"``, ``"minval"`` and ``"minval_max"`` constrain it to ``bval_min``."""
+    bval_min: float = 100.0
+    """Constraint modes: the target b-value [s/mm^2]."""
+    bval_obj_weight: float = 1.7034494007148022
+    """``"obj"`` mode: magnitude of the normalized b-value pull. Recipe setting."""
+    bval_max_scale: float = 1.02
+    """``"minval_max"`` mode: per-iteration b scale factor. Recipe setting."""
+    bval_pwl_quad: bool = False
+    """Exact piecewise-linear b-value (see ``add_bvalue(pwl_quad=...)``)."""
+    w_bval: float = 1.0
+    """Initial ADMM weight of the b-value constraint (constraint modes only). Recipe setting."""
 
     # --- SAFE, PNS, CNS ---
-    pns_lim: float | np.ndarray | Callable | None = None   # PNS limit, 1.0 = model stim_limit; None = off
-    cns_lim: float | np.ndarray | Callable | None = None   # CNS limit, same forms; None = off
-    safe_params: SafeSource | tuple | None = None   # None = random (seed 42); (pns, cns) -> kind="params"
-    safe_test_axes: tuple[int, ...] = (0,)          # axes (x, y, z = 0, 1, 2) to be safe on, one op each
-    safe_eps: float = 0.0                # softabs smoothing of SAFE |.| [T/m/s]; 0 = exact |.|
-    safe_signed13: bool = False          # |.| of SAFE terms 1/3 in the prox, not the forward map
-    safe_lifted: bool = True             # lift LP2(|slew|) onto a slack u >= |slew| (Op_SAFE_Slack)
-    w_slack: float = 105.08823640819529  # weight of the u >= |slew| coupling op (safe_lifted only)
-    safe_alpha_exact: bool = True        # raster-invariant filter (see GroptParams.safe_alpha_exact)
+    pns_lim: float | np.ndarray | Callable | None = None
+    """PNS limit, 1.0 = the model's stim_limit; None = off. A float, per-sample array or ``f(cfg, t)``."""
+    cns_lim: float | np.ndarray | Callable | None = None
+    """Cardiac stimulation limit, in the same forms as ``pns_lim``; None = off."""
+    safe_params: SafeSource | tuple | None = None
+    """SAFE model parameters: None = random (seed 42), a ``(pns, cns)`` pair of dicts, or a ``SafeSource``."""
+    safe_test_axes: tuple[int, ...] = (0,)
+    """Axes (x, y, z = 0, 1, 2) whose SAFE coefficients the waveform must be safe on, one constraint each."""
+    safe_eps: float = 0.0
+    """Softabs smoothing of the SAFE ``|.|`` [T/m/s]; 0 = exact. Recipe setting."""
+    safe_signed13: bool = False
+    """Take the ``|.|`` of SAFE terms 1 and 3 in the prox rather than the forward map. Recipe setting."""
+    safe_lifted: bool = True
+    """Lift ``LP2(|slew|)`` onto a slack ``u >= |slew|`` (Op_SAFE_Slack). Recipe setting."""
+    w_slack: float = 105.08823640819529
+    """Initial ADMM weight of the ``u >= |slew|`` coupling (``safe_lifted`` only). Recipe setting."""
+    safe_alpha_exact: bool = True
+    """Raster-invariant SAFE filter (see ``GroptParams.safe_alpha_exact``)."""
     w_pns: float = 12.366370987704867
+    """Initial ADMM weight of the PNS constraints. Recipe setting."""
     w_cns: float = 57.339230929159065
+    """Initial ADMM weight of the cardiac constraints. Recipe setting."""
 
     # --- optional constraints (None / False => off) ---
     concomitant: bool = False
-    concomitant_tol: float = 0.1    # feasible when |E_pre/E_post - 1| <= tol; project=True still drives it to 1
+    """Balance the gradient energy before and after the 180, so concomitant-field phase refocuses."""
+    concomitant_tol: float = 0.1
+    """Feasible when ``|E_pre/E_post - 1| <= tol``; ``concomitant_project`` still drives the balance to 1."""
     w_concomitant: float = 4.371489218804275
+    """Initial ADMM weight of the concomitant constraint. Recipe setting."""
     concomitant_project: bool = True
-    concomitant_exact_quad: bool = True  # False: legacy raster-dependent rectangle sum of g^2
+    """Enforce an exact balance by projection; False allows the ``concomitant_tol`` band."""
+    concomitant_exact_quad: bool = True
+    """Exact integral of g^2; False is the legacy raster-dependent rectangle sum."""
 
-    eddy_lam: float | None = None   # eddy time constant [s]
+    eddy_lam: float | None = None
+    """Eddy current time constant(s) [s] to null at the end of the waveform; None = off."""
     w_eddy: float = 1.0
+    """Initial ADMM weight of the eddy constraint. Recipe setting."""
     eddy_project: bool = True
+    """Enforce eddy == 0 exactly by projection; False uses a soft box. Recipe setting."""
 
     # --- basin control (None => off) ---
-    basin_same_sign: bool | None = None  # False: force sign-flip (global) basin; True: no-flip (local)
-    basin_window: float = 1e-3           # averaging window on each side of the 180 [s]
-    basin_eps: float = 0.07              # min |mean g| per window, as a fraction of gmax
+    basin_same_sign: bool | None = None
+    """False: force the sign-flip (global) basin; True: the no-flip (local) one; None = off."""
+    basin_window: float = 1e-3
+    """Averaging window on each side of the 180 [s]."""
+    basin_eps: float = 0.07
+    """Minimum ``|mean g|`` per window, as a fraction of gmax."""
 
     # --- order-2 TV (jerk) regularizer: reduces slew jitter on the flat b-value optimum ---
-    jerk_lam: float = 0.0           # add_TV(order=2) lambda, physical units (~1e-9..1e-6 useful); 0 = off
+    jerk_lam: float = 0.0
+    """``add_TV(order=2)`` lambda in physical units (about 1e-9 to 1e-6 is useful); 0 = off."""
     w_jerk: float = 1.0
+    """Initial ADMM weight of the jerk regularizer. Recipe setting."""
 
     # --- initial waveform (solve seed) ---
-    x0_mode: str = "sine"           # "diff_init" (built-in 1e-2 seed) | "const" | "sine"
-    x0_amp: float = 0.08443255496637647  # seed amplitude on free samples (const, sine)
-    x0_invert: bool = False         # flip the seed sign after the 180
-    x0_periods: float = 2.0         # sine mode: periods per free run (zero at both ends)
-    x0_project: bool = False        # pre-project the seed onto the moment null-space (M0..M_MMT = 0)
+    x0_mode: str = "sine"
+    """Seed waveform: ``"diff_init"`` (built-in 1e-2 seed), ``"const"`` or ``"sine"``. Recipe setting."""
+    x0_amp: float = 0.08443255496637647
+    """Seed amplitude on the free samples (const, sine). Recipe setting."""
+    x0_invert: bool = False
+    """Flip the seed's sign after the 180. Recipe setting."""
+    x0_periods: float = 2.0
+    """Sine mode: periods per free run (zero at both ends). Recipe setting."""
+    x0_project: bool = False
+    """Pre-project the seed onto the moment null space (M0..M_MMT = 0). Recipe setting."""
 
     def __post_init__(self):
         """Turn a (pns, cns) dict pair into SafeSource(kind="params"); check safe_test_axes."""
@@ -148,50 +200,83 @@ class SolverCfg:
 
     # outer loop
     max_iter: int = 4000
-    max_feval: int = 200000         # cap on total inner CG iterations
+    """Maximum outer iterations."""
+    max_feval: int = 200000
+    """Cap on the total inner (CG) iterations."""
     min_iter: int = 1
-    obj_patience: int = 20          # obj mode: stop after N feasible iters with no improvement
-    obj_rtol: float = 1e-4          # relative improvement threshold for obj_patience
-    gamma_x: float = 1.165149741846207  # over-relaxation of the X update
+    """Minimum outer iterations before a feasible iterate is accepted."""
+    obj_patience: int = 20
+    """``"obj"`` mode: stop after this many feasible iterations with no improvement."""
+    obj_rtol: float = 1e-4
+    """Relative improvement threshold for ``obj_patience``."""
+    gamma_x: float = 1.165149741846207
+    """Over-relaxation of the X update."""
 
     # inner (CG) solver
     ils_tol: float = 0.07290432029478086
+    """Inner-solver tolerance, relative to the warm-start residual."""
     ils_max_iter: int = 31
+    """Maximum inner-solver iterations per outer iteration."""
     ils_min_iter: int = 2
-    ils_sigma: float = 0.0001554544663042038  # proximal weight
+    """Minimum inner-solver iterations per outer iteration."""
+    ils_sigma: float = 0.0001554544663042038
+    """Proximal weight: adds sigma*I to the inner system."""
     ils_tik_lam: float = 0.0
+    """Tikhonov weight: adds tik_lam*I to the inner-system matrix."""
 
-    bb_reweight: bool = True        # BB per-operator adaptation
-    rw_interval: int = 37           # BB cadence: reweight every rw_interval outer iters
-    rw_e_corr: float = 0.16079028465931097  # BB correlation threshold (Xu et al.); lower = updates more often
-    rw_scalelim: float = 4.991259555225381  # max weight change per BB step (1.0 = frozen)
-    rw_eps: float = 1e-36           # safeguard floor for the correlation/norm guards
+    bb_reweight: bool = True
+    """Per-operator BB (spectral) weight adaptation."""
+    rw_interval: int = 37
+    """BB cadence: reweight every ``rw_interval`` outer iterations."""
+    rw_e_corr: float = 0.16079028465931097
+    """BB correlation threshold (Xu et al.); lower updates more often."""
+    rw_scalelim: float = 4.991259555225381
+    """Maximum weight change per BB step (1.0 = frozen)."""
+    rw_eps: float = 1e-36
+    """Safeguard floor for the BB correlation and norm guards."""
 
-    grw: bool = True                # global reweighting: bump the most persistently infeasible op
-    grw_interval: int = 31          # grw cadence (only when grw)
-    grw_mod: float = 6.005900533768388  # grw multiplier (only when grw)
-    grw_balanced: bool = False      # rescale all weights to keep their geometric mean fixed
+    grw: bool = True
+    """Global reweighting: bump the weight of the most persistently infeasible operator."""
+    grw_interval: int = 31
+    """Global reweighting cadence (only with ``grw``)."""
+    grw_mod: float = 6.005900533768388
+    """Global reweighting multiplier (only with ``grw``)."""
+    grw_balanced: bool = False
+    """After a bump, rescale all weights to keep their geometric mean fixed."""
 
-    reproject_iterate: bool = False  # re-project onto the equality constraints each outer iteration
+    reproject_iterate: bool = False
+    """Re-project onto the equality constraints every outer iteration."""
 
     # low-pass the iterate each outer iteration (suppresses high-frequency oscillation)
-    cutoff_freq: float = -1.0       # [Hz]; <= 0 off
-    cutoff_iter: int = -1           # apply until this iteration; -1 = always
-    cutoff_trans: float = 0.0       # raised-cosine roll-off, fraction of the cutoff bin; 0 = brick wall
+    cutoff_freq: float = -1.0
+    """Low-pass the iterate every outer iteration at this frequency [Hz]; <= 0 = off."""
+    cutoff_iter: int = -1
+    """Apply the low-pass until this iteration; -1 = always."""
+    cutoff_trans: float = 0.0
+    """Raised-cosine roll-off, as a fraction of the cutoff bin; 0 = brick wall."""
 
     # trust region: re-solve with a larger proximal sigma when the step monitor rejects a step
     tr_enable: bool = False
-    tr_tol: float = -1.0            # reject threshold; <= 0 uses the monitor default
-    tr_bump: float = 4.0            # sigma multiplier per reject
-    tr_max_reject: int = 5          # re-solves per outer iteration before taking the step anyway
-    tr_decay: float = 0.5           # sigma decay toward ils_sigma on an accepted step
-    tr_monitor: str = "linearization_error"  # | "feasibility" | "rel_step"
+    """Trust region: re-solve with a larger proximal sigma when the step monitor rejects a step."""
+    tr_tol: float = -1.0
+    """Reject threshold; <= 0 uses the monitor's default."""
+    tr_bump: float = 4.0
+    """Sigma multiplier per rejected step."""
+    tr_max_reject: int = 5
+    """Re-solves per outer iteration before taking the step anyway."""
+    tr_decay: float = 0.5
+    """Sigma decay toward ``ils_sigma`` after an accepted step."""
+    tr_monitor: str = "linearization_error"
+    """Step monitor: ``"linearization_error"``, ``"feasibility"`` or ``"rel_step"``."""
 
     # feasibility-gated objective: b-pull *= exp(-violation/obj_gate_scale); only SAFE reports violation
     obj_gate: bool = False
+    """Scale the b-value pull by ``exp(-violation / obj_gate_scale)``; only SAFE reports a violation."""
     obj_gate_scale: float = 0.05
+    """Violation scale of the objective gate."""
 
-    extra_debug: bool = False       # populate solver.get_debug()
+    extra_debug: bool = False
+    """Record per-iteration histories (``solver.get_debug()``, the result's ``debug``)."""
 
 
 # ===========================================================================
@@ -208,10 +293,15 @@ class SafeSource:
     """
 
     kind: str = "random"
+    """``"random"``, ``"asc"`` or ``"params"`` (see above)."""
     seed: int = 42
+    """``kind="random"``: random-number seed."""
     asc_file: str | None = None
+    """``kind="asc"``: path to the scanner's .asc file."""
     pns: dict | None = None
+    """``kind="params"``: PNS SAFE parameter dict."""
     cns: dict | None = None
+    """``kind="params"``: cardiac SAFE parameter dict."""
 
     def __post_init__(self):
         """Validate and copy the dicts of a kind="params" source."""

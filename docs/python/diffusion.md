@@ -102,10 +102,19 @@ rectangle rule that reads slightly high on a coarse raster; `bval_pwl_quad=True`
 ::: gropt.diffusion.dt_schedule
 
 ::: gropt.diffusion.DiffParams
+    options:
+        summary: true
+        show_signature_annotations: true
 
 ::: gropt.diffusion.SolverCfg
+    options:
+        summary: true
+        show_signature_annotations: true
 
 ::: gropt.diffusion.SafeSource
+    options:
+        summary: true
+        show_signature_annotations: true
 
 ::: gropt.diffusion.safe_ops
 
