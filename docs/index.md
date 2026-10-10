@@ -11,8 +11,8 @@ hide:
 <h1 class="gropt-hero__tagline">A toolbox for designing optimal MRI gradient waveforms</h1>
 
 <p class="gropt-hero__sub">Describe what a gradient waveform has to do (moments, b-value, timing, hardware and nerve
-stimulation limits) and GrOpt finds the shortest waveform that does it, from a C++ core built to run inside a pulse
-sequence.</p>
+stimulation limits) and GrOpt finds the shortest waveform that does it, in milliseconds to a fraction of a second.
+Use it from Python, or build its C++ core into a pulse sequence.</p>
 
 [Get started](examples/simple_example.ipynb){ .md-button .md-button--primary }
 [Examples](examples/moments/flow_encoding.ipynb){ .md-button }
@@ -32,58 +32,64 @@ sequence.</p>
 sides. See [minimum TE](examples/diffusion/diffusion_te.ipynb).</figcaption>
 </figure>
 
-## What it does
+## What you can design
+
+Each card links to a worked example.
 
 <div class="grid cards" markdown>
 
--   :material-speedometer:{ .lg .middle } __Hardware limits__
+-   :material-sine-wave:{ .lg .middle } __Gradient moments__
 
     ---
 
-    Gradient amplitude and slew rate, per axis or rotation invariant, constant or varying over time.
+    Null or set moments of any order, for flow compensation, phase encoding or rephasing, and find the
+    shortest waveform that meets them.
 
-    [:octicons-arrow-right-24: Constraints](python/constraints.md)
+    [:octicons-arrow-right-24: Example: flow encoding](examples/moments/flow_encoding.ipynb)
 
--   :material-sine-wave:{ .lg .middle } __Moments and fixed samples__
+-   :material-pin-outline:{ .lg .middle } __Fixed gradient values__
 
     ---
 
-    Null or target gradient moments of any order over any window, and fix any samples: nonzero ends, RF
-    gaps, plateaus.
+    Hold any samples at set values: nonzero end points that join neighbouring gradients, or a slice-select
+    plateau with its refocusing lobe designed around it.
 
-    [:octicons-arrow-right-24: Flow encoding](examples/moments/flow_encoding.ipynb)
+    [:octicons-arrow-right-24: Example: fixed gradient values](examples/moments/nonzero_ends.ipynb)
+
+-   :material-vector-curve:{ .lg .middle } __Waveform shape__
+
+    ---
+
+    Choose among the waveforms that meet the constraints: minimum gradient energy, or a total-variation
+    penalty for blockier, trapezoid-like lobes.
+
+    [:octicons-arrow-right-24: Example: regularization](examples/objective_functions/regularizations.ipynb)
 
 -   :material-flash-outline:{ .lg .middle } __Nerve stimulation__
 
     ---
 
-    Peripheral nerve and cardiac stimulation limits with the SAFE model, from your scanner's `.asc` file.
+    Peripheral nerve and cardiac stimulation limits with the SAFE model, from your scanner's parameters.
 
-    [:octicons-arrow-right-24: PNS limits](examples/hardware/pns.ipynb)
+    [:octicons-arrow-right-24: Example: PNS limits](examples/hardware/pns.ipynb)
 
--   :material-water-outline:{ .lg .middle } __Diffusion__
-
-    ---
-
-    Maximize the b-value or find the minimum TE, with motion, eddy-current and concomitant-field compensation.
-
-    [:octicons-arrow-right-24: Diffusion encoding](examples/diffusion/diffusion.ipynb)
-
--   :material-timer-outline:{ .lg .middle } __Fast__
+-   :material-axis-arrow:{ .lg .middle } __Hardware limits__
 
     ---
 
-    Typical waveforms solve in milliseconds, and warm starts make searches over durations cheap.
+    Gradient amplitude and slew rate across several axes, per axis or rotation invariant, and limits that change
+    over time.
 
-    [:octicons-arrow-right-24: Solver control](examples/solvers/solver_control.ipynb)
+    [:octicons-arrow-right-24: Example: multiple axes](examples/hardware/multi_axis.ipynb)
 
--   :material-language-python:{ .lg .middle } __Python and C++__
+-   :material-water-outline:{ .lg .middle } __Diffusion encoding__
 
     ---
 
-    A Python package with notebooks for every feature, on the same C++ solver a sequence can embed.
+    Maximize the b-value or find the minimum TE, with motion, eddy-current and concomitant-field compensation,
+    from a short problem description.
 
-    [:octicons-arrow-right-24: API reference](python/gropt_py.md)
+    [:octicons-arrow-right-24: Example: diffusion encoding](examples/diffusion/diffusion.ipynb)
 
 </div>
 
