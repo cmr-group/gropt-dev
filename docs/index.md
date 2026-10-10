@@ -10,9 +10,9 @@ hide:
 
 <h1 class="gropt-hero__tagline">A toolbox for designing optimal MRI gradient waveforms</h1>
 
-<p class="gropt-hero__sub">Describe what a gradient waveform has to do (moments, b-value, timing, hardware and nerve
-stimulation limits) and GrOpt finds the shortest waveform that does it, in milliseconds to a fraction of a second.
-Use it from Python, or build its C++ core into a pulse sequence.</p>
+<p class="gropt-hero__sub">Rather than combinations of trapezoids, GrOpt uses constrained optimization to find the
+time-optimal gradient waveform for a given set of hardware limits and encoding requirements. The solver is written
+in C++, with Python bindings, and is designed to be compiled into a pulse sequence.</p>
 
 [Get started](examples/simple_example.ipynb){ .md-button .md-button--primary }
 [Examples](examples/moments/flow_encoding.ipynb){ .md-button }
