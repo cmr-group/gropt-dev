@@ -8,7 +8,7 @@ hide:
 
 ![GrOpt](img/gropt_logo.png){ .gropt-hero__logo }
 
-<h1 class="gropt-hero__tagline">Time-optimal MRI gradient waveforms, designed by constrained optimization</h1>
+<h1 class="gropt-hero__tagline">A toolbox for designing optimal MRI gradient waveforms</h1>
 
 <p class="gropt-hero__sub">Describe what a gradient waveform has to do (moments, b-value, timing, hardware and nerve
 stimulation limits) and GrOpt finds the shortest waveform that does it, from a C++ core built to run inside a pulse
@@ -120,15 +120,12 @@ waveform = result.X          # [T/m]
 
 ## Citing GrOpt
 
-<!-- TODO(citations): the references below are placeholders written from memory; replace them with the exact
-     citations (and add volume, pages and DOI) before publishing. -->
+<!-- TODO(citation): written from memory; check it and add volume, pages and DOI before publishing. -->
 
 If GrOpt is useful in your work, please cite:
 
-- M. Loecher, M. J. Middione, D. B. Ennis. *A gradient optimization toolbox for general purpose time-optimal MRI
-  gradient waveform design.* Magnetic Resonance in Medicine, 2020.
-- E. Aliotta, H. H. Wu, D. B. Ennis. *Convex optimized diffusion encoding (CODE) gradient waveforms for minimum
-  echo time and bulk motion-compensated diffusion-weighted MRI.* Magnetic Resonance in Medicine, 2017.
+M. Loecher, M. J. Middione, D. B. Ennis. *A gradient optimization toolbox for general purpose time-optimal MRI
+gradient waveform design.* Magnetic Resonance in Medicine, 2020.
 
 ??? quote "BibTeX"
 
@@ -138,13 +135,5 @@ If GrOpt is useful in your work, please cite:
       title   = {A gradient optimization toolbox for general purpose time-optimal {MRI} gradient waveform design},
       journal = {Magnetic Resonance in Medicine},
       year    = {2020}
-    }
-
-    @article{aliotta2017code,
-      author  = {Aliotta, Eric and Wu, Holden H. and Ennis, Daniel B.},
-      title   = {Convex optimized diffusion encoding ({CODE}) gradient waveforms for minimum echo time and bulk
-                 motion-compensated diffusion-weighted {MRI}},
-      journal = {Magnetic Resonance in Medicine},
-      year    = {2017}
     }
     ```
