@@ -110,6 +110,7 @@ struct Result {
 
 // Build, solve and re-check one waveform at this TE. Each R.w_* is the starting weight the recipe tuned for
 // that constraint; the limits themselves come from the problem above.
+// --------------------------------------------------------------------------------------------------------
 Result solve_at(double TE, const Recipe &R) {
     Result res;
     res.TE = TE;
@@ -201,10 +202,9 @@ Result solve_at(double TE, const Recipe &R) {
     return res;
 }
 
-// Shortest TE that passes every check and reaches b_target on the 10 us raster. TE is quantized to the
-// dt grid: every TE in [T_readout + m dt, T_readout + (m + 1) dt) gives the same N = m + 1 samples, so search
-// over m and solve each bin at its middle. Longer TE gives more b, so bisect between an infeasible lo and a
-// feasible hi (the solver is local, so b(TE) is only nearly monotone; the answer can be a bin or so off).
+
+// Shortest TE that passes every check and reaches b_target on the 10 us raster.
+// --------------------------------------------------------------------------------------------------------
 Result te_search(double b_target, const Recipe &R, double TE_max = 150e-3) {
     // Bin m -> the TE solved for it (the middle, so rounding never moves it to another bin)
     auto TE_of = [](int m) { return T_readout + (m + 0.5) * dt; };
