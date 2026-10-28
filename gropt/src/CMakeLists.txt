@@ -1,7 +1,9 @@
 # Standalone C++ build (no Python / nanobind / pixi needed):
 #   cmake -S gropt/src -B build-cpp -G Ninja -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build-cpp
-#   ./build-cpp/gropt
+#   ./build-cpp/gropt                      (demo_diffusion.cpp: the full diffusion.py mirror)
+#   ./build-cpp/gropt_diffusion_simple     (demo_diffusion_simple.cpp: one solve at a fixed TE, then the shortest
+#                                           TE for a target b; both checked on the 10 us raster)
 # Optional addons: -DGROPT_PLOTTING=ON (matplot++, needs gnuplot at runtime), -DGROPT_HDF5=ON (HighFive).
 cmake_minimum_required(VERSION 3.17)
 project(gropt LANGUAGES CXX)
@@ -14,6 +16,9 @@ include(${CMAKE_CURRENT_LIST_DIR}/gropt_core.cmake)   # -> gropt_core (shared wi
 # ---- standalone executable -----------------------------------------------------------------------
 add_executable(gropt main.cpp demo_diffusion.cpp)
 target_link_libraries(gropt PRIVATE gropt_core)
+
+add_executable(gropt_diffusion_simple demo_diffusion_simple.cpp)
+target_link_libraries(gropt_diffusion_simple PRIVATE gropt_core)
 
 # ---- optional plotting addon (matplot++) ---------------------------------------------------------
 option(GROPT_PLOTTING "Build the standalone with matplot++ plotting" OFF)

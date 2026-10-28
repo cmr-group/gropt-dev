@@ -1,5 +1,5 @@
 # The gropt_core static library, shared by the Python build (CMakeLists.txt) and the standalone build
-# (gropt/src/CMakeLists.txt). main.cpp and demo_diffusion.cpp belong to the standalone executable only.
+# (gropt/src/CMakeLists.txt). main.cpp and the demo_diffusion*.cpp files belong to the standalone executables only.
 set(GROPT_CORE_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/equilibrate.cpp
     ${CMAKE_CURRENT_LIST_DIR}/fft_tools.cpp

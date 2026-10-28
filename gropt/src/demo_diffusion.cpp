@@ -6,7 +6,6 @@
 //
 // The Problem (timing, limits, constraints) is fixed below; the Recipe (weights, x0 seed, solver settings)
 // comes from diffusion_recipe.hpp.
-#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -119,50 +118,9 @@ struct Problem {
 };
 
 // ===================================================================================================
-// Builders (the C++ mirror of diffusion.py's _build_x0 / build_gparams / make_solver)
+// Builder (the C++ mirror of diffusion.py's build_gparams; the seed and solver settings are in
+// diffusion_recipe.hpp)
 // ===================================================================================================
-// X0 seed. Empty return -> keep the diff_init seed. Call after diff_init, before prepare.
-Eigen::VectorXd build_x0(const GroptParams &gp, const Recipe &R, int MMT, int start_idx) {
-    if (R.x0_mode == "diff_init") return {};
-    const int N = gp.N;
-    const double dt = gp.dt;
-    const Eigen::VectorXd &inv = gp.pdata.inv_vec, &fixer = gp.pdata.fixer, &setv = gp.pdata.set_vals;
-    auto free = [&](int i) { return fixer(i) > 0.5; };  // 1 = free, 0 = fixed
-    constexpr double PI = 3.14159265358979323846;
-    Eigen::VectorXd x = Eigen::VectorXd::Zero(N);
-
-    if (R.x0_mode == "const") {
-        for (int i = 0; i < N; ++i) if (free(i)) x(i) = R.x0_amp;
-        if (R.x0_invert) x.array() *= inv.array();
-    } else if (R.x0_mode == "sine") {
-        for (int i = 0; i < N;) {                       // full sine per free run: 0 at both ends
-            if (!free(i)) { ++i; continue; }
-            int j = i; while (j < N && free(j)) ++j;
-            const int n = j - i;
-            for (int k = 0; k < n && n >= 2; ++k)
-                x(i + k) = R.x0_amp * std::sin(2.0 * PI * R.x0_periods * (double(k) / (n - 1)));
-            i = j;
-        }
-        if (R.x0_invert) for (int i = 0; i < N; ++i) if (inv(i) < 0) x(i) = -x(i);
-    } else {
-        throw std::invalid_argument("Unknown x0_mode: " + R.x0_mode);
-    }
-
-    for (int i = 0; i < N; ++i) if (!free(i)) x(i) = std::isnan(setv(i)) ? 0.0 : setv(i);
-
-    if (R.x0_project && MMT >= 0) {                      // project onto moment null-space (free DOFs)
-        const int nm = MMT + 1;
-        Eigen::MatrixXd M(nm, N), Mt(nm, N);
-        for (int k = 0; k < nm; ++k)
-            for (int i = 0; i < N; ++i) {
-                M(k, i)  = (i < start_idx) ? 0.0 : std::pow(i * dt, k) * inv(i);
-                Mt(k, i) = M(k, i) * fixer(i);
-            }
-        x -= Mt.transpose() * (Mt * Mt.transpose()).ldlt().solve(M * x);
-    }
-    return x;
-}
-
 // Build into `gp` (out-param: GroptParams holds references into its own pdata, so it can't be returned
 // by value). Returns start_idx (> 0 only for preencode).
 int build_gparams(const Problem &P, const Recipe &R, GroptParams &gp) {
@@ -223,53 +181,10 @@ int build_gparams(const Problem &P, const Recipe &R, GroptParams &gp) {
         gp.add_bvalue(P.bval_min, 1.0, start_idx, -1, R.w_bval, mode, R.bval_max_scale, false, true);
     }
 
-    Eigen::VectorXd x0 = build_x0(gp, R, P.MMT, start_idx);   // empty -> keep the diff_init seed
-    if (x0.size()) gp.setvec_X0(x0, 1, false);
+    set_recipe_x0(gp, R, P.MMT, start_idx);
 
     gp.prepare();
     return start_idx;
-}
-
-void configure_solver(const Recipe &R, SolverGroptSDMM &solver) {
-    solver.max_iter = R.max_iter;
-    solver.max_feval = R.max_feval;
-    solver.min_iter = R.min_iter;
-    solver.obj_patience = R.obj_patience;
-    solver.obj_rtol = R.obj_rtol;
-    solver.gamma_x = R.gamma_x;
-    solver.extra_debug = R.extra_debug;
-
-    solver.reproject_iterate = R.reproject_iterate;
-
-    solver.cutoff_freq = R.cutoff_freq;
-    solver.cutoff_iter = R.cutoff_iter;
-    solver.cutoff_trans = R.cutoff_trans;
-
-    solver.tr_enable = R.tr_enable;
-    solver.tr_tol = R.tr_tol;
-    solver.tr_bump = R.tr_bump;
-    solver.tr_max_reject = R.tr_max_reject;
-    solver.tr_decay = R.tr_decay;
-    solver.tr_monitor = R.tr_monitor;
-
-    solver.obj_gate_enable = R.obj_gate;
-    solver.obj_gate_scale = R.obj_gate_scale;
-
-    solver.ils_tol = R.ils_tol;
-    solver.ils_max_iter = R.ils_max_iter;
-    solver.ils_min_iter = R.ils_min_iter;
-    solver.ils_sigma = R.ils_sigma;
-    solver.ils_tik_lam = R.ils_tik_lam;
-
-    solver.bb_enable = R.bb_reweight;
-    solver.rw_interval = R.rw_interval;
-    solver.rw_e_corr = R.rw_e_corr;
-    solver.rw_eps = R.rw_eps;
-    solver.rw_scalelim = R.rw_scalelim;
-    solver.grw_enable = R.grw;
-    solver.grw_interval = R.grw_interval;
-    solver.grw_mod = R.grw_mod;
-    solver.grw_balanced = R.grw_balanced;
 }
 
 }  // namespace
